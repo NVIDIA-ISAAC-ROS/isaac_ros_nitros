@@ -14,6 +14,7 @@
 #include "gxf/core/gxf.h"
 
 #include "isaac_ros_nitros/nitros_node.hpp"
+#include "isaac_ros_nitros/types/nitros_int64.hpp"
 #include "isaac_ros_nitros/types/type_adapter_nitros_context.hpp"
 
 #include "rclcpp/logger.hpp"
@@ -98,6 +99,10 @@ NitrosNode::NitrosNode(const rclcpp::NodeOptions & options)
     config_map_["vault/vault"].compatible_data_format = compatible_format;
     config_map_["vault/vault"].use_compatible_format_only = true;
   }
+
+  // Register NitrosInt64 for POL test
+  registerSupportedType<NitrosInt64>();
+
   startNitrosNode();
 }
 #pragma GCC diagnostic pop
@@ -245,6 +250,9 @@ NitrosNode::NitrosNode(
 
   // Create a frame_id map for the node
   frame_id_map_ptr_ = std::make_shared<std::map<ComponentKey, std::string>>();
+
+  // Create an NITROS type manager for the node
+  nitros_type_manager_ = std::make_shared<NitrosTypeManager>(this);
 }
 
 NitrosContext & NitrosNode::getNitrosContext()
@@ -323,6 +331,27 @@ void NitrosNode::startNitrosNode()
     }
   }
 
+  // Load required extension files
+  RCLCPP_INFO(get_logger(), "[NitrosNode] Loading extensions");
+  gxf_result_t code;
+  auto nitros_type_extensions = nitros_type_manager_->getExtensions();
+  auto all_extensions = extensions_;
+  all_extensions.insert(
+    all_extensions.end(),
+    nitros_type_extensions.begin(),
+    nitros_type_extensions.end());
+  for (const auto & extension_pair : all_extensions) {
+    const std::string package_directory =
+      ament_index_cpp::get_package_share_directory(extension_pair.first);
+    code = nitros_context_.loadExtension(package_directory, extension_pair.second);
+    if (code != GXF_SUCCESS) {
+      std::stringstream error_msg;
+      error_msg << "[NitrosNode] loadExtensions Error: " << GxfResultStr(code);
+      RCLCPP_ERROR(get_logger(), error_msg.str().c_str());
+      throw std::runtime_error(error_msg.str().c_str());
+    }
+  }
+
   // Load graph
   RCLCPP_INFO(get_logger(), "[NitrosNode] Loading graph to the optimizer");
   auto load_graph_result =
@@ -368,7 +397,7 @@ void NitrosNode::startNitrosNode()
   for (const auto & gxf_io_group : gxf_io_group_info_list_) {
     nitros_pub_sub_groups_.emplace_back(
       std::make_shared<NitrosPublisherSubscriberGroup>(
-        *this, gxf_io_group, config_map_, frame_id_map_ptr_));
+        *this, nitros_type_manager_, gxf_io_group, config_map_, frame_id_map_ptr_));
   }
 
   // Start negotiation
@@ -421,21 +450,8 @@ void NitrosNode::postNegotiationCallback()
     "[NitrosNode] Wrote the final YAML graph to \"%s\"", temp_yaml_filename.c_str());
 
 
-  // Set up context and load the graph
+  // Load the application graph
   gxf_result_t code;
-
-  RCLCPP_INFO(get_logger(), "[NitrosNode] Loading extensions");
-  for (const auto & extension_pair : extensions_) {
-    const std::string package_directory =
-      ament_index_cpp::get_package_share_directory(extension_pair.first);
-    code = nitros_context_.loadExtension(package_directory, extension_pair.second);
-    if (code != GXF_SUCCESS) {
-      std::stringstream error_msg;
-      error_msg << "[NitrosNode] loadExtensions Error: " << GxfResultStr(code);
-      RCLCPP_ERROR(get_logger(), error_msg.str().c_str());
-      throw std::runtime_error(error_msg.str().c_str());
-    }
-  }
 
   // Call the user's pre-load-graph initialization callback
   RCLCPP_INFO(get_logger(), "[NitrosNode] Calling user's pre-load-graph callback");
@@ -450,7 +466,6 @@ void NitrosNode::postNegotiationCallback()
     RCLCPP_ERROR(get_logger(), error_msg.str().c_str());
     throw std::runtime_error(error_msg.str().c_str());
   }
-
 
   // Get the pointers to the ingress/egress components in the loaded GXF graph and set
   // them to the coresponding Nitros publishers/subscribers

@@ -1,0 +1,57 @@
+{
+  "header": {
+    "frame_id": "tf_camera"
+  },
+  "detections": [
+    {
+      "results": [
+        {
+          "hypothesis": {
+            "class_id": "0",
+            "score": 0.25
+          }
+        },
+        {
+          "hypothesis": {
+            "class_id": "1",
+            "score": 0.45
+          }
+        }
+      ],
+      "bbox": {
+        "center": {
+          "position": {
+            "x": 4.0,
+            "y": 5.0
+          }
+        },
+        "size_x": 6.0,
+        "size_y": 7.0
+      }
+    },
+    {
+      "results": [
+        {
+          "hypothesis": {
+            "class_id": "2",
+            "score": 0.35
+          },
+          "hypothesis": {
+            "class_id": "3",
+            "score": 0.65
+          }
+        }
+      ],
+      "bbox": {
+        "center": {
+          "position": {
+            "x": 7.0,
+            "y": 8.0
+          }
+        },
+        "size_x": 9.0,
+        "size_y": 10.0
+      }
+    }
+  ]
+}

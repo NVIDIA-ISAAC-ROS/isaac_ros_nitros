@@ -106,25 +106,26 @@ class IsaacROSNitrosNodeTest(IsaacROSBaseTest):
 
             # Start sending messages
             self.node.get_logger().info('Start publishing messages')
+
+            # Wait at most 2 seconds for subscriber to receive at least one message
+            end_time = time.time() + 2
             sent_count = 0
-            end_time = time.time() + 0.5
             while time.time() < end_time:
                 sent_count += 1
                 pub.publish(msg)
                 rclpy.spin_once(self.node, timeout_sec=0.1)
 
-            # Conclude the test
-            received_count = len(received_messages[subscriber_topic_namespace])
-            self.node._logger.info(
-                f'Test Results:\n'
-                f'# of Messages Sent: {sent_count}\n'
-                f'# of Messages Received: {received_count}\n'
-                f'# of Messages Dropped: {sent_count - received_count}\n'
-                f'Message Drop Rate: {((sent_count-received_count)/sent_count)*100}%'
-            )
+                if len(received_messages[subscriber_topic_namespace]) > 0:
+                    break
 
-            self.assertGreater(len(received_messages[subscriber_topic_namespace]), 0)
-            self.assertEqual(received_messages[subscriber_topic_namespace][-1][0].data, 17)
+            self.node._logger.info(f'# of messages sent: {sent_count}')
+
+            self.assertGreater(len(received_messages[subscriber_topic_namespace]), 0,
+                               "Didn't receive any output.")
+            self.assertEqual(received_messages[subscriber_topic_namespace][-1][0].data, 17,
+                             'The received data was incorrect.')
+
+            self.node._logger.info('At least one message was received correctly.')
 
         finally:
             [self.node.destroy_subscription(sub) for sub in subs]

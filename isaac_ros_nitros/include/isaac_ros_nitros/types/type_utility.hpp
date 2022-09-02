@@ -23,8 +23,6 @@ namespace isaac_ros
 namespace nitros
 {
 
-std::string getROSTypeNameByDataFormat(const std::string data_format);
-
 constexpr u_int CLR_RED = 0xFFFF0000;
 constexpr u_int CLR_BLUE = 0xFF0000FF;
 constexpr u_int CLR_GREEN = 0xFF008000;
@@ -39,9 +37,18 @@ constexpr u_int CLR_PURPLE = 0xFF800080;
 static inline void nvtxRangePushWrapper(const char * range_title, u_int range_color)
 {
   #if defined(USE_NVTX)
-  nvtxEventAttributes_t eventAttrib = {0};
-  eventAttrib.version = NVTX_VERSION;
-  eventAttrib.size = NVTX_EVENT_ATTRIB_STRUCT_SIZE;
+  nvtxEventAttributes_t eventAttrib = {
+    NVTX_VERSION,  // version
+    NVTX_EVENT_ATTRIB_STRUCT_SIZE,  // size
+    0,  // category
+    0,  // colorType
+    0,  // color
+    0,  // payloadType
+    0,  // reseverd0
+    0,  // payload
+    0,  // messageType
+    0,  // message
+  };
   eventAttrib.messageType = NVTX_MESSAGE_TYPE_ASCII;
   eventAttrib.colorType = NVTX_COLOR_ARGB;
   eventAttrib.color = range_color;

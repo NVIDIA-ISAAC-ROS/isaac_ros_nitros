@@ -11,7 +11,6 @@
 #include "gxf/core/gxf.h"
 
 #include "isaac_ros_nitros/nitros_subscriber.hpp"
-#include "isaac_ros_nitros/types/types.hpp"
 
 #include "rclcpp/logger.hpp"
 #include "rclcpp/rclcpp.hpp"
@@ -26,11 +25,12 @@ namespace nitros
 
 NitrosSubscriber::NitrosSubscriber(
   rclcpp::Node & node,
+  std::shared_ptr<NitrosTypeManager> nitros_type_manager,
   const gxf::optimizer::ComponentInfo & gxf_component_info,
   const std::vector<std::string> & supported_data_formats,
   const NitrosPublisherSubscriberConfig & config)
 : NitrosPublisherSubscriberBase(
-    node, gxf_component_info, supported_data_formats, config)
+    node, nitros_type_manager, gxf_component_info, supported_data_formats, config)
 {
   if (config_.type == NitrosPublisherSubscriberType::NOOP) {
     return;
@@ -69,48 +69,53 @@ void NitrosSubscriber::addSupportedDataFormat(
 {
   rclcpp::SubscriptionOptions sub_options;
   sub_options.use_intra_process_comm = rclcpp::IntraProcessSetting::Enable;
-  #define SUB_HELPER(DATA_TYPE_NAME) \
-  if (data_format == DATA_TYPE_NAME::supported_type_name) { \
-    if (data_format == config_.compatible_data_format) { \
-      auto compatible_sub = \
-        std::static_pointer_cast<rclcpp::Subscription<DATA_TYPE_NAME::MsgT>>(compatible_sub_); \
-      negotiated_sub_->add_compatible_subscription( \
-        compatible_sub, config_.compatible_data_format, \
-        weight); \
-      RCLCPP_DEBUG( \
-        node_.get_logger(), \
-        "[NitrosSubscriber] Added a compatible subscriber: " \
-        "topic_name=\"%s\", data_format=\"%s\"", \
-        compatible_sub_->get_topic_name(), config_.compatible_data_format.c_str()); \
-    } else { \
-      std::function<void(std::shared_ptr<DATA_TYPE_NAME::MsgT>)> subscriber_callback = \
-        std::bind( \
-        &NitrosSubscriber::subscriberCallback<DATA_TYPE_NAME::MsgT>, \
-        this, \
-        std::placeholders::_1, \
-        data_format); \
-      negotiated_sub_->add_supported_callback<DATA_TYPE_NAME>( \
-        weight, \
-        config_.qos, \
-        subscriber_callback, \
-        sub_options); \
-      RCLCPP_DEBUG( \
-        node_.get_logger(), \
-        "[NitrosSubscriber] Added a supported data format: " \
-        "topic_name=\"%s\", data_format=\"%s\"", \
-        compatible_sub_->get_topic_name(), data_format.c_str()); \
-    } \
-    return; \
-  }
-  FOREACH_NITROS_DATA_FORMAT(SUB_HELPER);
 
-  std::stringstream error_msg;
-  error_msg <<
-    "[NitrosSubscriber] Could not identify the supported data foramt: " <<
-    "\"" << data_format.c_str() << "\"";
-  RCLCPP_ERROR(
-    node_.get_logger(), error_msg.str().c_str());
-  throw std::runtime_error(error_msg.str().c_str());
+  if (!nitros_type_manager_->hasFormat(data_format)) {
+    std::stringstream error_msg;
+    error_msg <<
+      "[NitrosSubscriber] Could not identify the supported data foramt: " <<
+      "\"" << data_format.c_str() << "\"";
+    RCLCPP_ERROR(
+      node_.get_logger(), error_msg.str().c_str());
+    throw std::runtime_error(error_msg.str().c_str());
+  }
+
+  if (data_format == config_.compatible_data_format) {
+    nitros_type_manager_->getFormatCallbacks(data_format).addCompatibleSubscriberCallback(
+      node_,
+      negotiated_sub_,
+      compatible_sub_,
+      weight
+    );
+
+    RCLCPP_DEBUG(
+      node_.get_logger(),
+      "[NitrosSubscriber] Added a compatible subscriber: "
+      "topic_name=\"%s\", data_format=\"%s\"",
+      compatible_sub_->get_topic_name(), config_.compatible_data_format.c_str());
+  } else {
+    std::function<void(NitrosTypeBase &, const std::string data_format_name)>
+    subscriber_callback =
+      std::bind(
+      &NitrosSubscriber::subscriberCallback,
+      this,
+      std::placeholders::_1,
+      std::placeholders::_2);
+
+    nitros_type_manager_->getFormatCallbacks(data_format).addSubscriberSupportedFormatCallback(
+      node_,
+      negotiated_sub_,
+      weight,
+      config_.qos,
+      subscriber_callback,
+      sub_options);
+
+    RCLCPP_DEBUG(
+      node_.get_logger(),
+      "[NitrosSubscriber] Added a supported data format: "
+      "topic_name=\"%s\", data_format=\"%s\"",
+      compatible_sub_->get_topic_name(), data_format.c_str());
+  }
 }
 
 void NitrosSubscriber::start()
@@ -125,30 +130,33 @@ void NitrosSubscriber::createCompatibleSubscriber()
   rclcpp::SubscriptionOptions sub_options;
   sub_options.use_intra_process_comm = rclcpp::IntraProcessSetting::Enable;
 
-  #define COMP_SUB_HELPER(DATA_TYPE_NAME) \
-  if (config_.compatible_data_format == DATA_TYPE_NAME::supported_type_name) { \
-    std::function<void(std::shared_ptr<DATA_TYPE_NAME::MsgT>)> subscriber_callback = \
-      std::bind( \
-      &NitrosSubscriber::subscriberCallback<DATA_TYPE_NAME::MsgT>, \
-      this, \
-      std::placeholders::_1, \
-      config_.compatible_data_format); \
-    compatible_sub_ = node_.create_subscription<DATA_TYPE_NAME::MsgT>( \
-      config_.topic_name, \
-      config_.qos, \
-      subscriber_callback, \
-      sub_options); \
-    return; \
+  if (!nitros_type_manager_->hasFormat(config_.compatible_data_format)) {
+    std::stringstream error_msg;
+    error_msg <<
+      "[NitrosSubscriber] Could not identify the compatible data foramt: " <<
+      "\"" << config_.compatible_data_format.c_str() << "\"";
+    RCLCPP_ERROR(
+      node_.get_logger(), error_msg.str().c_str());
+    throw std::runtime_error(error_msg.str().c_str());
   }
-  FOREACH_NITROS_DATA_FORMAT(COMP_SUB_HELPER);
 
-  std::stringstream error_msg;
-  error_msg <<
-    "[NitrosSubscriber] Could not identify the compatible data foramt: " <<
-    "\"" << config_.compatible_data_format.c_str() << "\"";
-  RCLCPP_ERROR(
-    node_.get_logger(), error_msg.str().c_str());
-  throw std::runtime_error(error_msg.str().c_str());
+  std::function<void(NitrosTypeBase &, const std::string)>
+  subscriber_callback =
+    std::bind(
+    &NitrosSubscriber::subscriberCallback,
+    this,
+    std::placeholders::_1,
+    std::placeholders::_2);
+
+  nitros_type_manager_->getFormatCallbacks(config_.compatible_data_format).
+  createCompatibleSubscriberCallback(
+    node_,
+    compatible_sub_,
+    config_.topic_name,
+    config_.qos,
+    subscriber_callback,
+    sub_options
+  );
 }
 
 void NitrosSubscriber::postNegotiationCallback()
@@ -170,19 +178,18 @@ void NitrosSubscriber::postNegotiationCallback()
     negotiated_data_format_ = topics_info.negotiated_topics[0].supported_type_name;
     if (negotiated_data_format_ != config_.compatible_data_format) {
       // Delete the compatible subscriber as we don't use it anymore
-      #define REMOVE_COMP_SUBSCRIBER_HELPER(DATA_TYPE_NAME) \
-  if (config_.compatible_data_format == DATA_TYPE_NAME::supported_type_name) { \
-    auto compatible_sub = \
-      std::static_pointer_cast<rclcpp::Subscription<DATA_TYPE_NAME::MsgT>>(compatible_sub_); \
-    negotiated_sub_->remove_compatible_subscription( \
-      compatible_sub, config_.compatible_data_format); \
-    RCLCPP_DEBUG( \
-      node_.get_logger(), \
-      "[NitrosSubscriber] Removed a compatible subscriber: " \
-      "topic_name=\"%s\", data_format=\"%s\"", \
-      compatible_sub_->get_topic_name(), config_.compatible_data_format.c_str()); \
-  }
-      FOREACH_NITROS_DATA_FORMAT(REMOVE_COMP_SUBSCRIBER_HELPER);
+      nitros_type_manager_->getFormatCallbacks(config_.compatible_data_format).
+      removeCompatibleSubscriberCallback(
+        node_,
+        negotiated_sub_,
+        compatible_sub_);
+
+      RCLCPP_DEBUG(
+        node_.get_logger(),
+        "[NitrosSubscriber] Removed a compatible subscriber: "
+        "topic_name=\"%s\", data_format=\"%s\"",
+        compatible_sub_->get_topic_name(), config_.compatible_data_format.c_str());
+
       compatible_sub_ = nullptr;
     }
 
@@ -211,9 +218,8 @@ bool NitrosSubscriber::pushEntity(const int64_t eid)
   return true;
 }
 
-template<typename T>
 void NitrosSubscriber::subscriberCallback(
-  const std::shared_ptr<T> msg,
+  NitrosTypeBase & msg_base,
   const std::string data_format_name)
 {
   #if defined(USE_NVTX)
@@ -223,11 +229,13 @@ void NitrosSubscriber::subscriberCallback(
   #endif
 
   RCLCPP_DEBUG(node_.get_logger(), "[NitrosSubscriber] Received a Nitros-typed messgae");
-  RCLCPP_DEBUG(node_.get_logger(), "[NitrosSubscriber] \teid: %ld", msg->handle);
+  RCLCPP_DEBUG(node_.get_logger(), "[NitrosSubscriber] \teid: %ld", msg_base.handle);
   RCLCPP_DEBUG(
     node_.get_logger(), "[NitrosSubscriber] \tdata_format_name: %s",
     data_format_name.c_str());
-  RCLCPP_DEBUG(node_.get_logger(), "[NitrosSubscriber] \tmsg: %s", msg->data_format_name.c_str());
+  RCLCPP_DEBUG(
+    node_.get_logger(), "[NitrosSubscriber] \tmsg_base: %s",
+    msg_base.data_format_name.c_str());
   RCLCPP_DEBUG(
     node_.get_logger(), "[NitrosSubscriber] \tReceiver's pointer: %p",
     (void *)gxf_receiver_ptr_);
@@ -244,14 +252,14 @@ void NitrosSubscriber::subscriberCallback(
     RCLCPP_DEBUG(
       node_.get_logger(),
       "[NitrosSubscriber] Calling user-defined callback for an Nitros-typed "
-      "message (eid=%ld)", msg->handle);
-    config_.callback(context_, *msg.get());
+      "message (eid=%ld)", msg_base.handle);
+    config_.callback(context_, msg_base);
   }
 
   if (frame_id_map_ptr_ != nullptr) {
     std::string frame_id_source_key = config_.frame_id_source_key.empty() ?
       GenerateComponentKey(gxf_component_info_) : config_.frame_id_source_key;
-    (*frame_id_map_ptr_.get())[frame_id_source_key] = msg->frame_id;
+    (*frame_id_map_ptr_.get())[frame_id_source_key] = msg_base.frame_id;
 
     RCLCPP_DEBUG(
       node_.get_logger(),
@@ -259,7 +267,7 @@ void NitrosSubscriber::subscriberCallback(
       (*frame_id_map_ptr_.get())[frame_id_source_key].c_str());
   }
 
-  pushEntity(msg->handle);
+  pushEntity(msg_base.handle);
 
   #if defined(USE_NVTX)
   nvtxRangePopWrapper();

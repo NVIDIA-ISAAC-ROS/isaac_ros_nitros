@@ -40,6 +40,7 @@ public:
   // Constructor
   NitrosSubscriber(
     rclcpp::Node & node,
+    std::shared_ptr<NitrosTypeManager> nitros_type_manager,
     const gxf::optimizer::ComponentInfo & gxf_component_info,
     const std::vector<std::string> & supported_data_formats,
     const NitrosPublisherSubscriberConfig & config);
@@ -68,9 +69,8 @@ public:
   bool pushEntity(const int64_t eid);
 
   // The subscriber callback
-  template<typename T>
   void subscriberCallback(
-    const std::shared_ptr<T> msg,
+    NitrosTypeBase & msg_base,
     const std::string data_format_name);
 
 private:

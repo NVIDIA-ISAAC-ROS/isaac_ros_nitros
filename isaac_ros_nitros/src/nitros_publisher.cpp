@@ -11,7 +11,6 @@
 #include "gxf/std/timestamp.hpp"
 
 #include "isaac_ros_nitros/nitros_publisher.hpp"
-#include "isaac_ros_nitros/types/types.hpp"
 
 #include "rclcpp/logger.hpp"
 #include "rclcpp/rclcpp.hpp"
@@ -26,12 +25,13 @@ namespace nitros
 
 NitrosPublisher::NitrosPublisher(
   rclcpp::Node & node,
+  std::shared_ptr<NitrosTypeManager> nitros_type_manager,
   const gxf::optimizer::ComponentInfo & gxf_component_info,
   const std::vector<std::string> & supported_data_formats,
   const NitrosPublisherSubscriberConfig & config,
   const negotiated::NegotiatedPublisherOptions & negotiated_pub_options)
 : NitrosPublisherSubscriberBase(
-    node, gxf_component_info, supported_data_formats, config)
+    node, nitros_type_manager, gxf_component_info, supported_data_formats, config)
 {
   if (config_.type == NitrosPublisherSubscriberType::NOOP) {
     return;
@@ -72,38 +72,43 @@ void NitrosPublisher::addSupportedDataFormat(
   rclcpp::PublisherOptions pub_options;
   pub_options.use_intra_process_comm = rclcpp::IntraProcessSetting::Enable;
 
-  #define PUB_HELPER(DATA_TYPE_NAME) \
-  if (data_format == DATA_TYPE_NAME::supported_type_name) { \
-    if (data_format == config_.compatible_data_format) { \
-      auto compatible_pub = \
-        std::static_pointer_cast<rclcpp::Publisher<DATA_TYPE_NAME::MsgT>>(compatible_pub_); \
-      negotiated_pub_->add_compatible_publisher( \
-        compatible_pub, config_.compatible_data_format, \
-        weight); \
-      RCLCPP_DEBUG( \
-        node_.get_logger(), \
-        "[NitrosPublisher] Added a compatible publisher: " \
-        "topic_name=\"%s\", data_format=\"%s\"", \
-        compatible_pub_->get_topic_name(), config_.compatible_data_format.c_str()); \
-    } else { \
-      negotiated_pub_->add_supported_type<DATA_TYPE_NAME>( \
-        weight, \
-        config_.qos, \
-        pub_options); \
-      RCLCPP_DEBUG( \
-        node_.get_logger(), \
-        "[NitrosPublisher] Added a supported data format: " \
-        "topic_name=\"%s\", data_format=\"%s\"", \
-        compatible_pub_->get_topic_name(), data_format.c_str()); \
-    } \
-    return; \
+  if (!nitros_type_manager_->hasFormat(data_format)) {
+    std::stringstream error_msg;
+    error_msg <<
+      "[NitrosPublisher] Could not identify the supported data foramt: " <<
+      "\"" << data_format.c_str() << "\"";
+    RCLCPP_ERROR(
+      node_.get_logger(), error_msg.str().c_str());
+    throw std::runtime_error(error_msg.str().c_str());
   }
-  FOREACH_NITROS_DATA_FORMAT(PUB_HELPER);
 
-  RCLCPP_ERROR(
-    node_.get_logger(),
-    "[NitrosPublisher] Could not identify the supported data format \"%s\"",
-    data_format.c_str());
+  if (data_format == config_.compatible_data_format) {
+    nitros_type_manager_->getFormatCallbacks(data_format).addCompatiblePublisherCallback(
+      node_,
+      negotiated_pub_,
+      compatible_pub_,
+      weight
+    );
+
+    RCLCPP_DEBUG(
+      node_.get_logger(),
+      "[NitrosPublisher] Added a compatible publisher: "
+      "topic_name=\"%s\", data_format=\"%s\"",
+      compatible_pub_->get_topic_name(), config_.compatible_data_format.c_str());
+  } else {
+    nitros_type_manager_->getFormatCallbacks(data_format).addPublisherSupportedFormatCallback(
+      node_,
+      negotiated_pub_,
+      weight,
+      config_.qos,
+      pub_options);
+
+    RCLCPP_DEBUG(
+      node_.get_logger(),
+      "[NitrosPublisher] Added a supported data format: "
+      "topic_name=\"%s\", data_format=\"%s\"",
+      compatible_pub_->get_topic_name(), data_format.c_str());
+  }
 }
 
 void NitrosPublisher::start()
@@ -118,18 +123,24 @@ void NitrosPublisher::createCompatiblePublisher()
   rclcpp::PublisherOptions pub_options;
   pub_options.use_intra_process_comm = rclcpp::IntraProcessSetting::Enable;
 
-  #define COMP_PUB_HELPER(DATA_TYPE_NAME) \
-  if (config_.compatible_data_format == DATA_TYPE_NAME::supported_type_name) { \
-    compatible_pub_ = \
-      node_.create_publisher<DATA_TYPE_NAME::MsgT>(config_.topic_name, config_.qos, pub_options); \
-    return; \
+  if (!nitros_type_manager_->hasFormat(config_.compatible_data_format)) {
+    std::stringstream error_msg;
+    error_msg <<
+      "[NitrosPublisher] Could not identify the compatible data foramt: " <<
+      "\"" << config_.compatible_data_format.c_str() << "\"";
+    RCLCPP_ERROR(
+      node_.get_logger(), error_msg.str().c_str());
+    throw std::runtime_error(error_msg.str().c_str());
   }
-  FOREACH_NITROS_DATA_FORMAT(COMP_PUB_HELPER);
 
-  RCLCPP_ERROR(
-    node_.get_logger(),
-    "[NitrosPublisher] Could not identify the compatible data format: \"%s\"",
-    config_.compatible_data_format.c_str());
+  nitros_type_manager_->getFormatCallbacks(config_.compatible_data_format).
+  createCompatiblePublisherCallback(
+    node_,
+    compatible_pub_,
+    config_.topic_name,
+    config_.qos,
+    pub_options
+  );
 }
 
 void NitrosPublisher::postNegotiationCallback()
@@ -340,19 +351,20 @@ void NitrosPublisher::publish(NitrosTypeBase & base_msg)
     node_.get_logger(),
     "[NitrosPublisher] Publishing an Nitros-typed message (eid=%ld)", base_msg.handle);
 
-  #define PUBLISH_BASE_MSG_HELPER(DATA_TYPE_NAME) \
-  if (negotiated_data_format_ == DATA_TYPE_NAME::supported_type_name) { \
-    auto msg = static_cast<DATA_TYPE_NAME::MsgT &>(base_msg); \
-    negotiated_pub_->publish<DATA_TYPE_NAME>(msg); \
-  } \
-  if (config_.compatible_data_format == DATA_TYPE_NAME::supported_type_name && \
-    config_.compatible_data_format != negotiated_data_format_) { \
-    auto msg = static_cast<DATA_TYPE_NAME::MsgT &>(base_msg); \
-    auto compatible_pub = \
-      static_cast<rclcpp::Publisher<DATA_TYPE_NAME::MsgT> *>(compatible_pub_.get()); \
-    compatible_pub->publish(msg); \
+  if (!negotiated_data_format_.empty()) {
+    nitros_type_manager_->getFormatCallbacks(negotiated_data_format_).negotiatedPublishCallback(
+      node_,
+      negotiated_pub_,
+      base_msg);
   }
-  FOREACH_NITROS_DATA_FORMAT(PUBLISH_BASE_MSG_HELPER);
+
+  if (config_.compatible_data_format != negotiated_data_format_) {
+    nitros_type_manager_->getFormatCallbacks(config_.compatible_data_format).
+    compatiblePublishCallback(
+      node_,
+      compatible_pub_,
+      base_msg);
+  }
 }
 
 }  // namespace nitros

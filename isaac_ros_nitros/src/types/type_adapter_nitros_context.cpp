@@ -27,12 +27,6 @@ constexpr char TYPE_ADAPTER_CONTEXT_YAML[] =
 
 const std::vector<std::pair<std::string, std::string>> TYPE_ADAPTER_EXTENSIONS = {
   {"isaac_ros_nitros", "gxf/std/libgxf_std.so"},
-  {"isaac_ros_nitros", "gxf/multimedia/libgxf_multimedia.so"},
-  {"isaac_ros_nitros", "gxf/serialization/libgxf_serialization.so"},
-  {"isaac_ros_nitros", "gxf/libgxf_sight.so"},  // for nvidia::isaac::SightReceiver
-  {"isaac_ros_nitros", "gxf/libgxf_atlas.so"},  // for nvidia::isaac::PoseTree
-  {"isaac_ros_nitros", "gxf/libgxf_isaac_messages.so"},  // for nvidia::isaac::PoseFrameUid
-  {"isaac_ros_nitros", "gxf/libgxf_fiducials.so"}
 };
 
 NitrosContext g_type_adapter_nitros_context;
