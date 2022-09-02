@@ -149,6 +149,13 @@ protected:
   // Set the graph YAML file to be loaded
   void setAppYamlFilename(std::string package_relative_filepath);
 
+  // Register a supported type
+  template<typename T>
+  void registerSupportedType()
+  {
+    nitros_type_manager_->registerSupportedType<T>();
+  }
+
   // A list of I/O port groups
   GraphIOGroupSupportedDataTypesInfoList gxf_io_group_info_list_;
 
@@ -205,6 +212,9 @@ private:
 
   // Map for frame_id passthrough
   std::shared_ptr<std::map<ComponentKey, std::string>> frame_id_map_ptr_;
+
+  // Nitros type manager
+  std::shared_ptr<NitrosTypeManager> nitros_type_manager_;
 };
 
 }  // namespace nitros

@@ -19,6 +19,7 @@
 #include "extensions/gxf_optimizer/exporter/graph_types.hpp"
 #include "gxf/core/gxf.h"
 #include "isaac_ros_nitros/types/nitros_type_base.hpp"
+#include "isaac_ros_nitros/types/nitros_type_manager.hpp"
 
 #include "rclcpp/rclcpp.hpp"
 
@@ -76,10 +77,12 @@ public:
   // Constructor
   NitrosPublisherSubscriberBase(
     rclcpp::Node & node,
+    std::shared_ptr<NitrosTypeManager> nitros_type_manager,
     const gxf::optimizer::ComponentInfo & gxf_component_info,
     const std::vector<std::string> & supported_data_formats,
     const NitrosPublisherSubscriberConfig & config)
   : node_(node),
+    nitros_type_manager_(nitros_type_manager),
     gxf_component_info_(gxf_component_info),
     supported_data_formats_(supported_data_formats),
     config_(config) {}
@@ -149,6 +152,9 @@ protected:
   // The parent GXF context
   gxf_context_t context_;
 
+  // Nitros type manager
+  std::shared_ptr<NitrosTypeManager> nitros_type_manager_;
+
   // The info of the GXF component that's associated to this Nitros publisher/subscriber
   gxf::optimizer::ComponentInfo gxf_component_info_;
 
@@ -161,6 +167,7 @@ protected:
   // Negotiated data format
   std::string negotiated_data_format_;
 
+  // Frame ID map
   std::shared_ptr<std::map<gxf::optimizer::ComponentKey, std::string>> frame_id_map_ptr_;
 };
 

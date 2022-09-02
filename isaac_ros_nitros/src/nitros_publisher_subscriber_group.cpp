@@ -23,6 +23,7 @@
 
 #include "isaac_ros_nitros/nitros_publisher_subscriber_group.hpp"
 
+#include "extensions/gxf_optimizer/common/type.hpp"
 #include "negotiated/combinations.hpp"
 #include "rclcpp/logger.hpp"
 #include "rclcpp/rclcpp.hpp"
@@ -37,14 +38,19 @@ namespace nitros
 
 NitrosPublisherSubscriberGroup::NitrosPublisherSubscriberGroup(
   rclcpp::Node & node,
+  std::shared_ptr<NitrosTypeManager> nitros_type_manager,
   const gxf::optimizer::GraphIOGroupSupportedDataTypesInfo & gxf_io_supported_data_formats_info,
   const NitrosPublisherSubscriberConfigMap & nitros_pub_sub_configs,
   const std::shared_ptr<std::map<ComponentKey, std::string>> frame_id_map_ptr)
 : node_(node),
+  nitros_type_manager_(nitros_type_manager),
   gxf_io_supported_data_formats_info_(gxf_io_supported_data_formats_info),
   nitros_pub_sub_configs_(nitros_pub_sub_configs),
   frame_id_map_ptr_(frame_id_map_ptr)
 {
+  // Expand data formats if all ports in this IO group support "any" data formats
+  expandAnyDataFormats();
+
   // Remove undesired supported data formats if needed
   if (!applyUseCompatibleFormatOnly()) {
     RCLCPP_ERROR(
@@ -98,6 +104,57 @@ NitrosPublisherSubscriberGroup::getAllComponentInfos() const
     gxf_io_supported_data_formats_info_.egress_infos.begin(),
     gxf_io_supported_data_formats_info_.egress_infos.end());
   return component_info_list;
+}
+
+void NitrosPublisherSubscriberGroup::expandAnyDataFormats()
+{
+  // In the case that all ingress/egress ports in this group support "any" format,
+  // the supported data formats are expanded using the registered data formats.
+  // In such a case, the given IO group data format support information would
+  // only contain one data format combination with all port's supported data format
+  // as "any".
+  if (gxf_io_supported_data_formats_info_.supported_data_types.size() == 1) {
+    bool to_be_resolved = true;
+    // Check if every port's supported data format is "any"
+    for (const auto & supported_data_type :
+      gxf_io_supported_data_formats_info_.supported_data_types[0])
+    {
+      if (supported_data_type.second != gxf::optimizer::kAnyDataType) {
+        to_be_resolved = false;
+        break;
+      }
+    }
+    if (to_be_resolved == false) {
+      return;
+    }
+
+    // This IO group has all ingress and egress ports supporting "any".
+    // We make them actually support any format by expanding the formats with all
+    // the registered data formats.
+    RCLCPP_INFO(
+      node_.get_logger(),
+      "[NitrosPublisherSubscriberGroup] Expanding \"any\" data formats to all "
+      "registered data formats");
+    gxf_io_supported_data_formats_info_.supported_data_types.clear();
+    std::map<ComponentKey, std::string> supported_data_format_map;
+    for (const std::string registered_data_format :
+      nitros_type_manager_->getAllRegisteredDataFormats())
+    {
+      std::vector<gxf::optimizer::ComponentInfo> ingress_egress_infos =
+        gxf_io_supported_data_formats_info_.ingress_infos;
+      ingress_egress_infos.insert(
+        ingress_egress_infos.end(),
+        gxf_io_supported_data_formats_info_.egress_infos.begin(),
+        gxf_io_supported_data_formats_info_.egress_infos.end()
+      );
+      for (const auto & ingress_comp_info : ingress_egress_infos) {
+        const std::string component_key =
+          gxf::optimizer::GenerateComponentKey(ingress_comp_info);
+        supported_data_format_map[component_key] = registered_data_format;
+      }
+      gxf_io_supported_data_formats_info_.supported_data_types.push_back(supported_data_format_map);
+    }
+  }
 }
 
 bool NitrosPublisherSubscriberGroup::applyUseCompatibleFormatOnly()
@@ -307,7 +364,7 @@ void NitrosPublisherSubscriberGroup::createNitrosSubscribers()
     NitrosPublisherSubscriberConfig component_config = nitros_pub_sub_configs_[component_key];
 
     auto nitros_sub = std::make_shared<NitrosSubscriber>(
-      node_, ingress_comp_info, supported_data_formats, component_config);
+      node_, nitros_type_manager_, ingress_comp_info, supported_data_formats, component_config);
 
     nitros_sub->setFrameIdMap(frame_id_map_ptr_);
 
@@ -359,6 +416,7 @@ void NitrosPublisherSubscriberGroup::createNitrosPublishers()
 
     auto nitros_pub = std::make_shared<NitrosPublisher>(
       node_,
+      nitros_type_manager_,
       egress_comp_info,
       supported_data_formats,
       component_config,
@@ -490,8 +548,9 @@ void NitrosPublisherSubscriberGroup::updateUpstreamSubscriberDownstreamSupported
           // Supported format name
           upstream_type_to_add.supported_type_name = upstream_format;
           // The corresponding ROS type name
-          upstream_type_to_add.ros_type_name = getROSTypeNameByDataFormat(
-            upstream_type_to_add.supported_type_name);
+          upstream_type_to_add.ros_type_name =
+            nitros_type_manager_->getFormatCallbacks(
+            upstream_type_to_add.supported_type_name).getROSTypeName();
 
           upstream_types_to_add.supported_types.push_back(upstream_type_to_add);
         }
@@ -512,8 +571,9 @@ void NitrosPublisherSubscriberGroup::updateUpstreamSubscriberDownstreamSupported
           // Supported format name
           upstream_type_to_remove.supported_type_name = upstream_format;
           // The corresponding ROS type name
-          upstream_type_to_remove.ros_type_name = getROSTypeNameByDataFormat(
-            upstream_type_to_remove.supported_type_name);
+          upstream_type_to_remove.ros_type_name =
+            nitros_type_manager_->getFormatCallbacks(
+            upstream_type_to_remove.supported_type_name).getROSTypeName();
 
           upstream_types_to_remove.supported_types.push_back(upstream_type_to_remove);
         }
@@ -674,7 +734,7 @@ NitrosPublisherSubscriberGroup::publisherNegotiationCallback(
         if (is_valid_format_combination) {
           std::string pub_valid_format = supported_data_type_map.at(pub_comp_key);
           std::string key = negotiated::detail::generate_key(
-            getROSTypeNameByDataFormat(pub_valid_format),
+            nitros_type_manager_->getFormatCallbacks(pub_valid_format).getROSTypeName(),
             pub_valid_format);
           if (key_to_supported_types.count(key) > 0) {
             upstream_filtered_supported_types[key] = key_to_supported_types.at(key);
@@ -709,13 +769,13 @@ NitrosPublisherSubscriberGroup::publisherNegotiationCallback(
   for (size_t i = 1; i <= upstream_filtered_supported_types.size(); ++i) {
     double max_weight = 0.0;
 
-    auto check_combination =
-      [&upstream_filtered_supported_types = std::as_const(upstream_filtered_supported_types),
-        & gid_set = std::as_const(gid_set),
-        & compatible_supported_types = std::as_const(compatible_supported_types),
-        & negotiated_sub_gid_to_keys = std::as_const(negotiated_sub_gid_to_keys),
-        &max_weight,
-        &matched_subs](
+    auto check_combination = [
+      & upstream_filtered_supported_types = std::as_const(upstream_filtered_supported_types),
+      & gid_set = std::as_const(gid_set),
+      & compatible_supported_types = std::as_const(compatible_supported_types),
+      & negotiated_sub_gid_to_keys = std::as_const(negotiated_sub_gid_to_keys),
+      &max_weight,
+      &matched_subs](
       std::vector<std::string>::iterator first,
       std::vector<std::string>::iterator last) -> bool
       {

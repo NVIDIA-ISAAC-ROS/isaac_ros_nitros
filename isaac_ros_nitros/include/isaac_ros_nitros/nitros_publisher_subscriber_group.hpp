@@ -54,6 +54,7 @@ public:
   // Constructor
   NitrosPublisherSubscriberGroup(
     rclcpp::Node & node,
+    std::shared_ptr<NitrosTypeManager> nitros_type_manager,
     const gxf::optimizer::GraphIOGroupSupportedDataTypesInfo & gxf_io_supported_data_formats_info,
     const NitrosPublisherSubscriberConfigMap & nitros_pub_sub_configs,
     const std::shared_ptr<std::map<ComponentKey, std::string>> frame_id_map_ptr);
@@ -126,6 +127,9 @@ public:
   // Get all publisher/subscriber component infos
   std::vector<gxf::optimizer::ComponentInfo> getAllComponentInfos() const;
 
+  // Expand "any" format in gxf_io_supported_data_formats_info_ with registered formats
+  void expandAnyDataFormats();
+
   // For each component that has .use_compatible_format_only as true, remove all supported
   // formats except for the compatible format
   bool applyUseCompatibleFormatOnly();
@@ -153,6 +157,9 @@ private:
   // The ROS node that holds this group
   rclcpp::Node & node_;
 
+  // Nitros type manager
+  std::shared_ptr<NitrosTypeManager> nitros_type_manager_;
+
   // GXF graph information
   gxf::optimizer::GraphIOGroupSupportedDataTypesInfo gxf_io_supported_data_formats_info_;
 
@@ -163,6 +170,7 @@ private:
   std::vector<std::shared_ptr<NitrosPublisher>> nitros_pubs_;
   std::vector<std::shared_ptr<NitrosSubscriber>> nitros_subs_;
 
+  // Frame ID map
   std::shared_ptr<std::map<ComponentKey, std::string>> frame_id_map_ptr_;
 };
 

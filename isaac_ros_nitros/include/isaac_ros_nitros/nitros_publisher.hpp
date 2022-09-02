@@ -42,6 +42,7 @@ public:
   // Constructor
   NitrosPublisher(
     rclcpp::Node & node,
+    std::shared_ptr<NitrosTypeManager> nitros_type_manager,
     const gxf::optimizer::ComponentInfo & gxf_component_info,
     const std::vector<std::string> & supported_data_formats,
     const NitrosPublisherSubscriberConfig & config,

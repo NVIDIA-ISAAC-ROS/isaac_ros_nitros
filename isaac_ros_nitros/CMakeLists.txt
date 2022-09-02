@@ -32,31 +32,30 @@ message( STATUS "Architecture: ${ARCHITECTURE}" )
 find_package(ament_cmake_auto REQUIRED)
 ament_auto_find_build_dependencies()
 
+
+# Eigen3
 find_package(Eigen3 3.3 REQUIRED NO_MODULE)
+
 
 # GXF
 include_directories(gxf/include)
-include_directories(gxf/include/extensions/fiducials)
 include_directories(gxf/include/third_party)
 add_library(gxf SHARED IMPORTED)
 add_library(gxf_std SHARED IMPORTED)
 add_library(gxf_multimedia SHARED IMPORTED)  # for NitrosImage
 add_library(optimizer SHARED IMPORTED)
-add_library(fiducials SHARED IMPORTED)
 if( ${ARCHITECTURE} STREQUAL "x86_64" )
   set_property(TARGET gxf PROPERTY IMPORTED_LOCATION ${CMAKE_CURRENT_SOURCE_DIR}/gxf/lib/gxf_x86_64/core/libgxf_core.so)
   set_property(TARGET gxf_std PROPERTY IMPORTED_LOCATION ${CMAKE_CURRENT_SOURCE_DIR}/gxf/lib/gxf_x86_64/std/libgxf_std.so)
   set_property(
     TARGET gxf_multimedia PROPERTY IMPORTED_LOCATION ${CMAKE_CURRENT_SOURCE_DIR}/gxf/lib/gxf_x86_64/multimedia/libgxf_multimedia.so)
   set_property(TARGET optimizer PROPERTY IMPORTED_LOCATION ${CMAKE_CURRENT_SOURCE_DIR}/gxf/lib/gxf_x86_64/libgxf_optimizer.so)
-  set_property(TARGET fiducials PROPERTY IMPORTED_LOCATION ${CMAKE_CURRENT_SOURCE_DIR}/gxf/lib/gxf_x86_64/libgxf_fiducials.so)
 elseif( ${ARCHITECTURE} STREQUAL "aarch64" )
   set_property(TARGET gxf PROPERTY IMPORTED_LOCATION ${CMAKE_CURRENT_SOURCE_DIR}/gxf/lib/gxf_jetpack50/core/libgxf_core.so)
   set_property(TARGET gxf_std PROPERTY IMPORTED_LOCATION ${CMAKE_CURRENT_SOURCE_DIR}/gxf/lib/gxf_jetpack50/std/libgxf_std.so)
   set_property(
     TARGET gxf_multimedia PROPERTY IMPORTED_LOCATION ${CMAKE_CURRENT_SOURCE_DIR}/gxf/lib/gxf_jetpack50/multimedia/libgxf_multimedia.so)
   set_property(TARGET optimizer PROPERTY IMPORTED_LOCATION ${CMAKE_CURRENT_SOURCE_DIR}/gxf/lib/gxf_jetpack50/libgxf_optimizer.so)
-  set_property(TARGET fiducials PROPERTY IMPORTED_LOCATION ${CMAKE_CURRENT_SOURCE_DIR}/gxf/lib/gxf_jetpack50/libgxf_fiducials.so)
 endif()
 
 
@@ -64,34 +63,28 @@ endif()
 find_package(CUDA REQUIRED)
 include_directories("${CUDA_INCLUDE_DIRS}")
 
-option(USE_NVTX "Enable NVTX markers for improved profiling (if available)" OFF)
+option(USE_NVTX "Enable NVTX markers for improved profiling (if available)" ON)
 if(USE_NVTX)
     add_definitions(-DUSE_NVTX)
     link_directories("${CUDA_TOOLKIT_ROOT_DIR}/lib64")
     link_libraries("nvToolsExt")
 endif()
 
+
 # NitrosNode
 ament_auto_add_library(isaac_ros_nitros SHARED
   src/nitros_node.cpp
   src/nitros_context.cpp
   src/types/type_adapter_nitros_context.cpp
-  src/types/type_utility.cpp
   src/types/nitros_type_base.cpp
-  src/types/nitros_camera_info.cpp
-  src/types/nitros_image.cpp
-  src/types/nitros_disparity_image.cpp
   src/types/nitros_int64.cpp
-  src/types/nitros_tensor_list.cpp
-  src/types/nitros_point_cloud.cpp
-  src/types/nitros_april_tag_detection_array.cpp
   src/nitros_publisher.cpp
   src/nitros_subscriber.cpp
   src/nitros_publisher_subscriber_group.cpp)
 target_compile_definitions(isaac_ros_nitros
   PRIVATE "COMPOSITION_BUILDING_DLL"
 )
-target_link_libraries(isaac_ros_nitros gxf gxf_std gxf_multimedia optimizer fiducials Eigen3::Eigen)
+target_link_libraries(isaac_ros_nitros gxf gxf_multimedia optimizer Eigen3::Eigen)
 # For the NitrosNode test node
 rclcpp_components_register_node(isaac_ros_nitros
   PLUGIN "nvidia::isaac_ros::nitros::NitrosNode"
@@ -107,14 +100,14 @@ install(
   DIRECTORY gxf/include/
   DESTINATION include/
 )
-# Fiducials headers
-install(
-  DIRECTORY gxf/include/extensions/fiducials/
-  DESTINATION include/
-)
 # GXF third party headers
 install(
   DIRECTORY gxf/include/third_party/
+  DESTINATION include/
+)
+# Isaac headers
+install(
+  DIRECTORY gxf/include/extensions/isaac/
   DESTINATION include/
 )
 ament_export_include_directories("include")
@@ -152,12 +145,6 @@ if(BUILD_TESTING)
 
   find_package(launch_testing_ament_cmake REQUIRED)
   add_launch_test(test/isaac_ros_nitros_test_pol.py TIMEOUT "15")
-  add_launch_test(test/isaac_ros_nitros_tensor_list_test_pol.py TIMEOUT "15")
-  add_launch_test(test/isaac_ros_nitros_image_test_pol.py TIMEOUT "15")
-  add_launch_test(test/isaac_ros_nitros_camera_info_test_pol.py TIMEOUT "15")
-  add_launch_test(test/isaac_ros_nitros_disparity_image_test_pol.py TIMEOUT "15")
-  add_launch_test(test/isaac_ros_nitros_point_cloud_test_pol.py TIMEOUT "15")
-  add_launch_test(test/isaac_ros_nitros_april_tag_detection_array_test_pol.py TIMEOUT "15")
 endif()
 
 ament_auto_package()

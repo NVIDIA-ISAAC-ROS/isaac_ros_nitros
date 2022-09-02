@@ -13,7 +13,7 @@ license agreement from NVIDIA CORPORATION is strictly prohibited.
 <?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
   <name>isaac_ros_nitros</name>
-  <version>0.1.0</version>
+  <version>0.11.0</version>
   <description>Isaac ROS Nitros</description>
 
   <maintainer email="cyc@nvidia.com">CY Chen</maintainer>
@@ -24,14 +24,10 @@ license agreement from NVIDIA CORPORATION is strictly prohibited.
 
   <buildtool_depend>ament_cmake</buildtool_depend>
 
-  <depend>isaac_ros_tensor_list_interfaces</depend>
   <depend>negotiated</depend>
   <depend>rclcpp</depend>
   <depend>rclcpp_components</depend>
-  <depend>sensor_msgs</depend>
-  <depend>stereo_msgs</depend>
-  <depend>geometry_msgs</depend>
-  <depend>isaac_ros_apriltag_interfaces</depend>
+  <depend>std_msgs</depend>
 
   <test_depend>ament_lint_auto</test_depend>
   <test_depend>ament_lint_common</test_depend>

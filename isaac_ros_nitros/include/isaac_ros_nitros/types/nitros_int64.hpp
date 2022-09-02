@@ -18,6 +18,7 @@
 
 #include <string>
 
+#include "isaac_ros_nitros/types/nitros_format_agent.hpp"
 #include "isaac_ros_nitros/types/nitros_type_base.hpp"
 
 #include "rclcpp/type_adapter.hpp"
@@ -31,11 +32,8 @@ namespace isaac_ros
 namespace nitros
 {
 
-// Type
-struct NitrosInt64 : NitrosTypeBase
-{
-  using NitrosTypeBase::NitrosTypeBase;
-};
+// Type forward declaration
+struct NitrosInt64;
 
 // Formats
 struct nitros_int64_t
@@ -43,6 +41,17 @@ struct nitros_int64_t
   using MsgT = NitrosInt64;
   static const inline std::string supported_type_name = "nitros_int64";
 };
+
+// NITROS data type registration factory
+NITROS_TYPE_FACTORY_BEGIN(NitrosInt64)
+// Supported data formats
+NITROS_FORMAT_FACTORY_BEGIN()
+NITROS_FORMAT_ADD(nitros_int64_t)
+NITROS_FORMAT_FACTORY_END()
+// Required extensions
+NITROS_TYPE_EXTENSION_FACTORY_BEGIN()
+NITROS_TYPE_EXTENSION_FACTORY_END()
+NITROS_TYPE_FACTORY_END()
 
 }  // namespace nitros
 }  // namespace isaac_ros
