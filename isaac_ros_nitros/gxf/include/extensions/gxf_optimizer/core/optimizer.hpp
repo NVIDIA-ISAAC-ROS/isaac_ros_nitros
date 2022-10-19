@@ -64,6 +64,20 @@ class Optimizer {
       const GraphIOGroupDataTypeConfigurationsList& configs,
       const std::string& prefix = std::string());
 
+  // Get the graph based on the given ingress-egres group data type assignments.
+  // If a prefix string is given, then unnamed entities will be given random names and all
+  // entity names will be prepended with the given prefix.
+  // The resulting graph(s) (including all subgraphs) are saved to the specified directory.
+  // The top level graph YAMLf ile is named <export_base_filename>.yaml. Its first-level
+  // subgraphs are named <export_base_filename>_subgraph<index>.yaml and second-level
+  // subgraphs being <export_base_filename>_subgraph<index>_subgraph<2nd_level_index>.yaml
+  // and so on and so forth if any.
+  Expected<void> exportGraphToFiles(
+      const GraphIOGroupDataTypeConfigurationsList& configs,
+      const std::string& export_directory,
+      const std::string& export_base_filename,
+      const std::string& prefix = std::string());
+
   // Export ingress-egress groups and their supported data types
   Expected<GraphIOGroupSupportedDataTypesInfoList> exportGraphIOGroupSupportedDataTypesInfoList();
 

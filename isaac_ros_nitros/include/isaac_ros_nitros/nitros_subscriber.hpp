@@ -45,6 +45,14 @@ public:
     const std::vector<std::string> & supported_data_formats,
     const NitrosPublisherSubscriberConfig & config);
 
+  NitrosSubscriber(
+    rclcpp::Node & node,
+    const gxf_context_t context,
+    std::shared_ptr<NitrosTypeManager> nitros_type_manager,
+    const gxf::optimizer::ComponentInfo & gxf_component_info,
+    const std::vector<std::string> & supported_data_formats,
+    const NitrosPublisherSubscriberConfig & config);
+
   // Getter for the negotiated_sub_
   std::shared_ptr<negotiated::NegotiatedSubscription> getNegotiatedSubscriber();
 

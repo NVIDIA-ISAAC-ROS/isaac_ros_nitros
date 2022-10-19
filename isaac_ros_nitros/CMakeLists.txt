@@ -32,10 +32,13 @@ message( STATUS "Architecture: ${ARCHITECTURE}" )
 find_package(ament_cmake_auto REQUIRED)
 ament_auto_find_build_dependencies()
 
+# Elbrus (register path and install)
+ament_index_register_resource(elbrus CONTENT share/${PROJECT_NAME}/elbrus)
+install(DIRECTORY lib/elbrus
+  DESTINATION "${CMAKE_INSTALL_PREFIX}/share/${PROJECT_NAME}")
 
 # Eigen3
 find_package(Eigen3 3.3 REQUIRED NO_MODULE)
-
 
 # GXF
 include_directories(gxf/include)
@@ -45,17 +48,18 @@ add_library(gxf_std SHARED IMPORTED)
 add_library(gxf_multimedia SHARED IMPORTED)  # for NitrosImage
 add_library(optimizer SHARED IMPORTED)
 if( ${ARCHITECTURE} STREQUAL "x86_64" )
-  set_property(TARGET gxf PROPERTY IMPORTED_LOCATION ${CMAKE_CURRENT_SOURCE_DIR}/gxf/lib/gxf_x86_64/core/libgxf_core.so)
-  set_property(TARGET gxf_std PROPERTY IMPORTED_LOCATION ${CMAKE_CURRENT_SOURCE_DIR}/gxf/lib/gxf_x86_64/std/libgxf_std.so)
+  set_property(TARGET gxf PROPERTY IMPORTED_LOCATION ${CMAKE_CURRENT_SOURCE_DIR}/gxf/lib/gxf_x86_64_cuda_11_7/core/libgxf_core.so)
+  set_property(TARGET gxf_std PROPERTY IMPORTED_LOCATION ${CMAKE_CURRENT_SOURCE_DIR}/gxf/lib/gxf_x86_64_cuda_11_7/std/libgxf_std.so)
   set_property(
-    TARGET gxf_multimedia PROPERTY IMPORTED_LOCATION ${CMAKE_CURRENT_SOURCE_DIR}/gxf/lib/gxf_x86_64/multimedia/libgxf_multimedia.so)
-  set_property(TARGET optimizer PROPERTY IMPORTED_LOCATION ${CMAKE_CURRENT_SOURCE_DIR}/gxf/lib/gxf_x86_64/libgxf_optimizer.so)
+    TARGET gxf_multimedia
+    PROPERTY IMPORTED_LOCATION ${CMAKE_CURRENT_SOURCE_DIR}/gxf/lib/gxf_x86_64_cuda_11_7/multimedia/libgxf_multimedia.so)
+  set_property(TARGET optimizer PROPERTY IMPORTED_LOCATION ${CMAKE_CURRENT_SOURCE_DIR}/gxf/lib/gxf_x86_64_cuda_11_7/libgxf_optimizer.so)
 elseif( ${ARCHITECTURE} STREQUAL "aarch64" )
-  set_property(TARGET gxf PROPERTY IMPORTED_LOCATION ${CMAKE_CURRENT_SOURCE_DIR}/gxf/lib/gxf_jetpack50/core/libgxf_core.so)
-  set_property(TARGET gxf_std PROPERTY IMPORTED_LOCATION ${CMAKE_CURRENT_SOURCE_DIR}/gxf/lib/gxf_jetpack50/std/libgxf_std.so)
+  set_property(TARGET gxf PROPERTY IMPORTED_LOCATION ${CMAKE_CURRENT_SOURCE_DIR}/gxf/lib/gxf_jetpack502/core/libgxf_core.so)
+  set_property(TARGET gxf_std PROPERTY IMPORTED_LOCATION ${CMAKE_CURRENT_SOURCE_DIR}/gxf/lib/gxf_jetpack502/std/libgxf_std.so)
   set_property(
-    TARGET gxf_multimedia PROPERTY IMPORTED_LOCATION ${CMAKE_CURRENT_SOURCE_DIR}/gxf/lib/gxf_jetpack50/multimedia/libgxf_multimedia.so)
-  set_property(TARGET optimizer PROPERTY IMPORTED_LOCATION ${CMAKE_CURRENT_SOURCE_DIR}/gxf/lib/gxf_jetpack50/libgxf_optimizer.so)
+    TARGET gxf_multimedia PROPERTY IMPORTED_LOCATION ${CMAKE_CURRENT_SOURCE_DIR}/gxf/lib/gxf_jetpack502/multimedia/libgxf_multimedia.so)
+  set_property(TARGET optimizer PROPERTY IMPORTED_LOCATION ${CMAKE_CURRENT_SOURCE_DIR}/gxf/lib/gxf_jetpack502/libgxf_optimizer.so)
 endif()
 
 
@@ -70,6 +74,8 @@ if(USE_NVTX)
     link_libraries("nvToolsExt")
 endif()
 
+# Find VPI dependency
+find_package(vpi REQUIRED)
 
 # NitrosNode
 ament_auto_add_library(isaac_ros_nitros SHARED
@@ -80,11 +86,12 @@ ament_auto_add_library(isaac_ros_nitros SHARED
   src/types/nitros_int64.cpp
   src/nitros_publisher.cpp
   src/nitros_subscriber.cpp
-  src/nitros_publisher_subscriber_group.cpp)
+  src/nitros_publisher_subscriber_group.cpp
+  src/utils/vpi_utilities.cpp)
 target_compile_definitions(isaac_ros_nitros
   PRIVATE "COMPOSITION_BUILDING_DLL"
 )
-target_link_libraries(isaac_ros_nitros gxf gxf_multimedia optimizer Eigen3::Eigen)
+target_link_libraries(isaac_ros_nitros gxf gxf_multimedia optimizer Eigen3::Eigen vpi)
 # For the NitrosNode test node
 rclcpp_components_register_node(isaac_ros_nitros
   PLUGIN "nvidia::isaac_ros::nitros::NitrosNode"
@@ -123,13 +130,15 @@ install(
 # Install extensions directory
 # Also copying libgxf_core.so to the lib directory for exposing it to other packages
 if( ${ARCHITECTURE} STREQUAL "x86_64" )
-  install(DIRECTORY gxf/lib/gxf_x86_64/ DESTINATION share/${PROJECT_NAME}/gxf)
-  install(FILES gxf/lib/gxf_x86_64/multimedia/libgxf_multimedia.so DESTINATION lib/)
-  install(FILES gxf/lib/gxf_x86_64/cuda/libgxf_cuda.so DESTINATION lib/)
+  install(DIRECTORY gxf/lib/gxf_x86_64_cuda_11_7/ DESTINATION share/${PROJECT_NAME}/gxf)
+  install(FILES gxf/lib/gxf_x86_64_cuda_11_7/core/libgxf_core.so DESTINATION lib/)
+  install(FILES gxf/lib/gxf_x86_64_cuda_11_7/multimedia/libgxf_multimedia.so DESTINATION lib/)
+  install(FILES gxf/lib/gxf_x86_64_cuda_11_7/cuda/libgxf_cuda.so DESTINATION lib/)
 elseif( ${ARCHITECTURE} STREQUAL "aarch64" )
-  install(DIRECTORY gxf/lib/gxf_jetpack50/ DESTINATION share/${PROJECT_NAME}/gxf)
-  install(FILES gxf/lib/gxf_jetpack50/multimedia/libgxf_multimedia.so DESTINATION lib/)
-  install(FILES gxf/lib/gxf_jetpack50/cuda/libgxf_cuda.so DESTINATION lib/)
+  install(DIRECTORY gxf/lib/gxf_jetpack502/ DESTINATION share/${PROJECT_NAME}/gxf)
+  install(FILES gxf/lib/gxf_jetpack502/core/libgxf_core.so DESTINATION lib/)
+  install(FILES gxf/lib/gxf_jetpack502/multimedia/libgxf_multimedia.so DESTINATION lib/)
+  install(FILES gxf/lib/gxf_jetpack502/cuda/libgxf_cuda.so DESTINATION lib/)
 endif()
 set_target_properties(isaac_ros_nitros PROPERTIES BUILD_WITH_INSTALL_RPATH TRUE)
 set_target_properties(isaac_ros_nitros PROPERTIES INSTALL_RPATH "$ORIGIN/../share/${PROJECT_NAME}/gxf/core")

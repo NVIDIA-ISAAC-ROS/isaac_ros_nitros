@@ -261,23 +261,18 @@ gxf_result_t NitrosContext::loadExtension(
     return GXF_FAILURE;
   }
 
-  using func_gxf_set_severity_t = gxf_result_t (*)(gxf_context_t, gxf_severity_t);
+  using func_gxf_set_severity_t = void (*)(nvidia::Severity);
   func_gxf_set_severity_t func_gxf_set_severity =
-    reinterpret_cast<func_gxf_set_severity_t>(dlsym(handle, "GxfSetSeverity"));
+    reinterpret_cast<func_gxf_set_severity_t>(dlsym(
+      handle,
+      "_ZN6nvidia11SetSeverityENS_8SeverityE"));
   if (!func_gxf_set_severity) {
-    RCLCPP_ERROR(
+    RCLCPP_WARN(
       get_logger(),
-      "[NitrosContext] dlopen error when opening \"%s\": %s",
+      "[NitrosContext] dlopen error when opening \"%s\" to set the log severity level: %s",
       extension_file_path.c_str(), dlerror());
-    return GXF_FAILURE;
-  }
-
-  code = func_gxf_set_severity(context_, extension_log_severity_);
-  if (code != GXF_SUCCESS) {
-    RCLCPP_ERROR(
-      get_logger(),
-      "[NitrosContext] GxfSetSeverity Error: %s", GxfResultStr(code));
-    return code;
+  } else {
+    func_gxf_set_severity(static_cast<nvidia::Severity>(extension_log_severity_));
   }
 
   // Actually load the extension

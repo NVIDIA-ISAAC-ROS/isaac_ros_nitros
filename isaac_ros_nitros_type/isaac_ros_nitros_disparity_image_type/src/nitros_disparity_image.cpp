@@ -51,7 +51,6 @@ const std::unordered_map<VideoFormat, std::string> g_gxf_to_ros_video_format({
 // Get step size for ROS Image
 uint32_t GetStepSize(const nvidia::gxf::VideoBufferInfo & video_buff_info)
 {
-  // TODO(yuankunz): Implement for multiplanar to interleaved
   return video_buff_info.width * video_buff_info.color_planes[0].bytes_per_pixel;
 }
 
@@ -106,7 +105,7 @@ void rclcpp::TypeAdapter<nvidia::isaac_ros::nitros::NitrosDisparityImage,
   auto msg_entity = nvidia::gxf::Entity::Shared(context, source.handle);
 
   auto gxf_video_buffer = msg_entity->get<nvidia::gxf::VideoBuffer>();
-  auto gxf_disparity_parameters = msg_entity->findAll<float_t>();
+  auto gxf_disparity_parameters = msg_entity->findAll<float>();
 
   if (!gxf_video_buffer) {
     std::stringstream error_msg;
@@ -301,10 +300,10 @@ void rclcpp::TypeAdapter<nvidia::isaac_ros::nitros::NitrosDisparityImage,
   output_timestamp.value()->acqtime = input_timestamp;
 
   // Set focal and baseline
-  *(message->add<float_t>("t")->get()) = source.t;
-  *(message->add<float_t>("f")->get()) = source.f;
-  *(message->add<float_t>("min_disparity")->get()) = source.min_disparity;
-  *(message->add<float_t>("max_disparity")->get()) = source.max_disparity;
+  *(message->add<float>("t")->get()) = source.t;
+  *(message->add<float>("f")->get()) = source.f;
+  *(message->add<float>("min_disparity")->get()) = source.min_disparity;
+  *(message->add<float>("max_disparity")->get()) = source.max_disparity;
 
   // Set frame ID
   destination.frame_id = source.header.frame_id;
@@ -313,7 +312,7 @@ void rclcpp::TypeAdapter<nvidia::isaac_ros::nitros::NitrosDisparityImage,
   destination.handle = message->eid();
   GxfEntityRefCountInc(context, message->eid());
 
-  RCLCPP_INFO(
+  RCLCPP_DEBUG(
     rclcpp::get_logger("NitrosDisparityImage"),
     "[convert_to_custom] Conversion completed (resulting handle=%ld)", message->eid());
 

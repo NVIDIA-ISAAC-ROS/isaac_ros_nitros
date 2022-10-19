@@ -48,6 +48,15 @@ public:
     const NitrosPublisherSubscriberConfig & config,
     const negotiated::NegotiatedPublisherOptions & negotiated_pub_options);
 
+  NitrosPublisher(
+    rclcpp::Node & node,
+    const gxf_context_t context,
+    std::shared_ptr<NitrosTypeManager> nitros_type_manager,
+    const gxf::optimizer::ComponentInfo & gxf_component_info,
+    const std::vector<std::string> & supported_data_formats,
+    const NitrosPublisherSubscriberConfig & config,
+    const negotiated::NegotiatedPublisherOptions & negotiated_pub_options);
+
   // Getter for the negotiated_pub_
   std::shared_ptr<negotiated::NegotiatedPublisher> getNegotiatedPublisher();
 

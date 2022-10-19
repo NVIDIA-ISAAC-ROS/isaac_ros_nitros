@@ -1,12 +1,19 @@
 /*
-Copyright (c) 2020-2021, NVIDIA CORPORATION. All rights reserved.
-
-NVIDIA CORPORATION and its licensors retain all intellectual property
-and proprietary rights in and to this software, related documentation
-and any modifications thereto. Any use, reproduction, disclosure or
-distribution of this software and related documentation without an express
-license agreement from NVIDIA CORPORATION is strictly prohibited.
-*/
+ * SPDX-FileCopyrightText: Copyright (c) 2020-2021 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-License-Identifier: Apache-2.0
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 #ifndef NVIDIA_GXF_TEST_EXTENSIONS_TEST_PARAMETERS_HPP_
 #define NVIDIA_GXF_TEST_EXTENSIONS_TEST_PARAMETERS_HPP_
 
@@ -437,6 +444,94 @@ class TestHandleParameter : public Component {
   }
 
   Parameter<Handle<Allocator>> pool_;
+};
+
+// Tests various parameters with GxfParameterSetFromYamlNode() API
+class TestGxfParameterSetFromYamlNode : public Component {
+ public:
+  gxf_result_t initialize() override { return GXF_SUCCESS; }
+
+  gxf_result_t registerInterface(Registrar* registrar) override {
+    Expected<void> result;
+    result &= registrar->parameter(bool_, "bool");
+    result &= registrar->parameter(int8_, "int8");
+    result &= registrar->parameter(int16_, "int16");
+    result &= registrar->parameter(int32_, "int32");
+    result &= registrar->parameter(int64_, "int64");
+    result &= registrar->parameter(uint8_, "uint8");
+    result &= registrar->parameter(uint16_, "uint16");
+    result &= registrar->parameter(uint32_, "uint32");
+    result &= registrar->parameter(uint64_, "uint64");
+    result &= registrar->parameter(float_, "float");
+    result &= registrar->parameter(double_, "double");
+    result &= registrar->parameter(string_, "string");
+    result &= registrar->parameter(handle_, "handle");
+    result &= registrar->parameter(vector_bool_, "vector_bool");
+    result &= registrar->parameter(vector_int8_, "vector_int8");
+    result &= registrar->parameter(vector_int16_, "vector_int16");
+    result &= registrar->parameter(vector_int32_, "vector_int32");
+    result &= registrar->parameter(vector_int64_, "vector_int64");
+    result &= registrar->parameter(vector_uint8_, "vector_uint8");
+    result &= registrar->parameter(vector_uint16_, "vector_uint16");
+    result &= registrar->parameter(vector_uint32_, "vector_uint32");
+    result &= registrar->parameter(vector_uint64_, "vector_uint64");
+    result &= registrar->parameter(vector_float_, "vector_float");
+    result &= registrar->parameter(vector_double_, "vector_double");
+    result &= registrar->parameter(vector_handle_, "vector_handle");
+    result &= registrar->parameter(vector_string_, "vector_string");
+    result &= registrar->parameter(vector_2d_bool_, "vector_2d_bool");
+    result &= registrar->parameter(vector_2d_int8_, "vector_2d_int8");
+    result &= registrar->parameter(vector_2d_int16_, "vector_2d_int16");
+    result &= registrar->parameter(vector_2d_int32_, "vector_2d_int32");
+    result &= registrar->parameter(vector_2d_int64_, "vector_2d_int64");
+    result &= registrar->parameter(vector_2d_uint8_, "vector_2d_uint8");
+    result &= registrar->parameter(vector_2d_uint16_, "vector_2d_uint16");
+    result &= registrar->parameter(vector_2d_uint32_, "vector_2d_uint32");
+    result &= registrar->parameter(vector_2d_uint64_, "vector_2d_uint64");
+    result &= registrar->parameter(vector_2d_float_, "vector_2d_float");
+    result &= registrar->parameter(vector_2d_double_, "vector_2d_double");
+    result &= registrar->parameter(vector_2d_string_, "vector_2d_string");
+    return ToResultCode(result);
+  }
+
+  Parameter<bool> bool_;
+  Parameter<int8_t> int8_;
+  Parameter<int16_t> int16_;
+  Parameter<int32_t> int32_;
+  Parameter<int64_t> int64_;
+  Parameter<uint8_t> uint8_;
+  Parameter<uint16_t> uint16_;
+  Parameter<uint32_t> uint32_;
+  Parameter<uint64_t> uint64_;
+  Parameter<float> float_;
+  Parameter<double> double_;
+  Parameter<std::string> string_;
+  Parameter<Handle<Allocator>> handle_;
+  Parameter<std::vector<bool>> vector_bool_;
+  Parameter<std::vector<int8_t>> vector_int8_;
+  Parameter<std::vector<int16_t>> vector_int16_;
+  Parameter<std::vector<int32_t>> vector_int32_;
+  Parameter<std::vector<int64_t>> vector_int64_;
+  Parameter<std::vector<uint8_t>> vector_uint8_;
+  Parameter<std::vector<uint16_t>> vector_uint16_;
+  Parameter<std::vector<uint32_t>> vector_uint32_;
+  Parameter<std::vector<uint64_t>> vector_uint64_;
+  Parameter<std::vector<float>> vector_float_;
+  Parameter<std::vector<double>> vector_double_;
+  Parameter<std::vector<Handle<Allocator>>> vector_handle_;
+  Parameter<std::vector<std::string>> vector_string_;
+  Parameter<std::vector<std::vector<bool>>> vector_2d_bool_;
+  Parameter<std::vector<std::vector<int8_t>>> vector_2d_int8_;
+  Parameter<std::vector<std::vector<int16_t>>> vector_2d_int16_;
+  Parameter<std::vector<std::vector<int32_t>>> vector_2d_int32_;
+  Parameter<std::vector<std::vector<int64_t>>> vector_2d_int64_;
+  Parameter<std::vector<std::vector<uint8_t>>> vector_2d_uint8_;
+  Parameter<std::vector<std::vector<uint16_t>>> vector_2d_uint16_;
+  Parameter<std::vector<std::vector<uint32_t>>> vector_2d_uint32_;
+  Parameter<std::vector<std::vector<uint64_t>>> vector_2d_uint64_;
+  Parameter<std::vector<std::vector<float>>> vector_2d_float_;
+  Parameter<std::vector<std::vector<double>>> vector_2d_double_;
+  Parameter<std::vector<std::vector<std::string>>> vector_2d_string_;
 };
 
 }  // namespace test

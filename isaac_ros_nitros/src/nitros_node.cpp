@@ -397,7 +397,8 @@ void NitrosNode::startNitrosNode()
   for (const auto & gxf_io_group : gxf_io_group_info_list_) {
     nitros_pub_sub_groups_.emplace_back(
       std::make_shared<NitrosPublisherSubscriberGroup>(
-        *this, nitros_type_manager_, gxf_io_group, config_map_, frame_id_map_ptr_));
+        *this, nitros_context_.getContext(),
+        nitros_type_manager_, gxf_io_group, config_map_, frame_id_map_ptr_));
   }
 
   // Start negotiation
@@ -431,24 +432,21 @@ void NitrosNode::postNegotiationCallback()
   // Get the graph with the data formats assigned
   RCLCPP_INFO(
     get_logger(),
-    "[NitrosNode] Configuring the final graph based on the negotiation results");
-  auto graph_yaml_string = optimizer_.exportGraph(configs, graph_namespace_);
-  if (!graph_yaml_string) {
+    "[NitrosNode] Exporting the final graph based on the negotiation results");
+  auto export_result = optimizer_.exportGraphToFiles(
+    configs, package_share_directory_, graph_namespace_, graph_namespace_);
+  if (!export_result) {
     std::stringstream error_msg;
-    error_msg << "[NitrosNode] exportGraph Error: " << GxfResultStr(graph_yaml_string.error());
+    error_msg << "[NitrosNode] exportGraphToFiles Error: " <<
+      GxfResultStr(export_result.error());
     RCLCPP_ERROR(get_logger(), error_msg.str().c_str());
     throw std::runtime_error(error_msg.str().c_str());
   }
 
-  // Store the YAML graph in a temporary file
   std::string temp_yaml_filename = package_share_directory_ + "/" + graph_namespace_ + ".yaml";
-  std::ofstream app_yaml_file_out(temp_yaml_filename);
-  app_yaml_file_out << graph_yaml_string.value();
-  app_yaml_file_out.close();
   RCLCPP_INFO(
     get_logger(),
-    "[NitrosNode] Wrote the final YAML graph to \"%s\"", temp_yaml_filename.c_str());
-
+    "[NitrosNode] Wrote the final top level YAML graph to \"%s\"", temp_yaml_filename.c_str());
 
   // Load the application graph
   gxf_result_t code;
@@ -481,7 +479,6 @@ void NitrosNode::postNegotiationCallback()
         comp_info.component_type_name,
         &pointer);
       sub_ptr->setReceiverPointer(pointer);
-      sub_ptr->setContext(nitros_context_.getContext());
       RCLCPP_DEBUG(get_logger(), "[NitrosNode] Setting a subscriber's pointer: %p", pointer);
     }
 
@@ -495,7 +492,6 @@ void NitrosNode::postNegotiationCallback()
         comp_info.component_type_name,
         &pointer);
       pub_ptr->setVaultPointer(pointer);
-      pub_ptr->setContext(nitros_context_.getContext());
       RCLCPP_DEBUG(get_logger(), "[NitrosNode] Setting a publisher's pointer: %p", pointer);
       pub_ptr->startGxfVaultPeriodicPollingTimer();
     }
@@ -522,6 +518,32 @@ void NitrosNode::preLoadGraphSetParameter(
 )
 {
   nitros_context_.preLoadGraphSetParameter(entity_name, component_name, parameter_name, value);
+}
+
+std::shared_ptr<NitrosPublisher> NitrosNode::findNitrosPublisher(
+  const gxf::optimizer::ComponentInfo & comp_info)
+{
+  for (auto & nitros_pub_sub_group : nitros_pub_sub_groups_) {
+    auto nitros_pub = nitros_pub_sub_group->findNitrosPublisher(comp_info);
+    if (nitros_pub != nullptr) {
+      return nitros_pub;
+    }
+  }
+  return nullptr;
+}
+
+std::shared_ptr<NitrosSubscriber> NitrosNode::findNitrosSubscriber(
+  const gxf::optimizer::ComponentInfo & comp_info)
+{
+  {
+    for (auto & nitros_pub_sub_group : nitros_pub_sub_groups_) {
+      auto nitros_sub = nitros_pub_sub_group->findNitrosSubscriber(comp_info);
+      if (nitros_sub != nullptr) {
+        return nitros_sub;
+      }
+    }
+    return nullptr;
+  }
 }
 
 std::string NitrosNode::getNegotiatedDataFormat(const ComponentInfo comp_info) const
