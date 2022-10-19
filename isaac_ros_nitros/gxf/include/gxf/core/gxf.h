@@ -1,18 +1,19 @@
 /*
-Copyright (c) 2021-2022, NVIDIA CORPORATION. All rights reserved.
-
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-    http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
-*/
+ * SPDX-FileCopyrightText: Copyright (c) 2021-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-License-Identifier: Apache-2.0
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 #ifndef NVIDIA_GXF_CORE_GXF_H_
 #define NVIDIA_GXF_CORE_GXF_H_
 
@@ -155,7 +156,7 @@ typedef void* gxf_context_t;
 #define kNullContext nullptr
 
 /// @brief GXF Core Version
-#define kGxfCoreVersion "2.4.2"
+#define kGxfCoreVersion "2.4.3"
 
 /// @brief Creates a new GXF context
 ///
@@ -621,6 +622,10 @@ gxf_result_t GxfParameterSet1DInt32Vector(gxf_context_t context, gxf_uid_t uid, 
 // width should match the shape of the registered parameters.
 gxf_result_t GxfParameterSet2DInt32Vector(gxf_context_t context, gxf_uid_t uid, const char* key,
                                           int32_t** value, uint64_t height, uint64_t width);
+
+// Sets a parameter from YAML. The YAML node pointer should be a type of 'YAML::Node*'.
+gxf_result_t GxfParameterSetFromYamlNode(gxf_context_t context, gxf_uid_t uid, const char* key,
+                                         void* yaml_node, const char* prefix);
 
 // Gets a 64-bit floating point parameter
 gxf_result_t GxfParameterGetFloat64(gxf_context_t context, gxf_uid_t uid, const char* key,

@@ -37,6 +37,7 @@ using gxf::optimizer::GraphIOGroupSupportedDataTypesInfoList;
 using gxf::optimizer::GraphIOGroupDataTypeConfigurations;
 using gxf::optimizer::ComponentInfo;
 using gxf::optimizer::ComponentKey;
+using NitrosPubSubGroupPointerList = std::vector<std::shared_ptr<NitrosPublisherSubscriberGroup>>;
 
 // A hardware-accelerated ROS node base class
 class NitrosNode : public rclcpp::Node
@@ -129,6 +130,15 @@ protected:
     const std::string & parameter_name,
     const std::string & value
   );
+
+  // Find the corresponding Nitros publisher of the given component
+  std::shared_ptr<NitrosPublisher> findNitrosPublisher(
+    const gxf::optimizer::ComponentInfo & comp_info);
+
+  // Find the corresponding Nitros subscriber of the given component
+  std::shared_ptr<NitrosSubscriber> findNitrosSubscriber(
+    const gxf::optimizer::ComponentInfo & comp_info);
+
   // Get the negotiated data format for the given component
   std::string getNegotiatedDataFormat(const ComponentInfo comp_info) const;
 
@@ -199,7 +209,7 @@ private:
 
   // A list of pub/sub groups in which the data formats of a group of publishers and subscribers
   // are dependent on each other
-  std::vector<std::shared_ptr<NitrosPublisherSubscriberGroup>> nitros_pub_sub_groups_;
+  NitrosPubSubGroupPointerList nitros_pub_sub_groups_;
 
   // The graph optimizer
   nvidia::gxf::optimizer::Optimizer optimizer_;

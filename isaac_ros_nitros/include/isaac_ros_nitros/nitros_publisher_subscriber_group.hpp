@@ -54,6 +54,7 @@ public:
   // Constructor
   NitrosPublisherSubscriberGroup(
     rclcpp::Node & node,
+    const gxf_context_t context,
     std::shared_ptr<NitrosTypeManager> nitros_type_manager,
     const gxf::optimizer::GraphIOGroupSupportedDataTypesInfo & gxf_io_supported_data_formats_info,
     const NitrosPublisherSubscriberConfigMap & nitros_pub_sub_configs,
@@ -156,6 +157,9 @@ private:
 
   // The ROS node that holds this group
   rclcpp::Node & node_;
+
+  // The parent GXF context
+  gxf_context_t context_;
 
   // Nitros type manager
   std::shared_ptr<NitrosTypeManager> nitros_type_manager_;

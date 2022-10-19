@@ -26,49 +26,59 @@
 
 #include "isaac_ros_nitros_image_type/nitros_image.hpp"
 #include "isaac_ros_nitros/types/type_adapter_nitros_context.hpp"
-
 #include "rclcpp/rclcpp.hpp"
-
+#include "sensor_msgs/sensor_msgs/image_encodings.hpp"
+#include "isaac_ros_nitros/utils/vpi_utilities.hpp"
+#include "vpi/Image.h"
+#include "vpi/algo/ConvertImageFormat.h"
 
 constexpr char kEntityName[] = "memory_pool";
 constexpr char kComponentName[] = "unbounded_allocator";
 constexpr char kComponentTypeName[] = "nvidia::gxf::UnboundedAllocator";
 
-
 namespace
 {
+
 using VideoFormat = nvidia::gxf::VideoFormat;
+namespace img_encodings = sensor_msgs::image_encodings;
+namespace nitros = nvidia::isaac_ros::nitros;
 // Map to store the ROS format encoding to Nitros format encoding
 const std::unordered_map<std::string, VideoFormat> g_ros_to_gxf_video_format({
-    {"rgb8", VideoFormat::GXF_VIDEO_FORMAT_RGB},
-    {"rgba8", VideoFormat::GXF_VIDEO_FORMAT_RGBA},
-    {"rgb16", VideoFormat::GXF_VIDEO_FORMAT_RGB16},
-    {"bgr8", VideoFormat::GXF_VIDEO_FORMAT_BGR},
-    {"bgra8", VideoFormat::GXF_VIDEO_FORMAT_BGRA},
-    {"bgr16", VideoFormat::GXF_VIDEO_FORMAT_BGR16},
-    {"mono8", VideoFormat::GXF_VIDEO_FORMAT_GRAY},
-    {"mono16", VideoFormat::GXF_VIDEO_FORMAT_GRAY16},
-    {"nv24", VideoFormat::GXF_VIDEO_FORMAT_NV24}
+    {img_encodings::RGB8, VideoFormat::GXF_VIDEO_FORMAT_RGB},
+    {img_encodings::RGBA8, VideoFormat::GXF_VIDEO_FORMAT_RGBA},
+    {img_encodings::RGB16, VideoFormat::GXF_VIDEO_FORMAT_RGB16},
+    {img_encodings::BGR8, VideoFormat::GXF_VIDEO_FORMAT_BGR},
+    {img_encodings::BGRA8, VideoFormat::GXF_VIDEO_FORMAT_BGRA},
+    {img_encodings::BGR16, VideoFormat::GXF_VIDEO_FORMAT_BGR16},
+    {img_encodings::MONO8, VideoFormat::GXF_VIDEO_FORMAT_GRAY},
+    {img_encodings::MONO16, VideoFormat::GXF_VIDEO_FORMAT_GRAY16},
+    {img_encodings::NV24, VideoFormat::GXF_VIDEO_FORMAT_NV24_ER},
+    {"nv12", VideoFormat::GXF_VIDEO_FORMAT_NV12_ER},
   });
 
 // Map to store the Nitros format encoding to ROS format encoding
 const std::unordered_map<VideoFormat, std::string> g_gxf_to_ros_video_format({
-    {VideoFormat::GXF_VIDEO_FORMAT_RGB, "rgb8"},
-    {VideoFormat::GXF_VIDEO_FORMAT_RGBA, "rgba8"},
-    {VideoFormat::GXF_VIDEO_FORMAT_RGB16, "rgb16"},
-    {VideoFormat::GXF_VIDEO_FORMAT_BGR, "bgr8"},
-    {VideoFormat::GXF_VIDEO_FORMAT_BGRA, "bgra8"},
-    {VideoFormat::GXF_VIDEO_FORMAT_BGR16, "bgr16"},
-    {VideoFormat::GXF_VIDEO_FORMAT_GRAY, "mono8"},
-    {VideoFormat::GXF_VIDEO_FORMAT_GRAY16, "mono16"},
-    {VideoFormat::GXF_VIDEO_FORMAT_NV24, "nv24"}
+    {VideoFormat::GXF_VIDEO_FORMAT_RGB, img_encodings::RGB8},
+    {VideoFormat::GXF_VIDEO_FORMAT_RGBA, img_encodings::RGBA8},
+    {VideoFormat::GXF_VIDEO_FORMAT_RGB16, img_encodings::RGB16},
+    {VideoFormat::GXF_VIDEO_FORMAT_BGR, img_encodings::BGR8},
+    {VideoFormat::GXF_VIDEO_FORMAT_BGRA, img_encodings::BGRA8},
+    {VideoFormat::GXF_VIDEO_FORMAT_BGR16, img_encodings::BGR16},
+    {VideoFormat::GXF_VIDEO_FORMAT_GRAY, img_encodings::MONO8},
+    {VideoFormat::GXF_VIDEO_FORMAT_GRAY16, img_encodings::MONO16},
+    {VideoFormat::GXF_VIDEO_FORMAT_NV24_ER, img_encodings::NV24},
+    {VideoFormat::GXF_VIDEO_FORMAT_NV12_ER, "nv12"},
   });
 
 // Get step size for ROS Image
 uint32_t get_step_size(const nvidia::gxf::VideoBufferInfo & video_buff_info)
 {
-  // TODO(swani): Implement for multiplanar to interleaved
   return video_buff_info.width * video_buff_info.color_planes[0].bytes_per_pixel;
+}
+
+uint32_t get_step_size(const VPIImageData & vpi_img_data)
+{
+  return vpi_img_data.buffer.pitch.planes[0].pitchBytes;
 }
 
 template<VideoFormat T>
@@ -139,6 +149,15 @@ struct NoPaddingColorPlanes<VideoFormat::GXF_VIDEO_FORMAT_GRAY16>
 };
 
 template<>
+struct NoPaddingColorPlanes<VideoFormat::GXF_VIDEO_FORMAT_NV12>
+{
+  NoPaddingColorPlanes(size_t width)
+  : planes({nvidia::gxf::ColorPlane("Y", 1, width),
+        nvidia::gxf::ColorPlane("UV", 2, width * 2)}) {}
+  std::array<nvidia::gxf::ColorPlane, 2> planes;
+};
+
+template<>
 struct NoPaddingColorPlanes<VideoFormat::GXF_VIDEO_FORMAT_NV24>
 {
   NoPaddingColorPlanes(size_t width)
@@ -154,7 +173,6 @@ void allocate_video_buffer_no_padding(
   const nvidia::gxf::Handle<nvidia::gxf::VideoBuffer> & video_buff,
   const nvidia::gxf::Handle<nvidia::gxf::Allocator> & allocator_handle)
 {
-  // TODO(swani): Implement for Block Linear
   constexpr auto surface_layout = nvidia::gxf::SurfaceLayout::GXF_SURFACE_LAYOUT_PITCH_LINEAR;
   constexpr auto storage_type = nvidia::gxf::MemoryStorageType::kDevice;
   if (width % 2 != 0 || height % 2 != 0) {
@@ -238,27 +256,50 @@ void allocate_video_buffer(
         source.width, source.height, video_buff, allocator_handle);
       break;
 
+    case VideoFormat::GXF_VIDEO_FORMAT_NV12:
+      allocate_video_buffer_no_padding<VideoFormat::GXF_VIDEO_FORMAT_NV12>(
+        source.width, source.height, video_buff, allocator_handle);
+      break;
+
     default:
       break;
   }
 }
+
+VPIStatus CreateVPIImageWrapper(
+  VPIImage & vpi_image, VPIImageData & img_data, uint64_t flags,
+  const nvidia::gxf::Handle<nvidia::gxf::VideoBuffer> & video_buff)
+{
+  nvidia::gxf::VideoBufferInfo image_info = video_buff->video_frame_info();
+  nitros::VPIFormat vpi_format = nitros::ToVpiFormat(image_info.color_format);
+  img_data.bufferType = VPI_IMAGE_BUFFER_CUDA_PITCH_LINEAR;
+  img_data.buffer.pitch.format = vpi_format.image_format;
+  img_data.buffer.pitch.numPlanes = image_info.color_planes.size();
+  auto data_ptr_offset = 0;
+  for (size_t i = 0; i < image_info.color_planes.size(); ++i) {
+    img_data.buffer.pitch.planes[i].data = video_buff->pointer() + data_ptr_offset;
+    img_data.buffer.pitch.planes[i].height = image_info.color_planes[i].height;
+    img_data.buffer.pitch.planes[i].width = image_info.color_planes[i].width;
+    img_data.buffer.pitch.planes[i].pixelType = vpi_format.pixel_type[i];
+    img_data.buffer.pitch.planes[i].pitchBytes = image_info.color_planes[i].stride;
+
+    data_ptr_offset = image_info.color_planes[i].size;
+  }
+  return vpiImageCreateWrapper(&img_data, nullptr, flags, &vpi_image);
+}
 }  // namespace
 
 
-void rclcpp::TypeAdapter<nvidia::isaac_ros::nitros::NitrosImage,
-  sensor_msgs::msg::Image>::convert_to_ros_message(
-  const custom_type & source,
-  ros_message_type & destination)
+void rclcpp::TypeAdapter<nitros::NitrosImage, sensor_msgs::msg::Image>::convert_to_ros_message(
+  const custom_type & source, ros_message_type & destination)
 {
-  nvidia::isaac_ros::nitros::nvtxRangePushWrapper(
-    "NitrosImage::convert_to_ros_message",
-    nvidia::isaac_ros::nitros::CLR_PURPLE);
+  nitros::nvtxRangePushWrapper("NitrosImage::convert_to_ros_message", nitros::CLR_PURPLE);
 
   RCLCPP_DEBUG(
     rclcpp::get_logger("NitrosImage"),
     "[convert_to_ros_message] Conversion started for handle=%ld", source.handle);
 
-  auto context = nvidia::isaac_ros::nitros::GetTypeAdapterNitrosContext().getContext();
+  auto context = nitros::GetTypeAdapterNitrosContext().getContext();
   auto msg_entity = nvidia::gxf::Entity::Shared(context, source.handle);
 
   auto gxf_video_buffer = msg_entity->get<nvidia::gxf::VideoBuffer>();
@@ -285,21 +326,70 @@ void rclcpp::TypeAdapter<nvidia::isaac_ros::nitros::NitrosImage,
     destination.encoding = encoding->second;
   }
 
+  void * src_ptr;
+  size_t src_pitch{0};
+  uint32_t step_size{0};
+  VPIStream vpi_stream{};
+  uint64_t vpi_flags{VPI_BACKEND_CUDA};
+  VPIImage input{}, output{};
+  VPIImageData input_data{}, output_data{};
+
+  if (destination.encoding == "nv12" || destination.encoding == "nv24") {
+    // Convert multiplanar to interleaved rgb
+    RCLCPP_DEBUG(
+      rclcpp::get_logger("NitrosImage"),
+      "[convert_to_ros_message] Multiplanar to interleaved started");
+
+    // Create VPI stream
+    CHECK_VPI_STATUS(vpiStreamCreate(vpi_flags, &vpi_stream));
+
+    // VPI input image
+    CHECK_VPI_STATUS(CreateVPIImageWrapper(input, input_data, vpi_flags, gxf_video_buffer.value()));
+    // VPI output image
+    CHECK_VPI_STATUS(
+      vpiImageCreate(
+        destination.width, destination.height, VPI_IMAGE_FORMAT_RGB8, vpi_flags, &output));
+
+    // Call for color format conversion
+    CHECK_VPI_STATUS(vpiSubmitConvertImageFormat(vpi_stream, vpi_flags, input, output, nullptr));
+
+    // Wait for operations to complete
+    CHECK_VPI_STATUS(vpiStreamSync(vpi_stream));
+
+    // Copy data
+    CHECK_VPI_STATUS(
+      vpiImageLockData(output, VPI_LOCK_READ, VPI_IMAGE_BUFFER_CUDA_PITCH_LINEAR, &output_data));
+    // Release lock
+    CHECK_VPI_STATUS(vpiImageUnlock(output));
+
+    destination.encoding = img_encodings::RGB8;
+    src_ptr = output_data.buffer.pitch.planes[0].data;
+    src_pitch = get_step_size(output_data);
+    step_size = get_step_size(output_data);
+
+    RCLCPP_DEBUG(
+      rclcpp::get_logger("NitrosImage"),
+      "[convert_to_ros_message] Multiplanar to interleaved finished");
+  } else {
+    src_ptr = gxf_video_buffer.value()->pointer();
+    src_pitch = video_buffer_info.color_planes[0].stride;
+    step_size = get_step_size(video_buffer_info);
+  }
+
   destination.is_bigendian = 0;
 
   // Full row length in bytes
-  destination.step = get_step_size(video_buffer_info);
+  destination.step = step_size;
 
   // Resize the ROS image buffer to the right size
   destination.data.resize(destination.step * destination.height);
 
   // Copy data from Device to Host
-  // TODO(swani): Implement multiplanar to interleaved
   const cudaError_t cuda_error = cudaMemcpy2D(
     destination.data.data(),
     destination.step,
-    gxf_video_buffer.value()->pointer(),
-    video_buffer_info.color_planes[0].stride,
+    src_ptr,
+    src_pitch,
     destination.step,
     destination.height,
     cudaMemcpyDeviceToHost);
@@ -315,6 +405,10 @@ void rclcpp::TypeAdapter<nvidia::isaac_ros::nitros::NitrosImage,
       rclcpp::get_logger("NitrosImage"), error_msg.str().c_str());
     throw std::runtime_error(error_msg.str().c_str());
   }
+
+  vpiImageDestroy(input);
+  vpiImageDestroy(output);
+  vpiStreamDestroy(vpi_stream);
 
   // Populate timestamp information back into ROS header
   auto input_timestamp = msg_entity->get<nvidia::gxf::Timestamp>("timestamp");
@@ -335,28 +429,22 @@ void rclcpp::TypeAdapter<nvidia::isaac_ros::nitros::NitrosImage,
     rclcpp::get_logger("NitrosImage"),
     "[convert_to_ros_message] Conversion completed for handle=%ld", source.handle);
 
-  nvidia::isaac_ros::nitros::nvtxRangePopWrapper();
+  nitros::nvtxRangePopWrapper();
 }
 
 
-void rclcpp::TypeAdapter<nvidia::isaac_ros::nitros::NitrosImage,
-  sensor_msgs::msg::Image>::convert_to_custom(
-  const ros_message_type & source,
-  custom_type & destination)
+void rclcpp::TypeAdapter<nitros::NitrosImage, sensor_msgs::msg::Image>::convert_to_custom(
+  const ros_message_type & source, custom_type & destination)
 {
-  nvidia::isaac_ros::nitros::nvtxRangePushWrapper(
-    "NitrosImage::convert_to_custom",
-    nvidia::isaac_ros::nitros::CLR_PURPLE);
+  nitros::nvtxRangePushWrapper("NitrosImage::convert_to_custom", nitros::CLR_PURPLE);
 
-  RCLCPP_DEBUG(
-    rclcpp::get_logger("NitrosImage"),
-    "[convert_to_custom] Conversion started");
+  RCLCPP_DEBUG(rclcpp::get_logger("NitrosImage"), "[convert_to_custom] Conversion started");
 
-  auto context = nvidia::isaac_ros::nitros::GetTypeAdapterNitrosContext().getContext();
+  auto context = nitros::GetTypeAdapterNitrosContext().getContext();
 
   // Get pointer to allocator component
   gxf_uid_t cid;
-  nvidia::isaac_ros::nitros::GetTypeAdapterNitrosContext().getCid(
+  nitros::GetTypeAdapterNitrosContext().getCid(
     kEntityName, kComponentName, kComponentTypeName, cid);
 
   auto maybe_allocator_handle =
@@ -409,12 +497,13 @@ void rclcpp::TypeAdapter<nvidia::isaac_ros::nitros::NitrosImage,
   auto video_buffer_info = gxf_video_buffer.value()->video_frame_info();
 
   // Copy data from Host to Device
+  auto width = get_step_size(video_buffer_info);
   const cudaError_t cuda_error = cudaMemcpy2D(
     gxf_video_buffer.value()->pointer(),
     video_buffer_info.color_planes[0].stride,
     source.data.data(),
     source.step,
-    video_buffer_info.width * video_buffer_info.color_planes[0].bytes_per_pixel,
+    width,
     video_buffer_info.height,
     cudaMemcpyHostToDevice);
 
@@ -456,7 +545,7 @@ void rclcpp::TypeAdapter<nvidia::isaac_ros::nitros::NitrosImage,
     rclcpp::get_logger("NitrosImage"),
     "[convert_to_custom] Conversion completed (resulting handle=%ld)", message->eid());
 
-  nvidia::isaac_ros::nitros::nvtxRangePopWrapper();
+  nitros::nvtxRangePopWrapper();
 }
 
 // Map to store the Nitros image format encoding to Video buffer format
@@ -469,6 +558,7 @@ const std::unordered_map<std::string, VideoFormat> g_nitros_to_gxf_video_format(
   {"nitros_image_bgr16", VideoFormat::GXF_VIDEO_FORMAT_BGR16},
   {"nitros_image_mono8", VideoFormat::GXF_VIDEO_FORMAT_GRAY},
   {"nitros_image_mono16", VideoFormat::GXF_VIDEO_FORMAT_GRAY16},
+  {"nitros_image_nv12", VideoFormat::GXF_VIDEO_FORMAT_NV12},
   {"nitros_image_nv24", VideoFormat::GXF_VIDEO_FORMAT_NV24}
 });
 

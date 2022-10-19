@@ -38,11 +38,13 @@ namespace nitros
 
 NitrosPublisherSubscriberGroup::NitrosPublisherSubscriberGroup(
   rclcpp::Node & node,
+  const gxf_context_t context,
   std::shared_ptr<NitrosTypeManager> nitros_type_manager,
   const gxf::optimizer::GraphIOGroupSupportedDataTypesInfo & gxf_io_supported_data_formats_info,
   const NitrosPublisherSubscriberConfigMap & nitros_pub_sub_configs,
   const std::shared_ptr<std::map<ComponentKey, std::string>> frame_id_map_ptr)
 : node_(node),
+  context_(context),
   nitros_type_manager_(nitros_type_manager),
   gxf_io_supported_data_formats_info_(gxf_io_supported_data_formats_info),
   nitros_pub_sub_configs_(nitros_pub_sub_configs),
@@ -364,7 +366,12 @@ void NitrosPublisherSubscriberGroup::createNitrosSubscribers()
     NitrosPublisherSubscriberConfig component_config = nitros_pub_sub_configs_[component_key];
 
     auto nitros_sub = std::make_shared<NitrosSubscriber>(
-      node_, nitros_type_manager_, ingress_comp_info, supported_data_formats, component_config);
+      node_,
+      context_,
+      nitros_type_manager_,
+      ingress_comp_info,
+      supported_data_formats,
+      component_config);
 
     nitros_sub->setFrameIdMap(frame_id_map_ptr_);
 
@@ -416,6 +423,7 @@ void NitrosPublisherSubscriberGroup::createNitrosPublishers()
 
     auto nitros_pub = std::make_shared<NitrosPublisher>(
       node_,
+      context_,
       nitros_type_manager_,
       egress_comp_info,
       supported_data_formats,

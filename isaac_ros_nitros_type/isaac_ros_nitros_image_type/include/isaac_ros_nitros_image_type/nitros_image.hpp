@@ -84,6 +84,12 @@ struct nitros_image_mono16_t
   static const inline std::string supported_type_name = "nitros_image_mono16";
 };
 
+struct nitros_image_nv12_t
+{
+  using MsgT = NitrosImage;
+  static const inline std::string supported_type_name = "nitros_image_nv12";
+};
+
 struct nitros_image_nv24_t
 {
   using MsgT = NitrosImage;
@@ -102,6 +108,7 @@ NITROS_FORMAT_ADD(nitros_image_bgra8_t)
 NITROS_FORMAT_ADD(nitros_image_bgr16_t)
 NITROS_FORMAT_ADD(nitros_image_mono8_t)
 NITROS_FORMAT_ADD(nitros_image_mono16_t)
+NITROS_FORMAT_ADD(nitros_image_nv12_t)
 NITROS_FORMAT_ADD(nitros_image_nv24_t)
 NITROS_FORMAT_FACTORY_END()
 // Required extensions

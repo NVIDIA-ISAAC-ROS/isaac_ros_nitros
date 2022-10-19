@@ -58,6 +58,19 @@ NitrosSubscriber::NitrosSubscriber(
   }
 }
 
+NitrosSubscriber::NitrosSubscriber(
+  rclcpp::Node & node,
+  const gxf_context_t context,
+  std::shared_ptr<NitrosTypeManager> nitros_type_manager,
+  const gxf::optimizer::ComponentInfo & gxf_component_info,
+  const std::vector<std::string> & supported_data_formats,
+  const NitrosPublisherSubscriberConfig & config)
+: NitrosSubscriber(
+    node, nitros_type_manager, gxf_component_info, supported_data_formats, config)
+{
+  setContext(context);
+}
+
 std::shared_ptr<negotiated::NegotiatedSubscription> NitrosSubscriber::getNegotiatedSubscriber()
 {
   return negotiated_sub_;
@@ -224,7 +237,10 @@ void NitrosSubscriber::subscriberCallback(
 {
   #if defined(USE_NVTX)
   std::stringstream nvtx_tag_name;
-  nvtx_tag_name << "[" << node_.get_name() << "] NitrosSubscriber::subscriberCallback";
+  nvtx_tag_name <<
+    "[" << node_.get_name() << "] NitrosSubscriber::subscriberCallback(" <<
+    config_.topic_name << ", t=" <<
+    getTimestamp(msg_base) << ")";
   nvtxRangePushWrapper(nvtx_tag_name.str().c_str(), CLR_PURPLE);
   #endif
 

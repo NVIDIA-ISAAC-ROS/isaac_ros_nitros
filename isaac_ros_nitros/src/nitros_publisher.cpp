@@ -60,6 +60,21 @@ NitrosPublisher::NitrosPublisher(
   }
 }
 
+NitrosPublisher::NitrosPublisher(
+  rclcpp::Node & node,
+  const gxf_context_t context,
+  std::shared_ptr<NitrosTypeManager> nitros_type_manager,
+  const gxf::optimizer::ComponentInfo & gxf_component_info,
+  const std::vector<std::string> & supported_data_formats,
+  const NitrosPublisherSubscriberConfig & config,
+  const negotiated::NegotiatedPublisherOptions & negotiated_pub_options)
+: NitrosPublisher(
+    node, nitros_type_manager, gxf_component_info, supported_data_formats, config,
+    negotiated_pub_options)
+{
+  setContext(context);
+}
+
 std::shared_ptr<negotiated::NegotiatedPublisher> NitrosPublisher::getNegotiatedPublisher()
 {
   return negotiated_pub_;
@@ -225,12 +240,6 @@ void NitrosPublisher::gxfVaultPeriodicPollingCallback()
 
 void NitrosPublisher::publish(const int64_t handle)
 {
-  #if defined(USE_NVTX)
-  std::stringstream nvtx_tag_name;
-  nvtx_tag_name << "[" << node_.get_name() << "] NitrosPublisher::publish";
-  nvtxRangePushWrapper(nvtx_tag_name.str().c_str(), CLR_PURPLE);
-  #endif
-
   std::string frame_id = "";
   if ((frame_id_map_ptr_ != nullptr) && (!config_.frame_id_source_key.empty())) {
     if (frame_id_map_ptr_->count(config_.frame_id_source_key) > 0) {
@@ -247,10 +256,6 @@ void NitrosPublisher::publish(const int64_t handle)
     config_.compatible_data_format, frame_id};
 
   publish(nitros_msg);
-
-  #if defined(USE_NVTX)
-  nvtxRangePopWrapper();
-  #endif
 }
 
 void NitrosPublisher::publish(const int64_t handle, const std_msgs::msg::Header & ros_header)
@@ -333,17 +338,43 @@ void NitrosPublisher::publish(
 
 void NitrosPublisher::publish(NitrosTypeBase & base_msg)
 {
+  #if defined(USE_NVTX)
+  {
+    std::stringstream nvtx_tag_name;
+    nvtx_tag_name <<
+      "[" << node_.get_name() << "] NitrosPublisher::publish(" <<
+      config_.topic_name << ", t=" <<
+      getTimestamp(base_msg) << ")";
+    nvtxRangePushWrapper(nvtx_tag_name.str().c_str(), CLR_PURPLE);
+  }
+  #endif
+
   // Invoke user-defined callback if needed
   if (config_.callback != nullptr) {
+    #if defined(USE_NVTX)
+    {
+      std::stringstream nvtx_tag_name;
+      nvtx_tag_name <<
+        "[" << node_.get_name() << "] NitrosPublisher::publish(" <<
+        config_.topic_name << ")::config_.callback";
+      nvtxRangePushWrapper(nvtx_tag_name.str().c_str(), CLR_PURPLE);
+    }
+    #endif
     RCLCPP_DEBUG(
       node_.get_logger(),
       "[NitrosPublisher] Calling user-defined callback for an Nitros-typed "
       "message (eid=%ld)", base_msg.handle);
     config_.callback(context_, base_msg);
+    #if defined(USE_NVTX)
+    nvtxRangePopWrapper();
+    #endif
   }
 
   // Skip publishing if its a noop type
   if (config_.type == NitrosPublisherSubscriberType::NOOP) {
+    #if defined(USE_NVTX)
+    nvtxRangePopWrapper();
+    #endif
     return;
   }
 
@@ -365,6 +396,9 @@ void NitrosPublisher::publish(NitrosTypeBase & base_msg)
       compatible_pub_,
       base_msg);
   }
+  #if defined(USE_NVTX)
+  nvtxRangePopWrapper();
+  #endif
 }
 
 }  // namespace nitros

@@ -18,6 +18,7 @@
 
 #include "extensions/gxf_optimizer/exporter/graph_types.hpp"
 #include "gxf/core/gxf.h"
+#include "gxf/std/timestamp.hpp"
 #include "isaac_ros_nitros/types/nitros_type_base.hpp"
 #include "isaac_ros_nitros/types/nitros_type_manager.hpp"
 
@@ -87,6 +88,20 @@ public:
     supported_data_formats_(supported_data_formats),
     config_(config) {}
 
+  NitrosPublisherSubscriberBase(
+    rclcpp::Node & node,
+    const gxf_context_t context,
+    std::shared_ptr<NitrosTypeManager> nitros_type_manager,
+    const gxf::optimizer::ComponentInfo & gxf_component_info,
+    const std::vector<std::string> & supported_data_formats,
+    const NitrosPublisherSubscriberConfig & config)
+  : node_(node),
+    context_(context),
+    nitros_type_manager_(nitros_type_manager),
+    gxf_component_info_(gxf_component_info),
+    supported_data_formats_(supported_data_formats),
+    config_(config) {}
+
   // Getter for the GXF component info
   gxf::optimizer::ComponentInfo getComponentInfo()
   {
@@ -137,6 +152,23 @@ public:
     std::shared_ptr<std::map<gxf::optimizer::ComponentKey, std::string>> frame_id_map_ptr)
   {
     frame_id_map_ptr_ = frame_id_map_ptr;
+  }
+
+  uint64_t getTimestamp(NitrosTypeBase & base_msg) const
+  {
+    auto msg_entity = nvidia::gxf::Entity::Shared(context_, base_msg.handle);
+    if (msg_entity) {
+      auto timestamp = msg_entity->get<nvidia::gxf::Timestamp>();
+      if (timestamp) {
+        return timestamp.value()->acqtime;
+      }
+    }
+    RCLCPP_WARN(
+      node_.get_logger(),
+      "[NitrosPublisherSubscriberBase] Failed to get timestamp from a NITROS"
+      " message (eid=%ld)",
+      base_msg.handle);
+    return 0;
   }
 
   // Start negotiation

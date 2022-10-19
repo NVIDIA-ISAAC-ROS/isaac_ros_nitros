@@ -32,6 +32,8 @@ message( STATUS "Architecture: ${ARCHITECTURE}" )
 find_package(ament_cmake_auto REQUIRED)
 ament_auto_find_build_dependencies()
 
+# Find VPI dependency
+find_package(vpi REQUIRED)
 
 # for #include <cuda_runtime.h>
 find_package(CUDA REQUIRED)
@@ -51,7 +53,7 @@ ament_auto_add_library(${PROJECT_NAME} SHARED
 target_compile_definitions(${PROJECT_NAME}
   PRIVATE "COMPOSITION_BUILDING_DLL"
 )
-target_link_libraries(${PROJECT_NAME})
+target_link_libraries(${PROJECT_NAME} vpi)
 install(
   DIRECTORY include/
   DESTINATION include/${PROJECT_NAME}
