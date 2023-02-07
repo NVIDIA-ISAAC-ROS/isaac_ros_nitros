@@ -27,7 +27,7 @@
 #include "isaac_ros_nitros_image_type/nitros_image.hpp"
 #include "isaac_ros_nitros/types/type_adapter_nitros_context.hpp"
 #include "rclcpp/rclcpp.hpp"
-#include "sensor_msgs/sensor_msgs/image_encodings.hpp"
+#include "sensor_msgs/image_encodings.hpp"
 #include "isaac_ros_nitros/utils/vpi_utilities.hpp"
 #include "vpi/Image.h"
 #include "vpi/algo/ConvertImageFormat.h"
