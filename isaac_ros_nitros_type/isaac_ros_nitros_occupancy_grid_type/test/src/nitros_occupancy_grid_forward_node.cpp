@@ -20,7 +20,7 @@ namespace isaac_ros
 namespace nitros
 {
 
-constexpr char PACKAE_NAME[] = "isaac_ros_nitros_occupancy_grid_type";
+constexpr char PACKAGE_NAME[] = "isaac_ros_nitros_occupancy_grid_type";
 constexpr char FORWARD_FORMAT[] = "nitros_occupancy_grid";
 
 #pragma GCC diagnostic push
@@ -60,13 +60,13 @@ public:
       {},
       // Extension so file list
         {
-          {"isaac_ros_nitros", "gxf/std/libgxf_std.so"},
-          {"isaac_ros_nitros", "gxf/cuda/libgxf_cuda.so"},
-          {"isaac_ros_nitros", "gxf/serialization/libgxf_serialization.so"},
-          {"isaac_ros_nitros", "gxf/libgxf_message_compositor.so"}
+          {"isaac_ros_gxf", "gxf/lib/std/libgxf_std.so"},
+          {"isaac_ros_gxf", "gxf/lib/cuda/libgxf_cuda.so"},
+          {"isaac_ros_gxf", "gxf/lib/serialization/libgxf_serialization.so"},
+          {"isaac_ros_gxf", "gxf/lib/libgxf_message_compositor.so"}
         },
       // Test node package name
-      PACKAE_NAME)
+      PACKAGE_NAME)
   {
     std::string compatible_format = declare_parameter<std::string>("compatible_format", "");
     if (!compatible_format.empty()) {

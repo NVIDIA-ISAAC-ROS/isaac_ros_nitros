@@ -4,15 +4,15 @@
 
 ## Overview
 
-ROS2 Humble introduces new hardware-acceleration features, including type adaptation and type negotiation, that significantly increase performance for developers seeking to incorporate AI/machine learning and computer vision functionality into their ROS-based applications.
+ROS 2 Humble introduces new hardware-acceleration features, including type adaptation and type negotiation, that significantly increase performance for developers seeking to incorporate AI/machine learning and computer vision functionality into their ROS-based applications.
 
-Type adaptation (REP-2007) is common for hardware accelerators, which require a different data format to deliver optimal performance. Type adaptation allows ROS nodes to work in a format better suited to the hardware. Processing pipelines can eliminate memory copies between the CPU and the memory accelerator using the adapted type. Unnecessary memory copies consume CPU compute, waste power, and slow down performance, especially as the image size increases.  
+Type adaptation (REP-2007) is common for hardware accelerators, which require a different data format to deliver optimal performance. Type adaptation allows ROS nodes to work in a format better suited to the hardware. Processing graphs can eliminate memory copies between the CPU and the memory accelerator using the adapted type. Unnecessary memory copies consume CPU compute, waste power, and slow down performance, especially as the image size increases.  
 
-Type negotiation (REP-2009) allows different ROS nodes in a processing pipeline to advertise their supported types so that formats yielding ideal performance are chosen. The ROS framework performs this negotiation process and maintains compatibility with legacy nodes that don’t support negotiation.
+Type negotiation (REP-2009) allows different ROS nodes in a processing graph to advertise their supported types so that formats yielding ideal performance are chosen. The ROS framework performs this negotiation process and maintains compatibility with legacy nodes that don’t support negotiation.
 
-Accelerating processing pipelines using type adaptation and negotiation makes the hardware accelerator zero-copy possible. This reduces software/CPU overhead and unlocks the potential of the underlying hardware. As roboticists migrate to more powerful compute platforms like NVIDIA Jetson Orin, they can expect to realize more of the performance gains enabled by the hardware.
+Accelerating processing graphs using type adaptation and negotiation makes the hardware accelerator zero-copy possible. This reduces software/CPU overhead and unlocks the potential of the underlying hardware. As roboticists migrate to more powerful compute platforms like NVIDIA Jetson Orin, they can expect to realize more of the performance gains enabled by the hardware.
 
-The NVIDIA implementation of type adaption and negotiation are called NITROS (NVIDIA Isaac Transport for ROS). ROS processing pipelines made up of NITROS-based Isaac ROS hardware accelerated modules (a.k.a. GEMs or Isaac ROS nodes) can deliver promising performance and results.
+The NVIDIA implementation of type adaption and negotiation are called NITROS (NVIDIA Isaac Transport for ROS). ROS processing graphs made up of NITROS-based Isaac ROS hardware accelerated modules (a.k.a. GEMs or Isaac ROS nodes) can deliver promising performance and results.
 
 ## Table of Contents
 
@@ -35,18 +35,18 @@ The NVIDIA implementation of type adaption and negotiation are called NITROS (NV
 
 ## Latest Update
 
-Update 2022-10-19: Minor updates and bugfixes
+Update 2023-04-05: Update to be compatible with JetPack 5.1.1
 
 ## Supported Platforms
 
-This package is designed and tested to be compatible with ROS2 Humble running on [Jetson](https://developer.nvidia.com/embedded-computing) or an x86_64 system with an NVIDIA GPU.
+This package is designed and tested to be compatible with ROS 2 Humble running on [Jetson](https://developer.nvidia.com/embedded-computing) or an x86_64 system with an NVIDIA GPU.
 
-> **Note**: Versions of ROS2 earlier than Humble are **not** supported. This package depends on specific ROS2 implementation features that were only introduced beginning with the Humble release.
+> **Note**: Versions of ROS 2 earlier than Humble are **not** supported. This package depends on specific ROS 2 implementation features that were only introduced beginning with the Humble release.
 
-| Platform | Hardware                                                                                                                                                                                                 | Software                                                                                                             | Notes                                                                                                                                                                                   |
-| -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Jetson   | [Jetson Orin](https://www.nvidia.com/en-us/autonomous-machines/embedded-systems/jetson-orin/) <br> [Jetson Xavier](https://www.nvidia.com/en-us/autonomous-machines/embedded-systems/jetson-agx-xavier/) | [JetPack 5.0.2](https://developer.nvidia.com/embedded/jetpack)                                                       | For best performance, ensure that [power settings](https://docs.nvidia.com/jetson/archives/r34.1/DeveloperGuide/text/SD/PlatformPowerAndPerformance.html) are configured appropriately. |
-| x86_64   | NVIDIA GPU                                                                                                                                                                                               | [Ubuntu 20.04+](https://releases.ubuntu.com/20.04/) <br> [CUDA 11.6.1+](https://developer.nvidia.com/cuda-downloads) |
+| Platform | Hardware                                                                                                                                                                                                 | Software                                                                                                           | Notes                                                                                                                                                                                   |
+| -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Jetson   | [Jetson Orin](https://www.nvidia.com/en-us/autonomous-machines/embedded-systems/jetson-orin/) <br> [Jetson Xavier](https://www.nvidia.com/en-us/autonomous-machines/embedded-systems/jetson-agx-xavier/) | [JetPack 5.1.1](https://developer.nvidia.com/embedded/jetpack)                                                     | For best performance, ensure that [power settings](https://docs.nvidia.com/jetson/archives/r34.1/DeveloperGuide/text/SD/PlatformPowerAndPerformance.html) are configured appropriately. |
+| x86_64   | NVIDIA GPU                                                                                                                                                                                               | [Ubuntu 20.04+](https://releases.ubuntu.com/20.04/) <br> [CUDA 11.8+](https://developer.nvidia.com/cuda-downloads) |
 
 ### Docker
 
@@ -56,7 +56,7 @@ To simplify development, we strongly recommend leveraging the Isaac ROS Dev Dock
 
 ## System Assumptions
 
-The design of NITROS makes the following assumptions of the ROS2 applications:
+The design of NITROS makes the following assumptions of the ROS 2 applications:
 
 - To leverage the benefit of zero-copy in NITROS, all NITROS-accelerated nodes must run in the same process.
 - For a given topic in which type negotiation takes place, there can only be one negotiating publisher.
@@ -67,7 +67,7 @@ The design of NITROS makes the following assumptions of the ROS2 applications:
 Most Isaac ROS GEMs have been updated to be NITROS-accelerated.
 The acceleration is in effect between NITROS-accelerated nodes when two or more of them are connected next to each other. In such a case, NITROS-accelerated nodes can discover each other through type negotiation and leverage type adaptation for data transmission automatically at runtime.
 
-NITROS-accelerated nodes are also compatible with non-NITROS nodes: A NITROS-accelerated node can be used together with any existing, non-NITROS ROS2 node, and it will function like a typical ROS2 node.
+NITROS-accelerated nodes are also compatible with non-NITROS nodes: A NITROS-accelerated node can be used together with any existing, non-NITROS ROS 2 node, and it will function like a typical ROS 2 node.
 
 ## NITROS Data Types
 
@@ -82,10 +82,11 @@ Each NITROS type is one-to-one-mapped to a ROS message type, which ensures compa
 | NitrosDisparityImage         | [stereo_msgs/DisparityImage](https://github.com/ros2/common_interfaces/blob/humble/stereo_msgs/msg/DisparityImage.msg)                                                              |
 | NitrosPointCloud             | [sensor_msgs/PointCloud2](https://github.com/ros2/common_interfaces/blob/humble/sensor_msgs/msg/PointCloud2.msg)                                                                    |
 | NitrosAprilTagDetectionArray | [isaac_ros_apriltag_interfaces/AprilTagDetectionArray](https://github.com/NVIDIA-ISAAC-ROS/isaac_ros_common/blob/main/isaac_ros_apriltag_interfaces/msg/AprilTagDetectionArray.msg) |
+| NitrosPoseCovStamped         | [geometry_msgs/PoseWithCovariance](https://github.com/ros2/common_interfaces/blob/humble/geometry_msgs/msg/PoseWithCovariance.msg)                                                  |
 
 ## NITROS-Accelerated Graphs
 
-ROS2 graphs built with NITROS-accelerated nodes yield promising performance.
+ROS 2 graphs built with NITROS-accelerated nodes yield promising performance.
 The following highlights three graphs that are created and tested fully with Isaac ROS NITROS-accelerated nodes. For more detailed performance outcomes, visit [this page](https://github.com/NVIDIA-ISAAC-ROS/.github/blob/main/profile/performance-summary.md).
 
 ### AprilTag Detection Graph
@@ -131,7 +132,7 @@ Besides the above fully tested graphs, it is also possible to construct your own
 The key to successfully constructing a NITROS-accelerated graph is to ensure that all NITROS-accelerated nodes start in the same process (which permits zero-copy between nodes).
 To do so, follow the steps below to create your own launch file:
 
-1. Create a Python ROS2 launch file following the official [guide](https://docs.ros.org/en/humble/How-To-Guides/Launching-composable-nodes.html).
+1. Create a Python ROS 2 launch file following the official [guide](https://docs.ros.org/en/humble/How-To-Guides/Launching-composable-nodes.html).
 
 2. Create NITROS-accelerated nodes using `ComposableNode`.
    Taking `ArgusMonoNode` and `RectifyNode` as an example, the nodes can be created as follows:
@@ -179,17 +180,17 @@ To do so, follow the steps below to create your own launch file:
 
 ## Using NITROS-Accelerated Nodes in Existing Non-NITROS Graphs
 
-As stated in [NITROS-Accelerated Nodes](#nitros-accelerated-nodes), it is also possible to use any NITROS-accelerated nodes in an existing ROS2 graph, as all Isaac ROS nodes are compatible with non-NITROS ROS2 nodes.
+As stated in [NITROS-Accelerated Nodes](#nitros-accelerated-nodes), it is also possible to use any NITROS-accelerated nodes in an existing ROS 2 graph, as all Isaac ROS nodes are compatible with non-NITROS ROS 2 nodes.
 
 Follow these steps to integrate one or more NITROS-accelerated nodes into your graph:
 
 1. Follow the same steps introduced in the [previous section](#creating-graphs-with-nitros-accelerated-nodes) to create a `ComposableNodeContainer` that contains all the NITROS-accelerated nodes with multi-thread enabled (i.e. `executable='component_container_mt'`).
 
-2. Place the created composable node container in `LaunchDescription` together with your own, regular ROS2 node or composable node container declarations.
+2. Place the created composable node container in `LaunchDescription` together with your own, regular ROS 2 node or composable node container declarations.
 
 Now the NITROS-accelerated nodes will be able to choose the best compatible way to communicate with their adjacent nodes.
 
-- When connected to non-NITROS nodes, NITROS-accelerated nodes will function like regular ROS2 nodes.
+- When connected to non-NITROS nodes, NITROS-accelerated nodes will function like regular ROS 2 nodes.
 - When connected to NITROS-accelerated nodes, zero-copy data transmission via type adaptation and type negotiation will be adopted.
 
 Please visit the link below for an example graph that consists of NITROS-accelerated and non-NITROS nodes:
@@ -200,6 +201,7 @@ Please visit the link below for an example graph that consists of NITROS-acceler
 
 | Date       | Changes                                    |
 | ---------- | ------------------------------------------ |
+| 2023-04-05 | Update to be compatible with JetPack 5.1.1 |
 | 2022-10-19 | Minor updates and bugfixes                 |
 | 2022-08-31 | Update to be compatible with JetPack 5.0.2 |
 | 2022-06-30 | Initial release                            |

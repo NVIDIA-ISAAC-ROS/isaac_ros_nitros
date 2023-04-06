@@ -346,7 +346,7 @@ gxf_result_t NitrosContext::runGraphAsync()
 
   gxf_result_t code;
 
-  RCLCPP_INFO(get_logger(), "[NitrosContext] Initializing applicaiton...");
+  RCLCPP_INFO(get_logger(), "[NitrosContext] Initializing application...");
   code = GxfGraphActivate(context_);
   if (code != GXF_SUCCESS) {
     RCLCPP_ERROR(
@@ -355,7 +355,7 @@ gxf_result_t NitrosContext::runGraphAsync()
     return code;
   }
 
-  RCLCPP_INFO(get_logger(), "[NitrosContext] Running appliation...");
+  RCLCPP_INFO(get_logger(), "[NitrosContext] Running application...");
   code = GxfGraphRunAsync(context_);
   if (code != GXF_SUCCESS) {
     RCLCPP_ERROR(
@@ -369,7 +369,7 @@ gxf_result_t NitrosContext::runGraphAsync()
 }
 
 gxf_result_t NitrosContext::setParameterInt64(
-  const std::string & group_name,
+  const std::string & entity_name,
   const std::string & codelet_type,
   const std::string & parameter_name,
   const int64_t parameter_value)
@@ -379,7 +379,7 @@ gxf_result_t NitrosContext::setParameterInt64(
 
   gxf_result_t code;
   gxf_uid_t cid;
-  code = getCid(group_name, codelet_type, cid);
+  code = getCid(entity_name, codelet_type, cid);
   if (code != GXF_SUCCESS) {
     RCLCPP_ERROR(
       get_logger(),
@@ -398,7 +398,7 @@ gxf_result_t NitrosContext::setParameterInt64(
 }
 
 gxf_result_t NitrosContext::setParameterUInt64(
-  const std::string & group_name,
+  const std::string & entity_name,
   const std::string & codelet_type,
   const std::string & parameter_name,
   const uint64_t parameter_value)
@@ -408,7 +408,7 @@ gxf_result_t NitrosContext::setParameterUInt64(
 
   gxf_result_t code;
   gxf_uid_t cid;
-  code = getCid(group_name, codelet_type, cid);
+  code = getCid(entity_name, codelet_type, cid);
   if (code != GXF_SUCCESS) {
     RCLCPP_ERROR(
       get_logger(),
@@ -427,7 +427,7 @@ gxf_result_t NitrosContext::setParameterUInt64(
 }
 
 gxf_result_t NitrosContext::setParameterInt32(
-  const std::string & group_name,
+  const std::string & entity_name,
   const std::string & codelet_type,
   const std::string & parameter_name,
   const int32_t parameter_value)
@@ -437,7 +437,7 @@ gxf_result_t NitrosContext::setParameterInt32(
 
   gxf_result_t code;
   gxf_uid_t cid;
-  code = getCid(group_name, codelet_type, cid);
+  code = getCid(entity_name, codelet_type, cid);
   if (code != GXF_SUCCESS) {
     RCLCPP_ERROR(
       get_logger(),
@@ -456,7 +456,7 @@ gxf_result_t NitrosContext::setParameterInt32(
 }
 
 gxf_result_t NitrosContext::setParameterUInt32(
-  const std::string & group_name,
+  const std::string & entity_name,
   const std::string & codelet_type,
   const std::string & parameter_name,
   const uint32_t parameter_value)
@@ -466,7 +466,7 @@ gxf_result_t NitrosContext::setParameterUInt32(
 
   gxf_result_t code;
   gxf_uid_t cid;
-  code = getCid(group_name, codelet_type, cid);
+  code = getCid(entity_name, codelet_type, cid);
   if (code != GXF_SUCCESS) {
     RCLCPP_ERROR(
       get_logger(),
@@ -485,7 +485,7 @@ gxf_result_t NitrosContext::setParameterUInt32(
 }
 
 gxf_result_t NitrosContext::setParameterUInt16(
-  const std::string & group_name,
+  const std::string & entity_name,
   const std::string & codelet_type,
   const std::string & parameter_name,
   const uint16_t parameter_value)
@@ -495,7 +495,7 @@ gxf_result_t NitrosContext::setParameterUInt16(
 
   gxf_result_t code;
   gxf_uid_t cid;
-  code = getCid(group_name, codelet_type, cid);
+  code = getCid(entity_name, codelet_type, cid);
   if (code != GXF_SUCCESS) {
     RCLCPP_ERROR(
       get_logger(),
@@ -514,7 +514,7 @@ gxf_result_t NitrosContext::setParameterUInt16(
 }
 
 gxf_result_t NitrosContext::setParameterFloat64(
-  const std::string & group_name,
+  const std::string & entity_name,
   const std::string & codelet_type,
   const std::string & parameter_name,
   const double parameter_value)
@@ -524,7 +524,7 @@ gxf_result_t NitrosContext::setParameterFloat64(
 
   gxf_result_t code;
   gxf_uid_t cid;
-  code = getCid(group_name, codelet_type, cid);
+  code = getCid(entity_name, codelet_type, cid);
   if (code != GXF_SUCCESS) {
     RCLCPP_ERROR(
       get_logger(),
@@ -543,7 +543,7 @@ gxf_result_t NitrosContext::setParameterFloat64(
 }
 
 gxf_result_t NitrosContext::setParameterStr(
-  const std::string & group_name,
+  const std::string & entity_name,
   const std::string & codelet_type,
   const std::string & parameter_name,
   const std::string & parameter_value)
@@ -553,7 +553,7 @@ gxf_result_t NitrosContext::setParameterStr(
 
   gxf_result_t code;
   gxf_uid_t cid;
-  code = getCid(group_name, codelet_type, cid);
+  code = getCid(entity_name, codelet_type, cid);
   if (code != GXF_SUCCESS) {
     RCLCPP_ERROR(
       get_logger(),
@@ -571,8 +571,37 @@ gxf_result_t NitrosContext::setParameterStr(
   // End Mutex: shared_context_mutex_
 }
 
+gxf_result_t NitrosContext::setParameterHandle(
+  const std::string & entity_name,
+  const std::string & codelet_type,
+  const std::string & parameter_name,
+  const gxf_uid_t & uid)
+{
+  // Mutex: shared_context_mutex_
+  const std::lock_guard<std::mutex> lock(NitrosContext::shared_context_mutex_);
+
+  gxf_result_t code;
+  gxf_uid_t cid;
+  code = getCid(entity_name, codelet_type, cid);
+  if (code != GXF_SUCCESS) {
+    RCLCPP_ERROR(
+      get_logger(),
+      "[NitrosContext] Failed to get CID for setting parameters");
+    return code;
+  }
+  code = GxfParameterSetHandle(context_, cid, parameter_name.c_str(), uid);
+  if (code != GXF_SUCCESS) {
+    RCLCPP_ERROR(
+      get_logger(),
+      "[NitrosContext] GxfParameterSetHandle Error: %s", GxfResultStr(code));
+    return code;
+  }
+  return GXF_SUCCESS;
+  // End Mutex: shared_context_mutex_
+}
+
 gxf_result_t NitrosContext::setParameterBool(
-  const std::string & group_name,
+  const std::string & entity_name,
   const std::string & codelet_type,
   const std::string & parameter_name,
   const bool parameter_value)
@@ -582,7 +611,7 @@ gxf_result_t NitrosContext::setParameterBool(
 
   gxf_result_t code;
   gxf_uid_t cid;
-  code = getCid(group_name, codelet_type, cid);
+  code = getCid(entity_name, codelet_type, cid);
   if (code != GXF_SUCCESS) {
     RCLCPP_ERROR(
       get_logger(),
@@ -601,7 +630,7 @@ gxf_result_t NitrosContext::setParameterBool(
 }
 
 gxf_result_t NitrosContext::setParameter1DStrVector(
-  const std::string & group_name,
+  const std::string & entity_name,
   const std::string & codelet_type,
   const std::string & parameter_name,
   const std::vector<std::string> & parameter_value)
@@ -611,7 +640,7 @@ gxf_result_t NitrosContext::setParameter1DStrVector(
 
   gxf_result_t code;
   gxf_uid_t cid;
-  code = getCid(group_name, codelet_type, cid);
+  code = getCid(entity_name, codelet_type, cid);
   if (code != GXF_SUCCESS) {
     RCLCPP_ERROR(
       get_logger(),
@@ -635,7 +664,7 @@ gxf_result_t NitrosContext::setParameter1DStrVector(
 }
 
 gxf_result_t NitrosContext::setParameter1DInt32Vector(
-  const std::string & group_name,
+  const std::string & entity_name,
   const std::string & codelet_type,
   const std::string & parameter_name,
   std::vector<int32_t> & parameter_value)
@@ -645,7 +674,7 @@ gxf_result_t NitrosContext::setParameter1DInt32Vector(
 
   gxf_result_t code;
   gxf_uid_t cid;
-  code = getCid(group_name, codelet_type, cid);
+  code = getCid(entity_name, codelet_type, cid);
   if (code != GXF_SUCCESS) {
     RCLCPP_ERROR(
       get_logger(),
@@ -667,7 +696,7 @@ gxf_result_t NitrosContext::setParameter1DInt32Vector(
 }
 
 gxf_result_t NitrosContext::setParameter1DInt64Vector(
-  const std::string & group_name,
+  const std::string & entity_name,
   const std::string & codelet_type,
   const std::string & parameter_name,
   std::vector<int64_t> & parameter_value)
@@ -677,7 +706,7 @@ gxf_result_t NitrosContext::setParameter1DInt64Vector(
 
   gxf_result_t code;
   gxf_uid_t cid;
-  code = getCid(group_name, codelet_type, cid);
+  code = getCid(entity_name, codelet_type, cid);
   if (code != GXF_SUCCESS) {
     RCLCPP_ERROR(
       get_logger(),
@@ -699,7 +728,7 @@ gxf_result_t NitrosContext::setParameter1DInt64Vector(
 }
 
 gxf_result_t NitrosContext::setParameter1DFloat64Vector(
-  const std::string & group_name,
+  const std::string & entity_name,
   const std::string & codelet_type,
   const std::string & parameter_name,
   std::vector<double> & parameter_value)
@@ -709,7 +738,7 @@ gxf_result_t NitrosContext::setParameter1DFloat64Vector(
 
   gxf_result_t code;
   gxf_uid_t cid;
-  code = getCid(group_name, codelet_type, cid);
+  code = getCid(entity_name, codelet_type, cid);
   if (code != GXF_SUCCESS) {
     RCLCPP_ERROR(
       get_logger(),

@@ -105,8 +105,6 @@ void rclcpp::TypeAdapter<nvidia::isaac_ros::nitros::NitrosDisparityImage,
   auto msg_entity = nvidia::gxf::Entity::Shared(context, source.handle);
 
   auto gxf_video_buffer = msg_entity->get<nvidia::gxf::VideoBuffer>();
-  auto gxf_disparity_parameters = msg_entity->findAll<float>();
-
   if (!gxf_video_buffer) {
     std::stringstream error_msg;
     error_msg <<
@@ -164,7 +162,18 @@ void rclcpp::TypeAdapter<nvidia::isaac_ros::nitros::NitrosDisparityImage,
     throw std::runtime_error(error_msg.str().c_str());
   }
 
-  for (const auto & parameter : gxf_disparity_parameters) {
+  auto gxf_disparity_parameters = msg_entity->findAll<float>();
+  if (!gxf_disparity_parameters) {
+    std::stringstream error_msg;
+    error_msg <<
+      "[convert_to_ros_message] failed to get all GXF tensors: " <<
+      GxfResultStr(gxf_disparity_parameters.error());
+    RCLCPP_ERROR(
+      rclcpp::get_logger("NitrosDisparityImage"), error_msg.str().c_str());
+    throw std::runtime_error(error_msg.str().c_str());
+  }
+  for (const auto & parameter_handle : gxf_disparity_parameters.value()) {
+    auto parameter = parameter_handle.value();
     if (!std::strcmp(parameter.name(), "f")) {
       destination.f = *parameter.get();
     } else if (!std::strcmp(parameter.name(), "t")) {

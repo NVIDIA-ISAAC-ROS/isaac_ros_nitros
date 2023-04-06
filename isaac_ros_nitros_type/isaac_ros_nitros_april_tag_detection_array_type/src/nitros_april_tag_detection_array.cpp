@@ -240,7 +240,7 @@ void rclcpp::TypeAdapter<
   output_timestamp.value()->acqtime = input_timestamp;
 
   // count number of tags first to know how many times to run the below for loop
-  size_t tags_count = source.detections.size();
+  size_t tags_count = static_cast<size_t>(source.detections.size());
   auto create_fiducial_list_message_result =
     nvidia::isaac::CreateFiducialListMessage(context, tags_count)
     .map(

@@ -15,6 +15,8 @@
 #include <map>
 #include <memory>
 #include <string>
+#include <utility>
+#include <vector>
 
 #include "isaac_ros_nitros/types/nitros_type_base.hpp"
 
@@ -125,8 +127,12 @@ struct NitrosFormatCallbacks
       const rclcpp::SubscriptionOptions & options)>
   addSubscriberSupportedFormatCallback{nullptr};
 
-
   // Utilities
+  // Get T's extension list
+  std::function<
+    std::vector<std::pair<std::string, std::string>>()>
+  getExtensions{nullptr};
+
   // Get the corresponding ROS type name for the format T
   std::function<std::string()> getROSTypeName{nullptr};
 };
@@ -223,6 +229,11 @@ public:
         std::placeholders::_4,
         std::placeholders::_5,
         std::placeholders::_6
+      ),
+
+      // getExtensions
+      std::bind(
+        &NitrosFormatAgent<T>::getExtensions
       ),
 
       // getROSTypeName
@@ -322,7 +333,6 @@ public:
       compatible_pub->get_topic_name());
   }
 
-
   // Subscriber callbacks
   // Create a compatible subscriber for T
   static void createCompatibleSubscriberCallback(
@@ -333,7 +343,7 @@ public:
     std::function<void(NitrosTypeBase &, const std::string data_format_name)> subscriber_callback,
     const rclcpp::SubscriptionOptions & options)
   {
-    std::function<void(std::shared_ptr<typename T::MsgT>)> internal_subscriber_callback =
+    std::function<void(std::shared_ptr<const typename T::MsgT>)> internal_subscriber_callback =
       std::bind(
       &NitrosFormatAgent<T>::subscriberCallback,
       std::placeholders::_1,
@@ -397,7 +407,7 @@ public:
     std::function<void(NitrosTypeBase &, const std::string data_format_name)> subscriber_callback,
     const rclcpp::SubscriptionOptions & options)
   {
-    std::function<void(std::shared_ptr<typename T::MsgT>)> internal_subscriber_callback =
+    std::function<void(std::shared_ptr<const typename T::MsgT>)> internal_subscriber_callback =
       std::bind(
       &NitrosFormatAgent<T>::subscriberCallback,
       std::placeholders::_1,
@@ -414,6 +424,10 @@ public:
       T::supported_type_name.c_str());
   }
 
+  static std::vector<std::pair<std::string, std::string>> getExtensions()
+  {
+    return T::MsgT::GetExtensions();
+  }
 
   // Utilities
   // Get the corresponding ROS type name for the format T
@@ -425,7 +439,7 @@ public:
 
 private:
   static void subscriberCallback(
-    const std::shared_ptr<typename T::MsgT> msg,
+    const std::shared_ptr<const typename T::MsgT> msg,
     std::function<void(
       NitrosTypeBase &,
       const std::string data_format_name)> subscriber_callback)

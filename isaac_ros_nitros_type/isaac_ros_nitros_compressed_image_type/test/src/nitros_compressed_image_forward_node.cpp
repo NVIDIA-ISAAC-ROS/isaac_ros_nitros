@@ -60,10 +60,10 @@ public:
       {},
       // Extension so file list
         {
-          {"isaac_ros_nitros", "gxf/std/libgxf_std.so"},
-          {"isaac_ros_nitros", "gxf/cuda/libgxf_cuda.so"},
-          {"isaac_ros_nitros", "gxf/serialization/libgxf_serialization.so"},
-          {"isaac_ros_nitros", "gxf/libgxf_message_compositor.so"}
+          {"isaac_ros_gxf", "gxf/lib/std/libgxf_std.so"},
+          {"isaac_ros_gxf", "gxf/lib/cuda/libgxf_cuda.so"},
+          {"isaac_ros_gxf", "gxf/lib/serialization/libgxf_serialization.so"},
+          {"isaac_ros_gxf", "gxf/lib/libgxf_message_compositor.so"}
         },
       // Test node package name
       PACKAE_NAME)

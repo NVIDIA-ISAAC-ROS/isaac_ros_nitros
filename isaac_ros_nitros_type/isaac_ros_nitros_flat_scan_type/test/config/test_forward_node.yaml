@@ -1,0 +1,56 @@
+%YAML 1.2
+# Copyright (c) 2023, NVIDIA CORPORATION.  All rights reserved.
+#
+# NVIDIA CORPORATION and its licensors retain all intellectual property
+# and proprietary rights in and to this software, related documentation
+# and any modifications thereto.  Any use, reproduction, disclosure or
+# distribution of this software and related documentation without an express
+# license agreement from NVIDIA CORPORATION is strictly prohibited.
+---
+name: forward
+components:
+- name: input
+  type: nvidia::gxf::DoubleBufferReceiver
+  parameters:
+    capacity: 1
+- name: output
+  type: nvidia::gxf::DoubleBufferTransmitter
+- type: nvidia::isaac_ros::MessageForward
+  parameters:
+    in: input
+    out: output
+- type: nvidia::gxf::MessageAvailableSchedulingTerm
+  parameters:
+    receiver: input
+    min_size: 1
+---
+name: vault
+components:
+- name: input
+  type: nvidia::gxf::DoubleBufferReceiver
+  parameters:
+    capacity: 1
+- type: nvidia::gxf::MessageAvailableSchedulingTerm
+  parameters:
+    receiver: input
+    min_size: 1
+- name: vault
+  type: nvidia::gxf::Vault
+  parameters:
+    source: input
+    max_waiting_count: 1
+    drop_waiting: false
+---
+components:
+- type: nvidia::gxf::Connection
+  parameters:
+    source: forward/output
+    target: vault/input
+---
+components:
+- type: nvidia::gxf::GreedyScheduler
+  parameters:
+    clock: clock
+    stop_on_deadlock: false
+- name: clock
+  type: nvidia::gxf::RealtimeClock

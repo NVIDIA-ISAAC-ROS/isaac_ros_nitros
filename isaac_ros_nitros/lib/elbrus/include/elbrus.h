@@ -12,9 +12,13 @@
 #ifdef __cplusplus
 #include <cstdint>
 #include <cstddef>
+
+#define ELBRUS_DEFAULT(x) = (x)
 #else
 #include <stdint.h>
 #include <stddef.h>
+
+#define ELBRUS_DEFAULT(x)
 #endif
 
 #ifdef _WIN32
@@ -39,7 +43,7 @@ extern "C" {
  * API is guaranteed to be compatible between the same major version numbers.
  */   
 #define ELBRUS_API_VERSION_MAJOR 10
-#define ELBRUS_API_VERSION_MINOR 0
+#define ELBRUS_API_VERSION_MINOR 5
 
 /*
  * Use this function to check the version of the library you are using.
@@ -180,7 +184,7 @@ struct ELBRUS_Configuration
      *      vImu - vector in imu coordinate system
      *      vLeft - vector in left eye coordinate system
      */
-    ELBRUS_Pose imu_from_left;
+    struct ELBRUS_Pose imu_from_left;
 
 
     /* Gravitational acceleration that is used for the IMU integration,
@@ -212,7 +216,7 @@ struct ELBRUS_Configuration
 
     /*
      * If localization and mapping is used: 
-     * sync mode (same thread with visual odometry). Default: slam_sync_mode = 0
+     * sync mode (if true -> same thread with visual odometry). Default: slam_sync_mode = 0
      */
     int32_t slam_sync_mode;
 
@@ -220,7 +224,7 @@ struct ELBRUS_Configuration
      * Enable reading internal data from SLAM
      * ELBRUS_EnableReadingDataLayer(), ELBRUS_DisableReadingDataLayer()
      */
-    bool enable_reading_slam_internals;
+    int32_t enable_reading_slam_internals;
 
     /*
      * Set directory where the dump files will be saved: 
@@ -235,10 +239,16 @@ struct ELBRUS_Configuration
      * Enable IMU integrator
      */
     int32_t enable_imu_integrator;
+    /*
+     * Planar constraints.
+     * Slam poses will be modified so that the camera moves on a horizontal plane.
+     * See ELBRUS_GetSlamPose()
+     */
+    int32_t planar_constraints;
 };
 
 struct ELBRUS_Tracker;
-typedef ELBRUS_Tracker* ELBRUS_TrackerHandle;
+typedef struct ELBRUS_Tracker* ELBRUS_TrackerHandle;
 
 /*
  * Pixels must be stored row-wise
@@ -271,7 +281,7 @@ struct ELBRUS_ObservationVector
 {
     uint32_t num;
     uint32_t max;    // size of pre-allocated observations
-    ELBRUS_Observation *observations;
+    struct ELBRUS_Observation *observations;
 };
 
 struct ELBRUS_Landmark
@@ -295,7 +305,7 @@ struct ELBRUS_LandmarkVector
 {
     uint32_t num;
     uint32_t max;    // size of pre-allocated landmarks
-    ELBRUS_Landmark *landmarks;
+    struct ELBRUS_Landmark *landmarks;
 };
 
 /*
@@ -343,6 +353,12 @@ struct ELBRUS_PoseEstimate
     /* Pose timestamp in nanoseconds. */
     int64_t timestamp_ns;
 
+    /* Row-major representation of the 6x6 covariance matrix
+     * The orientation parameters use a fixed-axis representation.
+     * In order, the parameters are:
+     * (rotation about X axis, rotation about Y axis, rotation about Z axis, x, y, z)
+     * Rotation in radians, translation in meters.
+     */
     float covariance[6*6];
 
     /*
@@ -379,7 +395,7 @@ typedef uint32_t ELBRUS_Status;
  * Creates the default configuration
  */
 ELBRUS_API
-void ELBRUS_InitDefaultConfiguration(ELBRUS_Configuration *cfg);
+void ELBRUS_InitDefaultConfiguration(struct ELBRUS_Configuration *cfg);
 
 /*
  * Use this to initialize Elbrus
@@ -406,9 +422,9 @@ void ELBRUS_DestroyTracker(ELBRUS_TrackerHandle tracker);
  * This function returns false in a case of wrong timestamp order.
  */
 ELBRUS_API
-bool ELBRUS_RegisterImuMeasurement(ELBRUS_TrackerHandle tracker,
-                                   int64_t timestamp,
-                                   const struct ELBRUS_ImuMeasurement* imu);
+ELBRUS_Status ELBRUS_RegisterImuMeasurement(ELBRUS_TrackerHandle tracker,
+                                            int64_t timestamp,
+                                            const struct ELBRUS_ImuMeasurement* imu);
 
 /*
  * Track current frame synchronously:
@@ -445,9 +461,9 @@ bool ELBRUS_RegisterImuMeasurement(ELBRUS_TrackerHandle tracker,
  */
 ELBRUS_API
 ELBRUS_Status ELBRUS_Track(ELBRUS_TrackerHandle tracker,
-                           const ELBRUS_Image *images,
-                           const ELBRUS_Pose* predicted_pose,
-                           ELBRUS_PoseEstimate* pose_estimate);
+                           const struct ELBRUS_Image *images,
+                           const struct ELBRUS_Pose* predicted_pose,
+                           struct ELBRUS_PoseEstimate* pose_estimate);
 
 
 /*
@@ -458,7 +474,7 @@ ELBRUS_Status ELBRUS_Track(ELBRUS_TrackerHandle tracker,
  */
 ELBRUS_API
 ELBRUS_Status ELBRUS_GetOdometryPose(ELBRUS_TrackerHandle tracker,
-    ELBRUS_Pose* pose_odom);
+    struct ELBRUS_Pose* pose_odom);
 
 /*
  * Rig pose estimate by the slam system.
@@ -466,7 +482,7 @@ ELBRUS_Status ELBRUS_GetOdometryPose(ELBRUS_TrackerHandle tracker,
  */
 struct ELBRUS_PoseSlam
 {
-    ELBRUS_Pose pose;
+    struct ELBRUS_Pose pose;
 };
 
 /*
@@ -480,7 +496,7 @@ struct ELBRUS_PoseSlam
  */
 ELBRUS_API
 ELBRUS_Status ELBRUS_GetSlamPose(ELBRUS_TrackerHandle tracker,
-                                 ELBRUS_PoseSlam* pose_slam);
+                                 struct ELBRUS_PoseSlam* pose_slam);
 
 /*
  * Get list of poses for each frame.
@@ -491,12 +507,12 @@ ELBRUS_Status ELBRUS_GetSlamPose(ELBRUS_TrackerHandle tracker,
  */
 struct ELBRUS_PoseStamped {
     int64_t timestamp_ns;
-    ELBRUS_Pose pose;
+    struct ELBRUS_Pose pose;
 };
 ELBRUS_API
 uint32_t ELBRUS_GetAllPoses(ELBRUS_TrackerHandle tracker,
     uint32_t max_poses_stamped_count,
-    ELBRUS_PoseStamped* poses_stamped);
+    struct ELBRUS_PoseStamped* poses_stamped);
 
 
 // Asynchronous response for ELBRUS_SaveToSlamDb()
@@ -516,15 +532,15 @@ ELBRUS_Status ELBRUS_SaveToSlamDb(
 
     /* User defined asynchronous response, which will be called before the end of saving routine.
      * May be used to handle various error codes. */
-    ELBRUS_SaveToSlamDbResponse response = nullptr,
+    ELBRUS_SaveToSlamDbResponse response ELBRUS_DEFAULT(nullptr),
 
     /* Pointer to the response context, which will be passed to asynchronous response as argument. */
-    void* response_context = nullptr
+    void* response_context ELBRUS_DEFAULT(nullptr)
     );
 
 
 // Asynchronous response for ELBRUS_LocalizeInExistDb()
-typedef void(*ELBRUS_LocalizeInExistDbResponse)(void* response_context, ELBRUS_Status status, const ELBRUS_Pose* pose_in_db);
+typedef void(*ELBRUS_LocalizeInExistDbResponse)(void* response_context, ELBRUS_Status status, const struct ELBRUS_Pose* pose_in_db);
 
 /*
  * Localize in the existing DB (map).
@@ -542,21 +558,21 @@ ELBRUS_Status ELBRUS_LocalizeInExistDb(
     const char* foldername,
 
     /* Pointer to the proposed pose, where the robot might be. */
-    const ELBRUS_Pose* guess_pose,
+    const struct ELBRUS_Pose* guess_pose,
 
     /* Radius of the area, where the robot might be. In meters. if 0, a default value will be used. */
-    float radius = 0,
+    float radius ELBRUS_DEFAULT(0),
 
     /* Pointer the the observed images. Will be used if ELBRUS_Configuration.slam_sync_mode = 1.
      * Default value is nullptr. */
-    const ELBRUS_Image* images = nullptr,
+    const struct ELBRUS_Image* images ELBRUS_DEFAULT(nullptr),
 
     /* User defined asynchronous response, which will be called before the end of localization.
      * May be used to handle various error codes. */
-    ELBRUS_LocalizeInExistDbResponse response = nullptr,
+    ELBRUS_LocalizeInExistDbResponse response ELBRUS_DEFAULT(nullptr),
 
     /* Pointer to the response context, which will be passed to asynchronous response as argument. */
-    void* response_context = nullptr
+    void* response_context ELBRUS_DEFAULT(nullptr)
     );
 
 /*
@@ -564,20 +580,20 @@ ELBRUS_Status ELBRUS_LocalizeInExistDb(
  */
 ELBRUS_API
 ELBRUS_Status ELBRUS_GetLastLeftObservations(ELBRUS_TrackerHandle tracker,
-                                             ELBRUS_ObservationVector *observations);
+                                             struct ELBRUS_ObservationVector *observations);
 
 /*
  * Get current landmarks (SVIO 3d tracks) for visualization purpose.
  */
 ELBRUS_API
 ELBRUS_Status ELBRUS_GetLastLandmarks(ELBRUS_TrackerHandle tracker,
-                                      ELBRUS_LandmarkVector *landmarks);
+                                      struct ELBRUS_LandmarkVector *landmarks);
 
 /*
  * Get gravity vector in the last VO frame
  */
 ELBRUS_API
-ELBRUS_Status ELBRUS_GetLastGravity(ELBRUS_TrackerHandle tracker, ELBRUS_Gravity *gravity);
+ELBRUS_Status ELBRUS_GetLastGravity(ELBRUS_TrackerHandle tracker, struct ELBRUS_Gravity *gravity);
 
 /*
 * Get internal slam metrics for visualization purpose.
@@ -595,13 +611,13 @@ struct ELBRUS_SlamMetrics
 
 ELBRUS_API
 ELBRUS_Status ELBRUS_GetSlamMetrics(ELBRUS_TrackerHandle tracker,
-                                    ELBRUS_SlamMetrics* slam_metrics);
+                                    struct ELBRUS_SlamMetrics* slam_metrics);
 
 
 
 
 ELBRUS_API
-ELBRUS_Status ELBRUS_EnablePoseAccumulator(ELBRUS_TrackerHandle tracker, size_t capacity);
+ELBRUS_Status ELBRUS_EnablePoseAccumulator(ELBRUS_TrackerHandle tracker, uint32_t capacity);
 
 /*
 * Landmarks and pose graph reading
@@ -620,19 +636,19 @@ struct ELBRUS_LandmarkInfoArrayRef
 {
     uint64_t timestamp_ns;  // timestamp of landmarks
     uint32_t num;
-    const ELBRUS_LandmarkInfo* landmarks;
+    const struct ELBRUS_LandmarkInfo* landmarks;
 };
 
 struct ELBRUS_PoseGraphNode
 {
     uint64_t id;
-    ELBRUS_Pose node_pose;
+    struct ELBRUS_Pose node_pose;
 };
 struct ELBRUS_PoseGraphEdge
 {
     uint64_t node_from;             // node id 
     uint64_t node_to;               // node id 
-    ELBRUS_Pose transform;
+    struct ELBRUS_Pose transform;
     float covariance[6 * 6];
 };
 struct ELBRUS_PoseGraphRef
@@ -640,23 +656,23 @@ struct ELBRUS_PoseGraphRef
     uint64_t timestamp_ns;  // timestamp of pose graph
     uint32_t num_edges;
     uint32_t num_nodes;
-    const ELBRUS_PoseGraphNode* nodes;
-    const ELBRUS_PoseGraphEdge* edges;
+    const struct ELBRUS_PoseGraphNode* nodes;
+    const struct ELBRUS_PoseGraphEdge* edges;
 };
 
 struct ELBRUS_LocalizerProbe {
     uint64_t id;
-    ELBRUS_Pose guess_pose;
-    ELBRUS_Pose exact_result_pose;
+    struct ELBRUS_Pose guess_pose;
+    struct ELBRUS_Pose exact_result_pose;
     float weight;
     float exact_result_weight;
-    bool solved;
+    int32_t solved;
 };
 struct ELBRUS_LocalizerProbesRef {
     uint64_t timestamp_ns;  // timestamp of pose graph
     uint32_t num_probes;
     float size;
-    const ELBRUS_LocalizerProbe* probes;
+    const struct ELBRUS_LocalizerProbe* probes;
 };
 
 enum ELBRUS_DataLayer {
@@ -674,39 +690,39 @@ enum ELBRUS_DataLayer {
 // Enable or disable landmarks layer reading. 
 ELBRUS_API ELBRUS_Status ELBRUS_EnableReadingDataLayer(
     ELBRUS_TrackerHandle tracker,
-    ELBRUS_DataLayer layer,
+    enum ELBRUS_DataLayer layer,
     uint32_t max_items_count
     );
-ELBRUS_API ELBRUS_Status ELBRUS_DisableReadingDataLayer(ELBRUS_TrackerHandle tracker, ELBRUS_DataLayer layer);
+ELBRUS_API ELBRUS_Status ELBRUS_DisableReadingDataLayer(ELBRUS_TrackerHandle tracker, enum ELBRUS_DataLayer layer);
 
 // Start landmarks layer reading. Have to call ELBRUS_FinishReadingLandmarks. Thread-safe. Lock free
 // This function will fill all fields in the ELBRUS_LandmarkInfoArrayRef structure
 ELBRUS_API ELBRUS_Status ELBRUS_StartReadingLandmarks(
     ELBRUS_TrackerHandle tracker, 
-    ELBRUS_DataLayer layer,
-    ELBRUS_LandmarkInfoArrayRef* landmarks     // output
+    enum ELBRUS_DataLayer layer,
+    struct ELBRUS_LandmarkInfoArrayRef* landmarks     // output
     );
 // Finish landmarks layer reading.
-ELBRUS_API ELBRUS_Status ELBRUS_FinishReadingLandmarks(ELBRUS_TrackerHandle tracker, ELBRUS_DataLayer layer);
+ELBRUS_API ELBRUS_Status ELBRUS_FinishReadingLandmarks(ELBRUS_TrackerHandle tracker, enum ELBRUS_DataLayer layer);
 
 // Start pose graph reading. Have to call ELBRUS_FinishReadingPoseGraph. Thread-safe. Lock free
 // This function will fill all fields in the ELBRUS_PoseGraphRef structure
 ELBRUS_API ELBRUS_Status ELBRUS_StartReadingPoseGraph(
     ELBRUS_TrackerHandle tracker,
-    ELBRUS_DataLayer layer,
-    ELBRUS_PoseGraphRef* pose_graph     // output
+    enum ELBRUS_DataLayer layer,
+    struct ELBRUS_PoseGraphRef* pose_graph     // output
     );
 // Finish loop landmarks layer reading.
-ELBRUS_API ELBRUS_Status ELBRUS_FinishReadingPoseGraph(ELBRUS_TrackerHandle tracker, ELBRUS_DataLayer layer);
+ELBRUS_API ELBRUS_Status ELBRUS_FinishReadingPoseGraph(ELBRUS_TrackerHandle tracker, enum ELBRUS_DataLayer layer);
 
 // Start localizer probes reading. Have to call ELBRUS_FinishReadingPoseGraph. Thread-safe. Lock free
 // This function will fill all fields in the ELBRUS_LocalizerProbesRef structure
 ELBRUS_API ELBRUS_Status ELBRUS_StartReadingLocalizerProbes(
     ELBRUS_TrackerHandle tracker, 
-    ELBRUS_DataLayer layer, 
-    ELBRUS_LocalizerProbesRef* localizer_probes     // output
+    enum ELBRUS_DataLayer layer, 
+    struct ELBRUS_LocalizerProbesRef* localizer_probes     // output
     );
-ELBRUS_API ELBRUS_Status ELBRUS_FinishReadingLocalizerProbes(ELBRUS_TrackerHandle tracker, ELBRUS_DataLayer layer);
+ELBRUS_API ELBRUS_Status ELBRUS_FinishReadingLocalizerProbes(ELBRUS_TrackerHandle tracker, enum ELBRUS_DataLayer layer);
 
 /*
 * Set Log filename.

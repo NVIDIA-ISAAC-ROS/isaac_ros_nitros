@@ -103,73 +103,79 @@ public:
 
   // APIs for setting a parameter value in a given component
   gxf_result_t setParameterInt64(
-    const std::string & group_name,
+    const std::string & entity_name,
     const std::string & codelet_type,
     const std::string & parameter_name,
     const int64_t parameter_value);
 
   gxf_result_t setParameterUInt64(
-    const std::string & group_name,
+    const std::string & entity_name,
     const std::string & codelet_type,
     const std::string & parameter_name,
     const uint64_t parameter_value);
 
   gxf_result_t setParameterInt32(
-    const std::string & group_name,
+    const std::string & entity_name,
     const std::string & codelet_type,
     const std::string & parameter_name,
     const int32_t parameter_value);
 
   gxf_result_t setParameterUInt32(
-    const std::string & group_name,
+    const std::string & entity_name,
     const std::string & codelet_type,
     const std::string & parameter_name,
     const uint32_t parameter_value);
 
   gxf_result_t setParameterUInt16(
-    const std::string & group_name,
+    const std::string & entity_name,
     const std::string & codelet_type,
     const std::string & parameter_name,
     const uint16_t parameter_value);
 
   gxf_result_t setParameterFloat64(
-    const std::string & group_name,
+    const std::string & entity_name,
     const std::string & codelet_type,
     const std::string & parameter_name,
     const double parameter_value);
 
   gxf_result_t setParameterStr(
-    const std::string & group_name,
+    const std::string & entity_name,
     const std::string & codelet_type,
     const std::string & parameter_name,
     const std::string & parameter_value);
 
+  gxf_result_t setParameterHandle(
+    const std::string & entity_name,
+    const std::string & codelet_type,
+    const std::string & parameter_name,
+    const gxf_uid_t & uid);
+
   gxf_result_t setParameterBool(
-    const std::string & group_name,
+    const std::string & entity_name,
     const std::string & codelet_type,
     const std::string & parameter_name,
     const bool parameter_value);
 
   gxf_result_t setParameter1DStrVector(
-    const std::string & group_name,
+    const std::string & entity_name,
     const std::string & codelet_type,
     const std::string & parameter_name,
     const std::vector<std::string> & parameter_value);
 
   gxf_result_t setParameter1DInt32Vector(
-    const std::string & group_name,
+    const std::string & entity_name,
     const std::string & codelet_type,
     const std::string & parameter_name,
     std::vector<int32_t> & parameter_value);
 
   gxf_result_t setParameter1DInt64Vector(
-    const std::string & group_name,
+    const std::string & entity_name,
     const std::string & codelet_type,
     const std::string & parameter_name,
     std::vector<int64_t> & parameter_value);
 
   gxf_result_t setParameter1DFloat64Vector(
-    const std::string & group_name,
+    const std::string & entity_name,
     const std::string & codelet_type,
     const std::string & parameter_name,
     std::vector<double> & parameter_value);

@@ -19,7 +19,6 @@
 #include <string>
 
 #include "isaac_ros_nitros/types/nitros_format_agent.hpp"
-#include "isaac_ros_nitros/types/nitros_type_base.hpp"
 
 #include "rclcpp/type_adapter.hpp"
 #include "sensor_msgs/msg/point_cloud2.hpp"
@@ -51,8 +50,11 @@ NITROS_FORMAT_ADD(nitros_point_cloud_t)
 NITROS_FORMAT_FACTORY_END()
 // Required extensions
 NITROS_TYPE_EXTENSION_FACTORY_BEGIN()
-NITROS_TYPE_EXTENSION_ADD("isaac_ros_nitros", "gxf/std/libgxf_std.so")
-NITROS_TYPE_EXTENSION_ADD("isaac_ros_nitros", "gxf/multimedia/libgxf_multimedia.so")
+NITROS_TYPE_EXTENSION_ADD("isaac_ros_gxf", "gxf/lib/serialization/libgxf_serialization.so")
+NITROS_TYPE_EXTENSION_ADD("isaac_ros_gxf", "gxf/lib/libgxf_isaac_messages.so")
+NITROS_TYPE_EXTENSION_ADD("isaac_ros_gxf", "gxf/lib/libgxf_isaac_ros_messages.so")
+NITROS_TYPE_EXTENSION_ADD("isaac_ros_gxf", "gxf/lib/libgxf_atlas.so")
+NITROS_TYPE_EXTENSION_ADD("isaac_ros_gxf", "gxf/lib/libgxf_sight.so")
 NITROS_TYPE_EXTENSION_FACTORY_END()
 NITROS_TYPE_FACTORY_END()
 

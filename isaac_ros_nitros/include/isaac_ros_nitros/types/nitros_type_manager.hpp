@@ -16,7 +16,12 @@
 #include <vector>
 #include <utility>
 
+#include <ament_index_cpp/get_package_share_directory.hpp>
+
+#include "gxf/core/gxf.h"
+
 #include "isaac_ros_nitros/types/nitros_format_agent.hpp"
+#include "isaac_ros_nitros/types/type_adapter_nitros_context.hpp"
 
 #include "rclcpp/logger.hpp"
 #include "rclcpp/rclcpp.hpp"
@@ -87,6 +92,45 @@ public:
         extension_pairs.second.end());
     }
     return extensions;
+  }
+
+  // Load all extensions of all registered types
+  void loadExtensions()
+  {
+    auto extensions = getExtensions();
+    for (const auto & extension_pair : extensions) {
+      loadExtenstion(extension_pair.first, extension_pair.second);
+    }
+  }
+
+  // Load extensions for the specified, registered format
+  bool loadExtensions(const std::string & format_name)
+  {
+    if (!hasFormat(format_name)) {
+      return false;
+    }
+    auto extensions = getFormatCallbacks(format_name).getExtensions();
+    for (const auto & extension_pair : extensions) {
+      loadExtenstion(extension_pair.first, extension_pair.second);
+    }
+    return true;
+  }
+
+  // Load extension of the given name in the given package
+  void loadExtenstion(
+    const std::string & package_name,
+    const std::string & extension_name)
+  {
+    auto nitros_context = nvidia::isaac_ros::nitros::GetTypeAdapterNitrosContext();
+    const std::string package_directory =
+      ament_index_cpp::get_package_share_directory(package_name);
+    gxf_result_t code = nitros_context.loadExtension(package_directory, extension_name);
+    if (code != GXF_SUCCESS) {
+      std::stringstream error_msg;
+      error_msg << "loadExtensions Error: " << GxfResultStr(code);
+      RCLCPP_ERROR(get_logger(), error_msg.str().c_str());
+      throw std::runtime_error(error_msg.str().c_str());
+    }
   }
 
   // Check if the given format name has been registered

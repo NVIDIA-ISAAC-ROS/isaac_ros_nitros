@@ -15,7 +15,7 @@ from launch_ros.descriptions import ComposableNode
 import launch_testing
 import pytest
 import rclpy
-from std_msgs.msg import Int64
+from std_msgs.msg import Empty
 
 
 @pytest.mark.rostest
@@ -34,7 +34,7 @@ def generate_test_description():
                 name='isaac_ros_nitros',
                 namespace=test_ns,
                 parameters=[{
-                    'compatible_format': 'nitros_int64'
+                    'compatible_format': 'nitros_empty'
                 }]
             ),
             ComposableNode(
@@ -43,7 +43,7 @@ def generate_test_description():
                 name='isaac_ros_nitros',
                 namespace=test_ns+'/mid1',
                 parameters=[{
-                        'compatible_format': 'nitros_int64'
+                        'compatible_format': 'nitros_empty'
                 }],
                 remappings=[
                     (test_ns+'/mid1/topic_forward_input',
@@ -58,7 +58,7 @@ def generate_test_description():
                 name='isaac_ros_nitros',
                 namespace=test_ns+'/mid2',
                 parameters=[{
-                        'compatible_format': 'nitros_int64'
+                        'compatible_format': 'nitros_empty'
                 }],
             ),
             ComposableNode(
@@ -67,7 +67,7 @@ def generate_test_description():
                 name='isaac_ros_nitros',
                 namespace=test_ns+'/mid3',
                 parameters=[{
-                        'compatible_format': 'nitros_int64'
+                        'compatible_format': 'nitros_empty'
                 }],
                 remappings=[
                     (test_ns+'/mid3/topic_forward_input',
@@ -90,7 +90,7 @@ class IsaacROSNitrosNodeTest(IsaacROSBaseTest):
     """
     Proof-of-Life Test for Isaac ROS Nitros Node.
 
-    1. Sets up ROS publisher to send Int64 values
+    1. Sets up ROS publisher to send Empty values
     2. Sets up ROS subscriber to listen to output channel of NitrosNode
     3. Verify received messages
     """
@@ -103,7 +103,7 @@ class IsaacROSNitrosNodeTest(IsaacROSBaseTest):
 
         subscriber_topic_namespace = self.generate_namespace('mid3/topic_forward_output')
         test_subscribers = [
-            (subscriber_topic_namespace, Int64)
+            (subscriber_topic_namespace, Empty)
         ]
 
         subs = self.create_logging_subscribers(
@@ -117,14 +117,13 @@ class IsaacROSNitrosNodeTest(IsaacROSBaseTest):
         # Publisher
         publisher_topic_namespace = self.generate_namespace('topic_forward_input')
         pub = self.node.create_publisher(
-            Int64,
+            Empty,
             publisher_topic_namespace,
             self.DEFAULT_QOS)
 
         try:
             # Construct test message
-            msg = Int64()
-            msg.data = 17
+            msg = Empty()
 
             # Start sending messages
             self.node.get_logger().info('Start publishing messages')

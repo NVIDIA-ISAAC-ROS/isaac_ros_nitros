@@ -26,7 +26,7 @@ from sensor_msgs.msg import CameraInfo
 
 @pytest.mark.rostest
 def generate_test_description():
-    """Generate launch description with all ROS2 nodes for testing."""
+    """Generate launch description with all ROS 2 nodes for testing."""
     test_ns = IsaacROSNitrosCameraInfoTest.generate_namespace()
     container = ComposableNodeContainer(
         name='test_container',
@@ -112,11 +112,8 @@ class IsaacROSNitrosCameraInfoTest(IsaacROSBaseTest):
             self.assertEqual(camera_info.height, received_camera_info.height)
             self.assertEqual(camera_info.width, received_camera_info.width)
 
-            if (camera_info.distortion_model == 'plumb_bob' or
-                    camera_info.distortion_model == 'rational_polynomial'):
-                self.assertEqual('rational_polynomial', received_camera_info.distortion_model)
-            else:
-                self.assertEqual('equidistant', received_camera_info.distortion_model)
+            # Distortion model
+            self.assertEqual(camera_info.distortion_model, received_camera_info.distortion_model)
 
             # D
             for i in range(min(len(camera_info.d), len(received_camera_info.d))):

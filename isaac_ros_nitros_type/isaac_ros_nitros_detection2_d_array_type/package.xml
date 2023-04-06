@@ -13,7 +13,7 @@ license agreement from NVIDIA CORPORATION is strictly prohibited.
 <?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
   <name>isaac_ros_nitros_detection2_d_array_type</name>
-  <version>0.20.0</version>
+  <version>0.30.0</version>
   <description>Isaac ROS Nitros Detection 2D Array Type</description>
 
   <maintainer email="ashwinvk@nvidia.com">Ashwin Varghese Kuruttukulam</maintainer>
@@ -22,15 +22,18 @@ license agreement from NVIDIA CORPORATION is strictly prohibited.
   <author>Ashwin Varghese Kuruttukulam</author>
 
   <buildtool_depend>ament_cmake</buildtool_depend>
-
+  <depend>isaac_ros_nitros</depend>
+  <depend>negotiated</depend>
   <depend>rclcpp</depend>
   <depend>rclcpp_components</depend>
   <depend>vision_msgs</depend>
-  <depend>isaac_ros_nitros</depend>
+
+  <build_depend>isaac_ros_common</build_depend>
 
   <test_depend>ament_lint_auto</test_depend>
   <test_depend>ament_lint_common</test_depend>
   <test_depend>isaac_ros_test</test_depend>
+  <test_depend>isaac_ros_nitros_interfaces</test_depend>
 
   <export>
     <build_type>ament_cmake</build_type>

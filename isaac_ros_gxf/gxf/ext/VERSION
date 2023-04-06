@@ -1,0 +1,15 @@
+https://git-master.nvidia.com/r/plugins/gitiles/robotics/isaac/+/refs/heads/master
+819f8743f2751c340ca2fcba8efb8541b3bd8d23
+
+Patched: https://git-master.nvidia.com/r/c/robotics/isaac/+/2853951
+git fetch ssh://hemals@git-master.nvidia.com:12001/robotics/isaac refs/changes/51/2853951/7 && git cherry-pick FETCH_HEAD
+
+Patched: https://git-master.nvidia.com/r/c/robotics/isaac/+/2860401
+git fetch ssh://hemals@git-master.nvidia.com:12001/robotics/isaac refs/changes/01/2860401/4 && git cherry-pick FETCH_HEAD
+
+Patched: https://git-master.nvidia.com/r/c/robotics/isaac/+/2852017
+git fetch ssh://hemals@git-master.nvidia.com:12001/robotics/isaac refs/changes/17/2852017/7 && git cherry-pick FETCH_HEAD
+
+
+https://gitlab-master.nvidia.com/isaac_ros/isaac_ros_gxf_extensions
+8dc478a79e4e4f6875de21dc5b9e7eef590ada5e

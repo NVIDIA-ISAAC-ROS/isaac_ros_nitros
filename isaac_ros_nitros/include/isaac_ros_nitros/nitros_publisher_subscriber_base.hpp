@@ -11,8 +11,11 @@
 #ifndef ISAAC_ROS_NITROS__NITROS_PUBLISHER_SUBSCRIBER_BASE_HPP_
 #define ISAAC_ROS_NITROS__NITROS_PUBLISHER_SUBSCRIBER_BASE_HPP_
 
+#include <chrono>
 #include <map>
 #include <memory>
+#include <mutex>
+#include <queue>
 #include <string>
 #include <vector>
 
@@ -22,6 +25,7 @@
 #include "isaac_ros_nitros/types/nitros_type_base.hpp"
 #include "isaac_ros_nitros/types/nitros_type_manager.hpp"
 
+#include "isaac_ros_nitros_interfaces/msg/topic_statistics.hpp"
 #include "rclcpp/rclcpp.hpp"
 
 #if defined(USE_NVTX)
@@ -35,6 +39,11 @@ namespace isaac_ros
 {
 namespace nitros
 {
+
+namespace
+{
+constexpr float const kMicrosecondsInSeconds = 1000000;
+}
 
 // Enum for specifying vairous types of Nitros publishers/subscribers
 enum NitrosPublisherSubscriberType
@@ -66,6 +75,19 @@ struct NitrosPublisherSubscriberConfig
 
   // User-defined callback function
   std::function<void(const gxf_context_t, NitrosTypeBase &)> callback{nullptr};
+};
+
+// Configurations for a Nitros statistics
+struct NitrosStatisticsConfig
+{
+  // Statistics toggle
+  bool enable_statistics{false};
+
+  // Rate (Hz) at which to publish statistics to a ROS topic
+  float statistics_publish_rate{1.0};
+
+  // Window size of the mean filter in terms of number of messages received
+  int filter_window_size{100};
 };
 
 using NitrosPublisherSubscriberConfigMap =
@@ -177,8 +199,74 @@ public:
   // To be called after negotiation timer is up
   virtual void postNegotiationCallback() = 0;
 
+  // Update statistics numbers. To be called in nitros Subscriber and Publisher
+  void updateStatistics()
+  {
+    // Mutex lock to prevent simultaneous access of sum_msg_interarrival_time_
+    const std::lock_guard<std::mutex> lock(sum_msg_interarrival_time_mutex_);
+    // NITROS statistics
+    std::chrono::time_point<std::chrono::steady_clock> current_timestamp = clock_.now();
+
+    // we can only calculate frame rate after 2 messages have been received
+    if (prev_msg_timestamp_ != std::chrono::steady_clock::time_point::min()) {
+      int microseconds = std::chrono::duration_cast<std::chrono::microseconds>(
+        current_timestamp - prev_msg_timestamp_).count();
+      msg_interarrival_time_queue_.push(microseconds);
+
+      // add and subtract weighted datapoints to prevent summation of entire queue at
+      // each run of this function. Also, support mean filter when the filter size
+      // has not reached the maximum limit of config_.filter_window_size
+      sum_msg_interarrival_time_ += microseconds;
+      if (static_cast<int>(msg_interarrival_time_queue_.size()) >
+        statistics_config_.filter_window_size)
+      {
+        sum_msg_interarrival_time_ -= msg_interarrival_time_queue_.front();
+        msg_interarrival_time_queue_.pop();
+      }
+    }
+    prev_msg_timestamp_ = current_timestamp;
+  }
+
+  // Function to publish statistics to a ROS topic
+  void publishNitrosStatistics()
+  {
+    // Mutex lock to prevent simultaneous access of sum_msg_interarrival_time_
+    const std::lock_guard<std::mutex> lock(sum_msg_interarrival_time_mutex_);
+    // publish zero until atleast one message has been received
+    if (sum_msg_interarrival_time_ != 0) {
+      statistics_msg_.frame_rate = kMicrosecondsInSeconds /
+        (static_cast<float>(sum_msg_interarrival_time_) / msg_interarrival_time_queue_.size());
+    } else {
+      statistics_msg_.frame_rate = 0.0;
+    }
+    statistics_publisher_->publish(statistics_msg_);
+  }
+
+  // Initialize statistics variables
+  void initStatistics()
+  {
+    statistics_msg_.node_name = node_.get_name();
+    statistics_msg_.node_namespace = node_.get_namespace();
+    statistics_msg_.topic_name = config_.topic_name;
+
+    // Initialize varibles to min and zero as a flag to detect no messages have been received
+    prev_msg_timestamp_ = std::chrono::steady_clock::time_point::min();
+    sum_msg_interarrival_time_ = 0;
+
+    // Initialize statistics publisher and start a timer callback to publish at a fixed rate
+    statistics_publisher_ =
+      node_.create_publisher<isaac_ros_nitros_interfaces::msg::TopicStatistics>(
+      "/nitros_statistics", 10);
+    statistics_publisher_timer_ = node_.create_wall_timer(
+      std::chrono::milliseconds(
+        static_cast<int>(1000 / statistics_config_.statistics_publish_rate)),
+      [this]() -> void {
+        publishNitrosStatistics();
+      });
+  }
+
 protected:
-  // The parent ROS2 node
+  // The parent ROS 2 node
   rclcpp::Node & node_;
 
   // The parent GXF context
@@ -201,6 +289,35 @@ protected:
 
   // Frame ID map
   std::shared_ptr<std::map<gxf::optimizer::ComponentKey, std::string>> frame_id_map_ptr_;
+
+  // Mutex to prevent simultaneous access
+  std::mutex sum_msg_interarrival_time_mutex_;
+
+  // NITROS statistics variables
+  // Configurations for a Nitros statistics
+  NitrosStatisticsConfig statistics_config_;
+
+  // Statistics Data publisher
+  rclcpp::Publisher<isaac_ros_nitros_interfaces::msg::TopicStatistics>::SharedPtr
+    statistics_publisher_;
+
+  // Satistics ROS msg
+  isaac_ros_nitros_interfaces::msg::TopicStatistics statistics_msg_;
+
+  // Clock object used to retrived current timestamps
+  std::chrono::steady_clock clock_;
+
+  // Queue to store time between messages to implement windowed mean filter
+  std::queue<int> msg_interarrival_time_queue_;
+
+  // Sum of the message interarrival times received on this topic within the configured window
+  int64_t sum_msg_interarrival_time_;
+
+  // Prev timestamp stored for calculating frame rate
+  std::chrono::time_point<std::chrono::steady_clock> prev_msg_timestamp_;
+
+  // NITROS statistics publisher timer
+  rclcpp::TimerBase::SharedPtr statistics_publisher_timer_;
 };
 
 }  // namespace nitros

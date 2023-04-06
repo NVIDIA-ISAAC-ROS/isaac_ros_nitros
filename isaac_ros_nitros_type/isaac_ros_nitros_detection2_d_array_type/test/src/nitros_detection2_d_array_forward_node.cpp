@@ -47,7 +47,8 @@ public:
           {"vault/vault",
             {
               .type = NitrosPublisherSubscriberType::NEGOTIATED,
-              .qos = rclcpp::QoS(1),
+              .qos = rclcpp::QoS(
+                1),
               .compatible_data_format = FORWARD_FORMAT,
               .topic_name = "topic_forward_output",
               .use_compatible_format_only = true,
@@ -60,10 +61,11 @@ public:
       {},
       // Extension so file list
         {
-          {"isaac_ros_nitros", "gxf/std/libgxf_std.so"},
-          {"isaac_ros_nitros", "gxf/cuda/libgxf_cuda.so"},
-          {"isaac_ros_nitros", "gxf/serialization/libgxf_serialization.so"},
-          {"isaac_ros_nitros", "gxf/libgxf_message_compositor.so"}
+          {"isaac_ros_gxf", "gxf/lib/std/libgxf_std.so"},
+          {"isaac_ros_gxf", "gxf/lib/cuda/libgxf_cuda.so"},
+          {"isaac_ros_gxf", "gxf/lib/serialization/libgxf_serialization.so"},
+          {"isaac_ros_gxf", "gxf/lib/libgxf_message_compositor.so"},
+          {"isaac_ros_nitros_detection2_d_array_type", "gxf/lib/detection2_d/test/libisaac_ros_nitros_detection2_d_array_test_ext.so"}  // NOLINT
         },
       // Test node package name
       PACKAGE_NAME)

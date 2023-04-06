@@ -159,6 +159,9 @@ protected:
   // Set the graph YAML file to be loaded
   void setAppYamlFilename(std::string package_relative_filepath);
 
+  // Set the frame id for a custom frame id publisher
+  void setFrameIdSource(std::string source_frame_id_map_key, std::string frame_id);
+
   // Register a supported type
   template<typename T>
   void registerSupportedType()
@@ -225,6 +228,9 @@ private:
 
   // Nitros type manager
   std::shared_ptr<NitrosTypeManager> nitros_type_manager_;
+
+  // Configurations for a Nitros statistics
+  std::shared_ptr<NitrosStatisticsConfig> statistics_config_;
 };
 
 }  // namespace nitros

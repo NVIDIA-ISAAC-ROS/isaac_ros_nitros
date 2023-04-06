@@ -14,7 +14,7 @@
 #include "gxf/core/gxf.h"
 
 #include "isaac_ros_nitros/nitros_node.hpp"
-#include "isaac_ros_nitros/types/nitros_int64.hpp"
+#include "isaac_ros_nitros/types/nitros_empty.hpp"
 #include "isaac_ros_nitros/types/type_adapter_nitros_context.hpp"
 
 #include "rclcpp/logger.hpp"
@@ -64,7 +64,7 @@ NitrosNode::NitrosNode(const rclcpp::NodeOptions & options)
           {
             .type = NitrosPublisherSubscriberType::NEGOTIATED,
             .qos = rclcpp::QoS(1),
-            .compatible_data_format = "nitros_int64",
+            .compatible_data_format = "nitros_empty",
             .topic_name = "topic_forward_input",
           }
         },
@@ -72,7 +72,7 @@ NitrosNode::NitrosNode(const rclcpp::NodeOptions & options)
           {
             .type = NitrosPublisherSubscriberType::NEGOTIATED,
             .qos = rclcpp::QoS(1),
-            .compatible_data_format = "nitros_int64",
+            .compatible_data_format = "nitros_empty",
             .topic_name = "topic_forward_output",
           }
         }
@@ -83,10 +83,10 @@ NitrosNode::NitrosNode(const rclcpp::NodeOptions & options)
     {},
     // Extension so file list
       {
-        {"isaac_ros_nitros", "gxf/std/libgxf_std.so"},
-        {"isaac_ros_nitros", "gxf/cuda/libgxf_cuda.so"},
-        {"isaac_ros_nitros", "gxf/serialization/libgxf_serialization.so"},
-        {"isaac_ros_nitros", "gxf/libgxf_message_compositor.so"}
+        {"isaac_ros_gxf", "gxf/lib/std/libgxf_std.so"},
+        {"isaac_ros_gxf", "gxf/lib/cuda/libgxf_cuda.so"},
+        {"isaac_ros_gxf", "gxf/lib/serialization/libgxf_serialization.so"},
+        {"isaac_ros_gxf", "gxf/lib/libgxf_message_compositor.so"}
       },
     // Test node package name
     "isaac_ros_nitros")
@@ -100,8 +100,8 @@ NitrosNode::NitrosNode(const rclcpp::NodeOptions & options)
     config_map_["vault/vault"].use_compatible_format_only = true;
   }
 
-  // Register NitrosInt64 for POL test
-  registerSupportedType<NitrosInt64>();
+  // Register NitrosEmpty for POL test
+  registerSupportedType<NitrosEmpty>();
 
   startNitrosNode();
 }
@@ -223,7 +223,22 @@ NitrosNode::NitrosNode(
   package_name_(package_name)
 {
   RCLCPP_INFO(get_logger(), "[NitrosNode] Initializing NitrosNode");
+
+  // This line triggers the creation of a type adapter context that
+  // loads a GXF graph containing common components accessible by
+  // all NitrosNode subclasses created in the same process.
+  GetTypeAdapterNitrosContext();
+
   nitros_context_.setNode(this);
+
+  // Create an NITROS type manager for the node
+  statistics_config_ = std::make_shared<NitrosStatisticsConfig>();
+
+  statistics_config_->enable_statistics = declare_parameter<bool>("enable_statistics", false);
+  statistics_config_->statistics_publish_rate = declare_parameter<float>(
+    "statistics_publish_rate",
+    1.0);
+  statistics_config_->filter_window_size = declare_parameter<int>("filter_window_size", 100);
 
   // Set extension log level from an user-specified parameter
   nitros_context_.setExtensionLogSeverity(
@@ -334,13 +349,7 @@ void NitrosNode::startNitrosNode()
   // Load required extension files
   RCLCPP_INFO(get_logger(), "[NitrosNode] Loading extensions");
   gxf_result_t code;
-  auto nitros_type_extensions = nitros_type_manager_->getExtensions();
-  auto all_extensions = extensions_;
-  all_extensions.insert(
-    all_extensions.end(),
-    nitros_type_extensions.begin(),
-    nitros_type_extensions.end());
-  for (const auto & extension_pair : all_extensions) {
+  for (const auto & extension_pair : extensions_) {
     const std::string package_directory =
       ament_index_cpp::get_package_share_directory(extension_pair.first);
     code = nitros_context_.loadExtension(package_directory, extension_pair.second);
@@ -351,6 +360,8 @@ void NitrosNode::startNitrosNode()
       throw std::runtime_error(error_msg.str().c_str());
     }
   }
+  // Load extensions of the registered NITROS types
+  nitros_type_manager_->loadExtensions();
 
   // Load graph
   RCLCPP_INFO(get_logger(), "[NitrosNode] Loading graph to the optimizer");
@@ -398,7 +409,7 @@ void NitrosNode::startNitrosNode()
     nitros_pub_sub_groups_.emplace_back(
       std::make_shared<NitrosPublisherSubscriberGroup>(
         *this, nitros_context_.getContext(),
-        nitros_type_manager_, gxf_io_group, config_map_, frame_id_map_ptr_));
+        nitros_type_manager_, gxf_io_group, config_map_, frame_id_map_ptr_, *statistics_config_));
   }
 
   // Start negotiation
@@ -608,6 +619,23 @@ void NitrosNode::addGeneratorRuleFilename(std::string package_relative_filepath)
 void NitrosNode::setAppYamlFilename(std::string package_relative_filepath)
 {
   app_yaml_filename_ = package_relative_filepath;
+}
+
+void NitrosNode::setFrameIdSource(std::string source_frame_id_map_key, std::string frame_id)
+{
+  if (frame_id_map_ptr_ == nullptr) {
+    std::stringstream error_msg;
+    error_msg <<
+      "[NitrosNode] setFrameIdSource was called before frame_id_map_ptr_ was initialized";
+    RCLCPP_ERROR(get_logger(), error_msg.str().c_str());
+    throw std::runtime_error(error_msg.str().c_str());
+  }
+
+  (*frame_id_map_ptr_.get())[source_frame_id_map_key] = frame_id;
+  RCLCPP_DEBUG(
+    get_logger(),
+    "[NitrosNode] Set frame id for key %s to %s", source_frame_id_map_key.c_str(),
+    (*frame_id_map_ptr_.get())[source_frame_id_map_key].c_str());
 }
 
 NitrosNode::~NitrosNode()
