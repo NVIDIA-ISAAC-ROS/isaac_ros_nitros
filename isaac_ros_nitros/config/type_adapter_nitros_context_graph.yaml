@@ -11,3 +11,34 @@ name: memory_pool
 components:
 - name: unbounded_allocator
   type: nvidia::gxf::UnboundedAllocator
+---
+#############
+# Pose Tree #
+#############
+name: global_pose_tree
+components:
+  - name: pose_tree
+    type: nvidia::isaac::PoseTree
+  - type: nvidia::isaac::PoseTreeSetup
+    parameters:
+      pose_tree: global_pose_tree/pose_tree
+  - name: world_frame
+    type: nvidia::isaac::PoseTreeFrame
+    parameters:
+      pose_tree: global_pose_tree/pose_tree
+  - name: map_frame
+    type: nvidia::isaac::PoseTreeFrame
+    parameters:
+      pose_tree: global_pose_tree/pose_tree
+      parent_frame: global_pose_tree/world_frame
+      initial_pose:
+        translation: [0.0, 0.0, 0.0]
+        rotation_rpy: [0.0, 0.0, 0.0]
+  - name: robot_frame
+    type: nvidia::isaac::PoseTreeFrame
+    parameters:
+      pose_tree: global_pose_tree/pose_tree
+      parent_frame: global_pose_tree/world_frame
+      initial_pose:
+        translation: [0.0, 0.0, 0.0]
+        rotation_rpy: [0.0, 0.0, 0.0]

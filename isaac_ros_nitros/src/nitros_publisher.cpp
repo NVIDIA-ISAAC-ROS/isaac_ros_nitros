@@ -75,6 +75,28 @@ NitrosPublisher::NitrosPublisher(
   setContext(context);
 }
 
+NitrosPublisher::NitrosPublisher(
+  rclcpp::Node & node,
+  const gxf_context_t context,
+  std::shared_ptr<NitrosTypeManager> nitros_type_manager,
+  const gxf::optimizer::ComponentInfo & gxf_component_info,
+  const std::vector<std::string> & supported_data_formats,
+  const NitrosPublisherSubscriberConfig & config,
+  const negotiated::NegotiatedPublisherOptions & negotiated_pub_options,
+  const NitrosStatisticsConfig & statistics_config)
+: NitrosPublisher(
+    node, context, nitros_type_manager, gxf_component_info, supported_data_formats, config,
+    negotiated_pub_options)
+{
+  statistics_config_ = statistics_config;
+
+  if (statistics_config_.enable_statistics) {
+    // Initialize statistics variables and message fields
+    statistics_msg_.is_subscriber = false;
+    initStatistics();
+  }
+}
+
 std::shared_ptr<negotiated::NegotiatedPublisher> NitrosPublisher::getNegotiatedPublisher()
 {
   return negotiated_pub_;
@@ -167,7 +189,9 @@ void NitrosPublisher::postNegotiationCallback()
   auto topics_info = negotiated_pub_->get_negotiated_topics_info();
   if (!topics_info.success || topics_info.negotiated_topics.size() == 0) {
     negotiated_data_format_ = "";
-    RCLCPP_INFO(node_.get_logger(), "[NitrosPublisher] Negotiation failed");
+    RCLCPP_INFO(
+      node_.get_logger(),
+      "[NitrosPublisher] Negotiation ended with no results");
     RCLCPP_INFO(
       node_.get_logger(),
       "[NitrosPublisher] Use only the compatible publisher: "
@@ -396,6 +420,11 @@ void NitrosPublisher::publish(NitrosTypeBase & base_msg)
       compatible_pub_,
       base_msg);
   }
+
+  if (statistics_config_.enable_statistics) {
+    updateStatistics();
+  }
+
   #if defined(USE_NVTX)
   nvtxRangePopWrapper();
   #endif

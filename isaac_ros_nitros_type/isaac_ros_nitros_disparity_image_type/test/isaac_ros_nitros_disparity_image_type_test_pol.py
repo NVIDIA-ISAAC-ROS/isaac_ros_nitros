@@ -27,7 +27,7 @@ from stereo_msgs.msg import DisparityImage
 
 @pytest.mark.rostest
 def generate_test_description():
-    """Generate launch description with all ROS2 nodes for testing."""
+    """Generate launch description with all ROS 2 nodes for testing."""
     test_ns = IsaacROSDisparityImageTest.generate_namespace()
     container = ComposableNodeContainer(
         name='image_container',

@@ -52,7 +52,17 @@ void rclcpp::TypeAdapter<
   auto msg_entity = nvidia::gxf::Entity::Shared(context, source.handle);
 
   auto gxf_tensors = msg_entity->findAll<nvidia::gxf::Tensor>();
-  for (auto gxf_pose_tensor : gxf_tensors) {
+  if (!gxf_tensors) {
+    std::stringstream error_msg;
+    error_msg <<
+      "[convert_to_ros_message] failed to get all GXF tensors: " <<
+      GxfResultStr(gxf_tensors.error());
+    RCLCPP_ERROR(
+      rclcpp::get_logger("NitrosPoseArray"), error_msg.str().c_str());
+    throw std::runtime_error(error_msg.str().c_str());
+  }
+  for (auto gxf_pose_tensor_handle : gxf_tensors.value()) {
+    auto gxf_pose_tensor = gxf_pose_tensor_handle.value();
     // Ensure pose tensor has correct shape
     if (gxf_pose_tensor->shape() != nvidia::gxf::Shape{kExpectedPoseAsTensorSize}) {
       std::stringstream error_msg;
@@ -101,7 +111,7 @@ void rclcpp::TypeAdapter<
         throw std::runtime_error(error_msg.c_str());
     }
 
-    // Create corresponding ROS2 Pose and populate the message object's fields
+    // Create corresponding ROS 2 Pose and populate the message object's fields
     auto ros_pose = geometry_msgs::msg::Pose{};
     ros_pose.position.x = ros_pose_tensor.at(0);
     ros_pose.position.y = ros_pose_tensor.at(1);

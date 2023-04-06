@@ -51,8 +51,18 @@ void rclcpp::TypeAdapter<
     nvidia::isaac_ros::nitros::GetTypeAdapterNitrosContext().getContext(), source.handle);
 
   auto gxf_tensors = msg_entity->findAll<nvidia::gxf::Tensor>();
-  for (auto gxf_tensor : gxf_tensors) {
-    // Create ROS2 Tensor and populate the message object's fields
+  if (!gxf_tensors) {
+    std::stringstream error_msg;
+    error_msg <<
+      "[convert_to_ros_message] failed to get all GXF tensors: " <<
+      GxfResultStr(gxf_tensors.error());
+    RCLCPP_ERROR(
+      rclcpp::get_logger("NitrosTensorList"), error_msg.str().c_str());
+    throw std::runtime_error(error_msg.str().c_str());
+  }
+  for (auto gxf_tensor_handle : gxf_tensors.value()) {
+    auto gxf_tensor = gxf_tensor_handle.value();
+    // Create ROS 2 Tensor and populate the message object's fields
     auto ros_tensor = isaac_ros_tensor_list_interfaces::msg::Tensor();
     ros_tensor.name = gxf_tensor.name();
     ros_tensor.data_type = static_cast<int32_t>(gxf_tensor->element_type());

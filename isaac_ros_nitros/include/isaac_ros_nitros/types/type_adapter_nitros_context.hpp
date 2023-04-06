@@ -11,6 +11,7 @@
 #ifndef ISAAC_ROS_NITROS__TYPES__TYPE_ADAPTER_NITROS_CONTEXT_HPP_
 #define ISAAC_ROS_NITROS__TYPES__TYPE_ADAPTER_NITROS_CONTEXT_HPP_
 
+#include <memory>
 #include <mutex>
 
 #include "isaac_ros_nitros/nitros_context.hpp"
@@ -24,7 +25,7 @@ namespace nitros
 {
 
 // Global NitrosContext for data type adapter
-extern NitrosContext g_type_adapter_nitros_context;
+extern std::unique_ptr<NitrosContext> g_type_adapter_nitros_context;
 
 // Mutex for the type adapter's global NitrosContext
 extern std::mutex g_type_adapter_nitros_context_mutex;

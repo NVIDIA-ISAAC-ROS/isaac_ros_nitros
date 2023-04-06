@@ -6,58 +6,17 @@
 # distribution of this software and related documentation without an express
 # license agreement from NVIDIA CORPORATION is strictly prohibited.
 
-cmake_minimum_required(VERSION 3.8)
+cmake_minimum_required(VERSION 3.23.2)
 project(isaac_ros_nitros_april_tag_detection_array_type LANGUAGES C CXX)
-
-
-# Default to C++17
-if(NOT CMAKE_CXX_STANDARD)
-  set(CMAKE_CXX_STANDARD 17)
-endif()
 
 if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
   add_compile_options(-Wall -Wextra -Wpedantic)
 endif()
 
-
-# Default to Release build
-if(NOT CMAKE_BUILD_TYPE OR CMAKE_BUILD_TYPE STREQUAL "")
-  set(CMAKE_BUILD_TYPE "Release" CACHE STRING "" FORCE)
-endif()
-message( STATUS "CMAKE_BUILD_TYPE: ${CMAKE_BUILD_TYPE}" )
-
-execute_process(COMMAND uname -m COMMAND tr -d '\n' OUTPUT_VARIABLE ARCHITECTURE)
-message( STATUS "Architecture: ${ARCHITECTURE}" )
-
 find_package(ament_cmake_auto REQUIRED)
 ament_auto_find_build_dependencies()
 
-
-# Eigen3
-find_package(Eigen3 3.3 REQUIRED NO_MODULE)
-
-
-# Fiducials
-include_directories(gxf/include)
-add_library(fiducials SHARED IMPORTED)
-if( ${ARCHITECTURE} STREQUAL "x86_64" )
-  set_property(TARGET fiducials PROPERTY IMPORTED_LOCATION ${CMAKE_CURRENT_SOURCE_DIR}/gxf/lib/gxf_x86_64/libgxf_fiducials.so)
-  install(DIRECTORY gxf/lib/gxf_x86_64/ DESTINATION share/${PROJECT_NAME}/gxf)
-elseif( ${ARCHITECTURE} STREQUAL "aarch64" )
-  set_property(TARGET fiducials PROPERTY IMPORTED_LOCATION ${CMAKE_CURRENT_SOURCE_DIR}/gxf/lib/gxf_jetpack50/libgxf_fiducials.so)
-  install(DIRECTORY gxf/lib/gxf_jetpack50/ DESTINATION share/${PROJECT_NAME}/gxf)
-endif()
-# Fiducials headers
-install(
-  DIRECTORY gxf/include/
-  DESTINATION include/
-)
-
-
-# for #include <cuda_runtime.h>
-find_package(CUDA REQUIRED)
-include_directories("${CUDA_INCLUDE_DIRS}")
-
+# NVTX
 option(USE_NVTX "Enable NVTX markers for improved profiling (if available)" ON)
 if(USE_NVTX)
     add_definitions(-DUSE_NVTX)
@@ -65,46 +24,64 @@ if(USE_NVTX)
     link_libraries("nvToolsExt")
 endif()
 
+# Dependencies
+find_package(Eigen3 3.3 REQUIRED NO_MODULE)
+find_package(GXF ${ISAAC_ROS_GXF_VERSION} MODULE REQUIRED
+    COMPONENTS
+    core
+    isaac_messages
+    multimedia
+)
+include(YamlCpp)
 
 # NitrosAprilTagDetectionArray
 ament_auto_add_library(${PROJECT_NAME} SHARED
-  src/nitros_april_tag_detection_array.cpp)
-target_compile_definitions(${PROJECT_NAME}
-  PRIVATE "COMPOSITION_BUILDING_DLL"
+  src/nitros_april_tag_detection_array.cpp
+  src/fiducial_message.cpp
 )
-target_link_libraries(${PROJECT_NAME} fiducials Eigen3::Eigen)
-install(
-  DIRECTORY include/
-  DESTINATION include/${PROJECT_NAME}
+target_link_libraries(${PROJECT_NAME}
+  Eigen3::Eigen
+  GXF::core
+  GXF::isaac_messages
+  GXF::multimedia
+  yaml-cpp
 )
-install(TARGETS ${PROJECT_NAME} EXPORT export_${PROJECT_NAME})
+set_target_properties(${PROJECT_NAME} PROPERTIES BUILD_RPATH_USE_ORIGIN TRUE)
+set_target_properties(${PROJECT_NAME} PROPERTIES INSTALL_RPATH_USE_LINK_PATH TRUE)
 
-ament_export_include_directories("include")
-
+# Make library available for sharing in Nitros
+install(TARGETS ${PROJECT_NAME} LIBRARY DESTINATION share/${PROJECT_NAME}/gxf/lib/fiducial_message)
 
 if(BUILD_TESTING)
-  # NitrosAprilTagDetectionArrayForwardNode
-  ament_auto_add_library(
-    isaac_ros_nitros_april_tag_detection_array_forward_node SHARED test/src/nitros_april_tag_detection_array_forward_node.cpp)
-  target_compile_definitions(isaac_ros_nitros_april_tag_detection_array_forward_node
-    PRIVATE "COMPOSITION_BUILDING_DLL"
-  )
-  target_link_libraries(isaac_ros_nitros_april_tag_detection_array_forward_node ${PROJECT_NAME})
-  rclcpp_components_register_nodes(
-    isaac_ros_nitros_april_tag_detection_array_forward_node "nvidia::isaac_ros::nitros::NitrosAprilTagDetectionArrayForwardNode")
-  set(node_plugins
-    "${node_plugins}nvidia::isaac_ros::nitros::NitrosAprilTagDetectionArrayForwardNode;$<TARGET_FILE:isaac_ros_nitros_april_tag_detection_array_forward_node>\n")
   # Install test/config directory
-  install(
-    DIRECTORY test/config
-    DESTINATION share/${PROJECT_NAME}/test
+  install(DIRECTORY test/config DESTINATION share/${PROJECT_NAME}/test)
+
+  # NitrosAprilTagDetectionArrayForwardNode
+  ament_auto_add_library(isaac_ros_nitros_april_tag_detection_array_forward_node SHARED
+    test/src/nitros_april_tag_detection_array_forward_node.cpp
   )
+  target_link_libraries(isaac_ros_nitros_april_tag_detection_array_forward_node ${PROJECT_NAME} GXF::std)
+  set_target_properties(isaac_ros_nitros_april_tag_detection_array_forward_node PROPERTIES
+      BUILD_RPATH_USE_ORIGIN TRUE)
+  set_target_properties(isaac_ros_nitros_april_tag_detection_array_forward_node PROPERTIES
+      INSTALL_RPATH_USE_LINK_PATH TRUE)
+  rclcpp_components_register_nodes(isaac_ros_nitros_april_tag_detection_array_forward_node
+      "nvidia::isaac_ros::nitros::NitrosAprilTagDetectionArrayForwardNode")
+  set(node_plugins "${node_plugins}nvidia::isaac_ros::nitros::NitrosAprilTagDetectionArrayForwardNode;\
+      $<TARGET_FILE:isaac_ros_nitros_april_tag_detection_array_forward_node>\n")
+
+  # Test registration extension
+  ament_auto_add_library(isaac_ros_nitros_april_tag_detection_array_test_ext SHARED
+      test/src/fiducial_message_test_ext.cpp
+  )
+  target_link_libraries(isaac_ros_nitros_april_tag_detection_array_test_ext GXF::std)
+  install(TARGETS isaac_ros_nitros_april_tag_detection_array_test_ext
+      LIBRARY DESTINATION share/${PROJECT_NAME}/gxf/lib/fiducial_message/test)
 
   find_package(ament_lint_auto REQUIRED)
 
   # Ignore copyright notices since we use custom NVIDIA Isaac ROS Software License
   set(ament_cmake_copyright_FOUND TRUE)
-
   ament_lint_auto_find_test_dependencies()
 
   find_package(launch_testing_ament_cmake REQUIRED)

@@ -42,13 +42,15 @@ NitrosPublisherSubscriberGroup::NitrosPublisherSubscriberGroup(
   std::shared_ptr<NitrosTypeManager> nitros_type_manager,
   const gxf::optimizer::GraphIOGroupSupportedDataTypesInfo & gxf_io_supported_data_formats_info,
   const NitrosPublisherSubscriberConfigMap & nitros_pub_sub_configs,
-  const std::shared_ptr<std::map<ComponentKey, std::string>> frame_id_map_ptr)
+  const std::shared_ptr<std::map<ComponentKey, std::string>> frame_id_map_ptr,
+  const NitrosStatisticsConfig & statistics_config)
 : node_(node),
   context_(context),
   nitros_type_manager_(nitros_type_manager),
   gxf_io_supported_data_formats_info_(gxf_io_supported_data_formats_info),
   nitros_pub_sub_configs_(nitros_pub_sub_configs),
-  frame_id_map_ptr_(frame_id_map_ptr)
+  frame_id_map_ptr_(frame_id_map_ptr),
+  statistics_config_(statistics_config)
 {
   // Expand data formats if all ports in this IO group support "any" data formats
   expandAnyDataFormats();
@@ -371,7 +373,8 @@ void NitrosPublisherSubscriberGroup::createNitrosSubscribers()
       nitros_type_manager_,
       ingress_comp_info,
       supported_data_formats,
-      component_config);
+      component_config,
+      statistics_config_);
 
     nitros_sub->setFrameIdMap(frame_id_map_ptr_);
 
@@ -428,7 +431,8 @@ void NitrosPublisherSubscriberGroup::createNitrosPublishers()
       egress_comp_info,
       supported_data_formats,
       component_config,
-      negotiated_pub_options);
+      negotiated_pub_options,
+      statistics_config_);
 
     nitros_pub->setFrameIdMap(frame_id_map_ptr_);
 

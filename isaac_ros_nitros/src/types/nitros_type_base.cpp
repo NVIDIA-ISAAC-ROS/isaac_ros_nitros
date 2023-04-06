@@ -43,7 +43,7 @@ NitrosTypeBase::NitrosTypeBase(
     "[Constructor] Creating a Nitros-typed object for handle = %ld",
     handle);
   GxfEntityRefCountInc(
-    nvidia::isaac_ros::nitros::g_type_adapter_nitros_context.getContext(),
+    nvidia::isaac_ros::nitros::GetTypeAdapterNitrosContext().getContext(),
     handle);
 }
 
@@ -58,7 +58,7 @@ NitrosTypeBase::NitrosTypeBase(const NitrosTypeBase & other)
     "[Copy Constructor] Copying a Nitros-typed object for handle = %ld",
     other.handle);
   GxfEntityRefCountInc(
-    nvidia::isaac_ros::nitros::g_type_adapter_nitros_context.getContext(),
+    nvidia::isaac_ros::nitros::GetTypeAdapterNitrosContext().getContext(),
     other.handle);
 }
 
@@ -69,7 +69,7 @@ NitrosTypeBase::~NitrosTypeBase()
     "[Destructor]Dstroying a Nitros-typed object for handle = %ld",
     handle);
   GxfEntityRefCountDec(
-    nvidia::isaac_ros::nitros::g_type_adapter_nitros_context.getContext(),
+    nvidia::isaac_ros::nitros::GetTypeAdapterNitrosContext().getContext(),
     handle);
 }
 

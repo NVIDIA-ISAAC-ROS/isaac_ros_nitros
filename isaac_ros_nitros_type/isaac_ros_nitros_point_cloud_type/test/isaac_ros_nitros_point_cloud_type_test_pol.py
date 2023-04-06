@@ -27,7 +27,7 @@ from sensor_msgs.msg import PointCloud2
 
 @pytest.mark.rostest
 def generate_test_description():
-    """Generate launch description with all ROS2 nodes for testing."""
+    """Generate launch description with all ROS 2 nodes for testing."""
     test_ns = IsaacROSNitrosPointCloudTest.generate_namespace()
     container = ComposableNodeContainer(
         name='point_cloud_container',
@@ -99,17 +99,28 @@ class IsaacROSNitrosPointCloudTest(IsaacROSBaseTest):
                     done = True
                     break
 
-            self.assertTrue(done, "Didn't receive output on output_image topic!")
+            self.assertTrue(
+                done, "Didn't receive output on output_image topic!")
 
             received_points = received_messages['output']
+
+            self.assertEqual(cloud_msg.header.frame_id, received_points.header.frame_id,
+                             'Source and received frame ids dont match')
 
             self.assertEqual(len(cloud_msg.data), len(received_points.data),
                              'Source and received image sizes do not match: ' +
                              f'{len(cloud_msg.data)} != {len(received_points.data)}')
-
+            self.assertEqual(cloud_msg.is_bigendian, received_points.is_bigendian,
+                             'Source and received image is_bigendian field do not match')
+            self.assertEqual(cloud_msg.row_step, received_points.row_step,
+                             'Source and received image row_step field do not match')
+            self.assertEqual(cloud_msg.point_step, received_points.point_step,
+                             'Source and received image point_step field do not match')
             for i in range(len(cloud_msg.data)):
-                self.assertEqual(cloud_msg.data[i], received_points.data[i],
-                                 'Souce and received image pixels do not match')
+                # by convention the 15th bit is not used and hence not passed through
+                if (i % 16 != 15):
+                    self.assertEqual(cloud_msg.data[i], received_points.data[i],
+                                     'Source and received image pixels do not match')
 
             print('Source and received images are identical.')
         finally:

@@ -15,6 +15,7 @@
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wunused-parameter"
 #pragma GCC diagnostic ignored "-Wmissing-field-initializers"
+#pragma GCC diagnostic ignored "-Wpedantic"
 #include "gxf/core/entity.hpp"
 #include "gxf/core/gxf.h"
 #include "gxf/multimedia/camera.hpp"
@@ -27,12 +28,14 @@
 #include "rclcpp/rclcpp.hpp"
 
 
+constexpr char SOURCE_CAMERA_MODEL_GXF_NAME[] = "source_camera";
+
 namespace
 {
 using DistortionType = nvidia::gxf::DistortionType;
 const std::unordered_map<std::string, DistortionType> g_ros_to_gxf_distortion_model({
     {"pinhole", DistortionType::Perspective},
-    {"plumb_bob", DistortionType::Polynomial},
+    {"plumb_bob", DistortionType::Brown},
     {"rational_polynomial", DistortionType::Polynomial},
     {"equidistant", DistortionType::FisheyeEquidistant}
   });
@@ -40,7 +43,8 @@ const std::unordered_map<std::string, DistortionType> g_ros_to_gxf_distortion_mo
 const std::unordered_map<DistortionType, std::string> g_gxf_to_ros_distortion_model({
     {DistortionType::Polynomial, "rational_polynomial"},
     {DistortionType::FisheyeEquidistant, "equidistant"},
-    {DistortionType::Perspective, "pinhole"}
+    {DistortionType::Perspective, "pinhole"},
+    {DistortionType::Brown, "plumb_bob"}
   });
 }  // namespace
 
@@ -203,7 +207,7 @@ void rclcpp::TypeAdapter<
     throw std::runtime_error(error_msg.str().c_str());
   }
 
-  auto gxf_camera_model = message->add<nvidia::gxf::CameraModel>(source.header.frame_id.c_str());
+  auto gxf_camera_model = message->add<nvidia::gxf::CameraModel>(SOURCE_CAMERA_MODEL_GXF_NAME);
 
   gxf_camera_model.value()->dimensions = {source.width, source.height};
   gxf_camera_model.value()->focal_length = {

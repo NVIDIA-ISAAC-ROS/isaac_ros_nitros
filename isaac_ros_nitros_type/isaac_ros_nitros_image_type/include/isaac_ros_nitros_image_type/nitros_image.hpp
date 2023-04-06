@@ -113,7 +113,7 @@ NITROS_FORMAT_ADD(nitros_image_nv24_t)
 NITROS_FORMAT_FACTORY_END()
 // Required extensions
 NITROS_TYPE_EXTENSION_FACTORY_BEGIN()
-NITROS_TYPE_EXTENSION_ADD("isaac_ros_nitros", "gxf/multimedia/libgxf_multimedia.so")
+NITROS_TYPE_EXTENSION_ADD("isaac_ros_gxf", "gxf/lib/multimedia/libgxf_multimedia.so")
 NITROS_TYPE_EXTENSION_FACTORY_END()
 NITROS_TYPE_FACTORY_END()
 
