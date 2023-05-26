@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2022, NVIDIA CORPORATION.  All rights reserved.
+ * Copyright (c) 2022-2023, NVIDIA CORPORATION.  All rights reserved.
  *
  * NVIDIA CORPORATION and its licensors retain all intellectual property
  * and proprietary rights in and to this software, related documentation
@@ -11,6 +11,7 @@
 #ifndef ISAAC_ROS_NITROS__NITROS_PUBLISHER_SUBSCRIBER_BASE_HPP_
 #define ISAAC_ROS_NITROS__NITROS_PUBLISHER_SUBSCRIBER_BASE_HPP_
 
+#include <algorithm>
 #include <chrono>
 #include <map>
 #include <memory>
@@ -27,10 +28,6 @@
 
 #include "isaac_ros_nitros_interfaces/msg/topic_statistics.hpp"
 #include "rclcpp/rclcpp.hpp"
-
-#if defined(USE_NVTX)
-  #include "nvToolsExt.h"
-#endif
 
 
 namespace nvidia
@@ -88,6 +85,12 @@ struct NitrosStatisticsConfig
 
   // Window size of the mean filter in terms of number of messages received
   int filter_window_size{100};
+
+  // Map of topic name and corresponding expected time difference between messages in microseconds
+  std::map<std::string, int> topic_name_expected_dt_map;
+
+  // Tolerance for jitter from expected frame rate in microseconds
+  int jitter_tolerance_us;
 };
 
 using NitrosPublisherSubscriberConfigMap =
@@ -123,6 +126,11 @@ public:
     gxf_component_info_(gxf_component_info),
     supported_data_formats_(supported_data_formats),
     config_(config) {}
+
+  const NitrosPublisherSubscriberConfig getConfig() const
+  {
+    return config_;
+  }
 
   // Getter for the GXF component info
   gxf::optimizer::ComponentInfo getComponentInfo()
@@ -202,8 +210,9 @@ public:
   // Update statistics numbers. To be called in nitros Subscriber and Publisher
   void updateStatistics()
   {
-    // Mutex lock to prevent simultaneous access of sum_msg_interarrival_time_
-    const std::lock_guard<std::mutex> lock(sum_msg_interarrival_time_mutex_);
+    // Mutex lock to prevent simultaneous access of common parameters
+    // used by updateStatistics() and publishNitrosStatistics()
+    const std::lock_guard<std::mutex> lock(nitros_statistics_mutex_);
     // NITROS statistics
     std::chrono::time_point<std::chrono::steady_clock> current_timestamp = clock_.now();
 
@@ -211,16 +220,35 @@ public:
     if (prev_msg_timestamp_ != std::chrono::steady_clock::time_point::min()) {
       int microseconds = std::chrono::duration_cast<std::chrono::microseconds>(
         current_timestamp - prev_msg_timestamp_).count();
+      // calculate difference between time between msgs(using system clock)
+      // and expected time between msgs
+      int abs_jitter = std::abs(
+        microseconds -
+        statistics_config_.topic_name_expected_dt_map[statistics_msg_.topic_name]);
+      if (abs_jitter > statistics_config_.jitter_tolerance_us) {
+        RCLCPP_WARN(
+          node_.get_logger(),
+          "[NitrosStatistics] Difference of time between messages(%i) and expected time between"
+          " messages(%i) is out of tolerance(%i) by %i for topic %s. Units are microseconds.",
+          microseconds, statistics_config_.topic_name_expected_dt_map[statistics_msg_.topic_name],
+          statistics_config_.jitter_tolerance_us, abs_jitter, statistics_msg_.topic_name.c_str());
+      }
+      // Update max abs jitter
+      max_abs_jitter_ = std::max(max_abs_jitter_, abs_jitter);
+      msg_jitter_queue_.push(abs_jitter);
       msg_interarrival_time_queue_.push(microseconds);
 
       // add and subtract weighted datapoints to prevent summation of entire queue at
       // each run of this function. Also, support mean filter when the filter size
       // has not reached the maximum limit of config_.filter_window_size
+      sum_msg_jitter_ += abs_jitter;
       sum_msg_interarrival_time_ += microseconds;
       if (static_cast<int>(msg_interarrival_time_queue_.size()) >
         statistics_config_.filter_window_size)
       {
+        sum_msg_jitter_ -= msg_jitter_queue_.front();
         sum_msg_interarrival_time_ -= msg_interarrival_time_queue_.front();
+        msg_jitter_queue_.pop();
         msg_interarrival_time_queue_.pop();
       }
     }
@@ -230,15 +258,19 @@ public:
   // Function to publish statistics to a ROS topic
   void publishNitrosStatistics()
   {
-    // Mutex lock to prevent simultaneous access of sum_msg_interarrival_time_
-    const std::lock_guard<std::mutex> lock(sum_msg_interarrival_time_mutex_);
+    // Mutex lock to prevent simultaneous access of common parameters
+    // used by updateStatistics() and publishNitrosStatistics()
+    const std::lock_guard<std::mutex> lock(nitros_statistics_mutex_);
     // publish zero until atleast one message has been received
     if (sum_msg_interarrival_time_ != 0) {
       statistics_msg_.frame_rate = kMicrosecondsInSeconds /
         (static_cast<float>(sum_msg_interarrival_time_) / msg_interarrival_time_queue_.size());
+      statistics_msg_.mean_abs_jitter = sum_msg_jitter_ / msg_jitter_queue_.size();
     } else {
       statistics_msg_.frame_rate = 0.0;
+      statistics_msg_.mean_abs_jitter = 0;
     }
+    statistics_msg_.max_abs_jitter = max_abs_jitter_;
     statistics_publisher_->publish(statistics_msg_);
   }
 
@@ -249,9 +281,20 @@ public:
     statistics_msg_.node_namespace = node_.get_namespace();
     statistics_msg_.topic_name = config_.topic_name;
 
+    // Check if expected topic name is present in topic_name_expected_dt_map
+    if (!statistics_config_.topic_name_expected_dt_map.count(statistics_msg_.topic_name)) {
+      std::stringstream error_msg;
+      error_msg << "[NitrosNode]" << statistics_msg_.topic_name <<
+        " topic name not found in topics_list ROS param";
+      RCLCPP_ERROR(node_.get_logger(), error_msg.str().c_str());
+      throw std::runtime_error(error_msg.str().c_str());
+    }
+
     // Initialize varibles to min and zero as a flag to detect no messages have been received
     prev_msg_timestamp_ = std::chrono::steady_clock::time_point::min();
     sum_msg_interarrival_time_ = 0;
+    sum_msg_jitter_ = 0;
+    max_abs_jitter_ = 0;
 
     // Initialize statistics publisher and start a timer callback to publish at a fixed rate
     statistics_publisher_ =
@@ -290,8 +333,9 @@ protected:
   // Frame ID map
   std::shared_ptr<std::map<gxf::optimizer::ComponentKey, std::string>> frame_id_map_ptr_;
 
-  // Mutex to prevent simultaneous access
-  std::mutex sum_msg_interarrival_time_mutex_;
+  // Mutex lock to prevent simultaneous access of common parameters
+  // used by updateStatistics() and publishNitrosStatistics()
+  std::mutex nitros_statistics_mutex_;
 
   // NITROS statistics variables
   // Configurations for a Nitros statistics
@@ -310,8 +354,20 @@ protected:
   // Queue to store time between messages to implement windowed mean filter
   std::queue<int> msg_interarrival_time_queue_;
 
+  // Queue to store message jitter to implement windowed mean filter
+  // Jitter is the difference between the time between msgs(dt)
+  // calculated from fps specified in NITROS statistics ROS param
+  // and measured using system clock
+  std::queue<int> msg_jitter_queue_;
+
   // Sum of the message interarrival times received on this topic within the configured window
   int64_t sum_msg_interarrival_time_;
+
+  // Sum of the message jitter on this topic within the configured window
+  int64_t sum_msg_jitter_;
+
+  // Max absolute jitter
+  int max_abs_jitter_;
 
   // Prev timestamp stored for calculating frame rate
   std::chrono::time_point<std::chrono::steady_clock> prev_msg_timestamp_;

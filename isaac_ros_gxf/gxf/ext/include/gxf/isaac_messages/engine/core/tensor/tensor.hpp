@@ -100,6 +100,7 @@ Vector<int, sizeof...(Dimensions)> GetDimensionsVector(Args... dimensions) {
   constexpr int kRank = sizeof...(Dimensions);
   constexpr int kArgumentCount = sizeof...(Args);
   std::array<int, kRank> compile_time_dimensions{Dimensions...};
+  // TODO(dweikersdorf) Use explicit conversion to int
   Vector<int, kArgumentCount> runtime_dimensions(dimensions...);
   Vector<int, kRank> result;
   for (int i = 0; i < kRank; i++) {
@@ -314,7 +315,7 @@ class TensorBase<K, tensor::details::int_sequence<DimensionsPack...>, Buffer> {
   template <typename... Args,
       std::enable_if_t<sizeof...(Args) == kRank>* = nullptr>
   bool isValidCoordinate(Args... indices) const {
-    return isValidCoordinate(coordinate_t(indices...));
+    return isValidCoordinate(coordinate_t(indices...));  // TODO(dweikersdorf) Use explict casts
   }
 
   // Accesses the given index in the tensor with respect to memory ordering
@@ -339,20 +340,20 @@ class TensorBase<K, tensor::details::int_sequence<DimensionsPack...>, Buffer> {
             std::enable_if_t<sizeof...(Args) == kRank &&
                              std::is_trivial<element_t>::value>* = nullptr>
   element_t operator()(Args... indices) const {
-    return operator()(coordinate_t(indices...));
+    return operator()(coordinate_t(indices...));  // TODO(dweikersdorf) Use explict casts
   }
   // Helper wrappers for operator access for the most common orders of tensors
   template <typename... Args,
             std::enable_if_t<sizeof...(Args) == kRank &&
                              !std::is_trivial<element_t>::value>* = nullptr>
   element_const_ref_t operator()(Args... indices) const {
-    return operator()(coordinate_t(indices...));
+    return operator()(coordinate_t(indices...));  // TODO(dweikersdorf) Use explict casts
   }
   // Helper wrappers for operator access for the most common orders of tensors
   template <typename... Args,
             std::enable_if_t<sizeof...(Args) == kRank && kIsMutable>* = nullptr>
   element_ref_t operator()(Args... indices) {
-    return operator()(coordinate_t(indices...));
+    return operator()(coordinate_t(indices...));  // TODO(dweikersdorf) Use explict casts
   }
 
   // Creates a view on a slice with one dimension less. The dimension with highest significance

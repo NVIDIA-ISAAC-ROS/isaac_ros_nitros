@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2022, NVIDIA CORPORATION.  All rights reserved.
+ * Copyright (c) 2022-2023, NVIDIA CORPORATION.  All rights reserved.
  *
  * NVIDIA CORPORATION and its licensors retain all intellectual property
  * and proprietary rights in and to this software, related documentation
@@ -145,9 +145,10 @@ void rclcpp::TypeAdapter<
     destination.header.frame_id = frame_name.value();
   } else {
     RCLCPP_WARN(
-      rclcpp::get_logger("NitrosPointCloud"), "Setting frame if from NITROS msg");
+      rclcpp::get_logger("NitrosPointCloud"),
+      "Setting frame_id=%s from NITROS msg",
+      source.frame_id.c_str());
     // Set NITROS frame id as fallback method of populating frame_id
-    // Set frame ID
     destination.header.frame_id = source.frame_id;
   }
 

@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2022, NVIDIA CORPORATION.  All rights reserved.
+ * Copyright (c) 2022-2023, NVIDIA CORPORATION.  All rights reserved.
  *
  * NVIDIA CORPORATION and its licensors retain all intellectual property
  * and proprietary rights in and to this software, related documentation
@@ -103,6 +103,7 @@ protected:
     const std::string & app_yaml_filename,
     const GraphIOGroupSupportedDataTypesInfoList & gxf_io_group_info_list,
     const bool use_custom_io_group_info_list,
+    const bool use_raw_graph_no_optimizer,
     const NitrosPublisherSubscriberConfigMap & config_map,
     const std::vector<std::string> & extension_spec_preset_names,
     const std::vector<std::string> & extension_spec_filenames,
@@ -169,6 +170,9 @@ protected:
     nitros_type_manager_->registerSupportedType<T>();
   }
 
+  // Nitros type manager
+  std::shared_ptr<NitrosTypeManager> nitros_type_manager_;
+
   // A list of I/O port groups
   GraphIOGroupSupportedDataTypesInfoList gxf_io_group_info_list_;
 
@@ -188,6 +192,9 @@ protected:
 private:
   // The function to be called after negotiation timeout
   void postNegotiationCallback();
+
+  // The function for checking the status of the underlying graph
+  void gxfHeartbeatCallback();
 
   // Nitros context that has a shared underlying context across all NitrosNodes in the same process
   NitrosContext nitros_context_;
@@ -223,14 +230,21 @@ private:
   // Negotiation wait timer
   rclcpp::TimerBase::SharedPtr negotiation_timer_;
 
+  // The GXF graph heartbeat timer
+  rclcpp::TimerBase::SharedPtr gxf_heartbeat_timer_;
+
+  // The eid for checking the graph status
+  gxf_uid_t heartbeat_eid_ = -1;
+
   // Map for frame_id passthrough
   std::shared_ptr<std::map<ComponentKey, std::string>> frame_id_map_ptr_;
 
-  // Nitros type manager
-  std::shared_ptr<NitrosTypeManager> nitros_type_manager_;
-
   // Configurations for a Nitros statistics
   std::shared_ptr<NitrosStatisticsConfig> statistics_config_;
+
+  // When enabled namespacing and the graph optimizer are ignored
+  // In such a case, graph(s) will be loaded intact
+  bool use_raw_graph_no_optimizer_ = false;
 };
 
 }  // namespace nitros

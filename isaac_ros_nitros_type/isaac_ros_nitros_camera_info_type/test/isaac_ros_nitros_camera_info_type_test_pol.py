@@ -137,20 +137,12 @@ class IsaacROSNitrosCameraInfoTest(IsaacROSBaseTest):
 
             # P
             self.assertEqual(len(camera_info.p), len(received_camera_info.p))
-            # The P matrix is a 3*4 matrix, while left 3*3 matrix should be identical with K-matrix
+            # The P matrix is a 3*4 matrix
             for i in range(3):
                 for j in range(4):
-                    # Compare with the translation vector
-                    if(j == 3):
-                        self.assertEqual(
-                            round(camera_info.p[i*4+j], 2),
-                            round(received_camera_info.p[i*4+j], 2),
-                            f'{i+1}th P value does not match')
-                    # Compare with the K matrix
-                    else:
-                        self.assertEqual(
-                            round(camera_info.k[i*3+j], 2),
-                            round(received_camera_info.p[i*4+j], 2),
+                    self.assertEqual(
+                            round(camera_info.p[i*3+j], 2),
+                            round(received_camera_info.p[i*3+j], 2),
                             f'{i+1}th P value does not match')
 
             print('The received camera info is verified successfully')

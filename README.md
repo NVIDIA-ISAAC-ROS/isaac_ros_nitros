@@ -35,7 +35,7 @@ The NVIDIA implementation of type adaption and negotiation are called NITROS (NV
 
 ## Latest Update
 
-Update 2023-04-05: Update to be compatible with JetPack 5.1.1
+Update 2023-05-25: CPU usage optimizations.
 
 ## Supported Platforms
 
@@ -201,6 +201,7 @@ Please visit the link below for an example graph that consists of NITROS-acceler
 
 | Date       | Changes                                    |
 | ---------- | ------------------------------------------ |
+| 2023-05-25 | CPU usage optimizations                    |
 | 2023-04-05 | Update to be compatible with JetPack 5.1.1 |
 | 2022-10-19 | Minor updates and bugfixes                 |
 | 2022-08-31 | Update to be compatible with JetPack 5.0.2 |

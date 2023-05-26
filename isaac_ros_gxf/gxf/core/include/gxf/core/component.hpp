@@ -71,6 +71,7 @@ class Component {
 
   // The entity which owns this component
   Entity entity() const noexcept {
+    // FIXME(v1) check that value exists
     return Entity::Shared(context(), eid()).value();
   }
 

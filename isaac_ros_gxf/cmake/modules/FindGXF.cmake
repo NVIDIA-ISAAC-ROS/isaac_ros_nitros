@@ -35,6 +35,7 @@ list(APPEND _GXF_EXTENSIONS
     cuda
     isaac_messages
     isaac_ros_messages
+    message_compositor
     multimedia
     gxf_optimizer
     serialization

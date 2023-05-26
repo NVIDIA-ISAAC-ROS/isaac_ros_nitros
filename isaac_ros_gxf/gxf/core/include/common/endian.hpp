@@ -28,6 +28,7 @@
 namespace nvidia {
 
 /// Returns true if the machine stores multi-byte integers in little-endian format
+/// FIXME: Use std::memcpy if reinterpret_cast has to be removed
 inline bool IsLittleEndian() {
   const uint16_t test = 0x0102;
   return *reinterpret_cast<const uint8_t*>(&test) == 0x02;
@@ -62,6 +63,7 @@ template <> inline uint16_t DecodeLittleEndian<uint16_t>(uint16_t value) { retur
 template <> inline uint8_t  DecodeLittleEndian<uint8_t> (uint8_t  value) { return value; }
 
 /// Returns true if the machine stores multi-byte integers in big-endian format
+/// FIXME: Use std::memcpy if reinterpret_cast has to be removed
 inline bool IsBigEndian() {
   const uint16_t test = 0x0102;
   return *reinterpret_cast<const uint8_t*>(&test) == 0x01;

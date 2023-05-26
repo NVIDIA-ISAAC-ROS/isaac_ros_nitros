@@ -182,7 +182,7 @@ class Tensor {
   Tensor() = default;
 
   ~Tensor() {
-    memory_buffer_.freeBuffer();
+    memory_buffer_.freeBuffer();  // FIXME(V2) error code?
     element_count_ = 0;
     shape_ = Shape();
   }

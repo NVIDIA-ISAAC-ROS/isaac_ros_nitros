@@ -69,7 +69,7 @@ class ParameterBackendBase {
   // Returns true if it is possible to change this parameter
   bool isImmutable() const {
     if (isConstant()) {
-      const bool is_active = false;
+      const bool is_active = false;  // FIXME(v1) Check that component is not active.
       if (is_active) {
         return true;
       }
@@ -77,6 +77,7 @@ class ParameterBackendBase {
     return false;
   }
 
+  // FIXME(v1) make private
   gxf_context_t context_;
   gxf_uid_t uid_;
   gxf_parameter_flags_t flags_;
@@ -118,6 +119,7 @@ class ParameterBackend : public ParameterBackendBase {
   // Gets the current value of the parameter.
   const Expected<T>& try_get() const { return value_; }
 
+  // FIXME(v1) make private
   nvidia::gxf::Parameter<T>* frontend_ = nullptr;
   std::function<bool(const T&)> validator_;
   Expected<T> value_ = Unexpected{GXF_PARAMETER_NOT_INITIALIZED};
@@ -192,6 +194,7 @@ class ParameterBackend<Handle<T>> : public HandleParameterBackend {
     return value_;
   }
 
+  // FIXME(v1) make private
   const Expected<Handle<T>> unspecified_handle_ = Unexpected{GXF_PARAMETER_NOT_INITIALIZED};
   nvidia::gxf::Parameter<Handle<T>>* frontend_ = nullptr;
   Expected<Handle<T>> value_ = Unexpected{GXF_PARAMETER_NOT_INITIALIZED};

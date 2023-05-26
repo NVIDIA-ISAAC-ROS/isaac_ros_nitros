@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2022, NVIDIA CORPORATION.  All rights reserved.
+ * Copyright (c) 2022-2023, NVIDIA CORPORATION.  All rights reserved.
  *
  * NVIDIA CORPORATION and its licensors retain all intellectual property
  * and proprietary rights in and to this software, related documentation
@@ -128,7 +128,7 @@ public:
     if (code != GXF_SUCCESS) {
       std::stringstream error_msg;
       error_msg << "loadExtensions Error: " << GxfResultStr(code);
-      RCLCPP_ERROR(get_logger(), error_msg.str().c_str());
+      RCLCPP_ERROR(get_logger(), "%s", error_msg.str().c_str());
       throw std::runtime_error(error_msg.str().c_str());
     }
   }

@@ -1,4 +1,4 @@
-# Copyright (c) 2022, NVIDIA CORPORATION.  All rights reserved.
+# Copyright (c) 2022-2023, NVIDIA CORPORATION.  All rights reserved.
 #
 # NVIDIA CORPORATION and its licensors retain all intellectual property
 # and proprietary rights in and to this software, related documentation
@@ -15,6 +15,8 @@ endif()
 
 find_package(ament_cmake_auto REQUIRED)
 ament_auto_find_build_dependencies()
+
+set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 # NVTX
 option(USE_NVTX "Enable NVTX markers for improved profiling (if available)" ON)

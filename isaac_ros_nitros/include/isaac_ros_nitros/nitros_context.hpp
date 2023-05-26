@@ -52,6 +52,11 @@ public:
     const std::string & component_type,
     void ** pointer);
 
+  // Get the EID for the given entity name
+  gxf_result_t getEid(
+    const std::string & entity_name,
+    gxf_uid_t & eid);
+
   // Get the CID for a component of the given type in the given entity name
   gxf_result_t getCid(
     const std::string & entity_name,

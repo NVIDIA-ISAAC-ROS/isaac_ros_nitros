@@ -19,6 +19,7 @@
 
 #include <map>
 #include <memory>
+#include <mutex>
 #include <shared_mutex>  // NOLINT
 #include <string>
 #include <utility>
@@ -67,6 +68,7 @@ class ParameterStorage {
     backend->headline_ = headline;
     backend->description_ = description;
     backend->frontend_ = frontend;
+    // FIXME(v1) validator
 
     frontend->connect(backend.get());
 
@@ -117,7 +119,7 @@ class ParameterStorage {
     const auto code = ptr->set(std::move(value));
     if (!code) { return ForwardError(code); }
 
-    ptr->writeToFrontend();
+    ptr->writeToFrontend();  // FIXME(v1) Special treatment for codelet parameters
     return Success;
   }
 

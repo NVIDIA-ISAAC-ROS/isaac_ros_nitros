@@ -167,6 +167,13 @@ gxf_result_t NitrosContext::getComponentPointer(
   // End Mutex: shared_context_mutex_
 }
 
+gxf_result_t NitrosContext::getEid(
+  const std::string & entity_name,
+  gxf_uid_t & eid)
+{
+  return GxfEntityFind(context_, getNamespacedEntityName(entity_name).c_str(), &eid);
+}
+
 gxf_result_t NitrosContext::getCid(
   const std::string & entity_name,
   const std::string & component_type,

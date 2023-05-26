@@ -303,7 +303,9 @@ bool StagingQueue<T>::push(T item) {
         break;
       case OverflowBehavior::kFault:
         return false;
+        // FIXME "Added an item to a full queue while using the 'Fault' overflow behavior."
       default:
+        // FIXME "Invalid parameter"
         return false;
     }
   } else {
@@ -342,7 +344,9 @@ bool StagingQueue<T>::sync() {
         break;
       case OverflowBehavior::kFault:
         return false;
+        // FIXME "Added items to a full queue while using the 'Fault' overflow behavior.";
       default:
+        // FIXME "Invalid parameter"
         return false;
     }
   }
