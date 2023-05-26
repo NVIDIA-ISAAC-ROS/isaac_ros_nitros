@@ -31,6 +31,7 @@ namespace gxf {
 
 // All GXF objects are entities. An entity owns multiple components which define the functionality
 // of the entity. Entities themselves are nothing more than a unique identifier.
+// FIXME This type is a bit strange as it looks like and entity, but is in face just a handle.
 class Entity {
  public:
   // Creates a new entity
@@ -74,6 +75,7 @@ class Entity {
     eid_ = other.eid();
     context_ = other.context();
     if (eid_ != kNullUid) {
+      // FIXME(dweikersdorf) How do we deal with failure?
       GxfEntityRefCountInc(context_, eid_);
     }
   }
@@ -96,6 +98,7 @@ class Entity {
     context_ = other.context();
     eid_ = other.eid();
     if (eid_ != kNullUid) {
+      // FIXME(dweikersdorf) How do we deal with failure?
       GxfEntityRefCountInc(context_, eid_);
     }
     return *this;
@@ -293,7 +296,8 @@ class Entity {
 
  private:
   void release() {
-    GxfEntityRefCountDec(context_, eid_);
+    GxfEntityRefCountDec(context_, eid_);  // TODO(v2) We should use the error code, but we can't
+                                           //          do anything about it..
     eid_ = kNullUid;
   }
 

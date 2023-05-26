@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2022, NVIDIA CORPORATION.  All rights reserved.
+ * Copyright (c) 2022-2023, NVIDIA CORPORATION.  All rights reserved.
  *
  * NVIDIA CORPORATION and its licensors retain all intellectual property
  * and proprietary rights in and to this software, related documentation
@@ -27,6 +27,14 @@ namespace isaac_ros
 {
 namespace nitros
 {
+
+constexpr char kGxfVaultComponentTypeName[] = "nvidia::gxf::Vault";
+constexpr char kGxfMessageRelayComponentTypeName[] =
+  "nvidia::isaac_ros::MessageRelay";
+
+const std::vector<std::pair<std::string, std::string>> BUILTIN_EXTENSIONS = {
+  {"isaac_ros_gxf", "gxf/lib/libgxf_message_compositor.so"},
+};
 
 const std::vector<std::string> BUILTIN_EXTENSION_SPEC_FILENAMES = {};
 
@@ -68,7 +76,7 @@ NitrosNode::NitrosNode(const rclcpp::NodeOptions & options)
             .topic_name = "topic_forward_input",
           }
         },
-        {"vault/vault",
+        {"sink/sink",
           {
             .type = NitrosPublisherSubscriberType::NEGOTIATED,
             .qos = rclcpp::QoS(1),
@@ -96,8 +104,8 @@ NitrosNode::NitrosNode(const rclcpp::NodeOptions & options)
     config_map_["forward/input"].compatible_data_format = compatible_format;
     config_map_["forward/input"].use_compatible_format_only = true;
 
-    config_map_["vault/vault"].compatible_data_format = compatible_format;
-    config_map_["vault/vault"].use_compatible_format_only = true;
+    config_map_["sink/sink"].compatible_data_format = compatible_format;
+    config_map_["sink/sink"].use_compatible_format_only = true;
   }
 
   // Register NitrosEmpty for POL test
@@ -121,6 +129,7 @@ NitrosNode::NitrosNode(
     app_yaml_filename,
     gxf_io_group_info_list,
     true,  // Use the given gxf_io_group_info_list
+    true,
     config_map,
     {},
     extension_spec_filenames,
@@ -145,6 +154,7 @@ NitrosNode::NitrosNode(
     app_yaml_filename,
     gxf_io_group_info_list,
     true,  // Use the given gxf_io_group_info_list
+    false,
     config_map,
     extension_spec_preset_names,
     extension_spec_filenames,
@@ -167,6 +177,7 @@ NitrosNode::NitrosNode(
     options,
     app_yaml_filename,
     {},  // Use an empty GXF IO information (to be initialized by optimizer)
+    false,
     false,
     config_map,
     {},
@@ -191,6 +202,7 @@ NitrosNode::NitrosNode(
     app_yaml_filename,
     {},  // Use an empty GXF IO information (to be initialized by optimizer)
     false,
+    false,
     config_map,
     extension_spec_preset_names,
     extension_spec_filenames,
@@ -205,6 +217,7 @@ NitrosNode::NitrosNode(
   const std::string & app_yaml_filename,
   const GraphIOGroupSupportedDataTypesInfoList & gxf_io_group_info_list,
   const bool use_custom_io_group_info_list,
+  const bool use_raw_graph_no_optimizer,
   const NitrosPublisherSubscriberConfigMap & config_map,
   const std::vector<std::string> & extension_spec_preset_names,
   const std::vector<std::string> & extension_spec_filenames,
@@ -214,6 +227,7 @@ NitrosNode::NitrosNode(
 : Node("NitrosNode", options),
   gxf_io_group_info_list_(gxf_io_group_info_list),
   use_custom_io_group_info_list_(use_custom_io_group_info_list),
+  use_raw_graph_no_optimizer_(use_raw_graph_no_optimizer),
   config_map_(config_map),
   app_yaml_filename_(app_yaml_filename),
   extension_spec_preset_names_(extension_spec_preset_names),
@@ -234,11 +248,36 @@ NitrosNode::NitrosNode(
   // Create an NITROS type manager for the node
   statistics_config_ = std::make_shared<NitrosStatisticsConfig>();
 
+  // Setup ROS parameters for NITROS statistics
   statistics_config_->enable_statistics = declare_parameter<bool>("enable_statistics", false);
-  statistics_config_->statistics_publish_rate = declare_parameter<float>(
-    "statistics_publish_rate",
-    1.0);
-  statistics_config_->filter_window_size = declare_parameter<int>("filter_window_size", 100);
+  if (statistics_config_->enable_statistics) {
+    statistics_config_->statistics_publish_rate = declare_parameter<float>(
+      "statistics_publish_rate",
+      1.0);
+    statistics_config_->filter_window_size =
+      declare_parameter<int>("filter_window_size", 100);
+    statistics_config_->jitter_tolerance_us =
+      declare_parameter<int>("jitter_tolerance_us", 5000.0);
+    // List of expected topic names
+    std::vector<std::string> topics_name_list =
+      declare_parameter<std::vector<std::string>>("topics_list", {});
+    // List of fps for each expected topic
+    std::vector<double> expected_fps_list =
+      declare_parameter<std::vector<double>>("expected_fps_list", {});
+    if (topics_name_list.size() !=
+      expected_fps_list.size())
+    {
+      std::stringstream error_msg;
+      error_msg << "[NitrosNode] topics_name_list and expected_fps_list do not have the same size";
+      RCLCPP_ERROR(get_logger(), error_msg.str().c_str());
+      throw std::runtime_error(error_msg.str().c_str());
+    }
+    // Populate the topic_name -> expected time difference
+    for (int i = 0; i < topics_name_list.size(); i++) {
+      statistics_config_->topic_name_expected_dt_map[topics_name_list[i]] = 1000000 /
+        expected_fps_list[i];
+    }
+  }
 
   // Set extension log level from an user-specified parameter
   nitros_context_.setExtensionLogSeverity(
@@ -246,8 +285,13 @@ NitrosNode::NitrosNode(
       "extension_log_level",
       gxf_severity_t::GXF_SEVERITY_WARNING)));
 
-  // Genearate a random unique namespace for the underlying GXF graph
-  graph_namespace_ = GenerateRandomString(10);
+  if (use_raw_graph_no_optimizer_) {
+    graph_namespace_ = "";
+    RCLCPP_INFO(get_logger(), "[NitrosNode] Enabled to use raw graph(s)");
+  } else {
+    // Genearate a random unique namespace for the underlying GXF graph
+    graph_namespace_ = GenerateRandomString(10);
+  }
   nitros_context_.setGraphNamespace(graph_namespace_);
   RCLCPP_DEBUG(get_logger(), "[NitrosNode] Namespace = %s", graph_namespace_.c_str());
 
@@ -348,8 +392,13 @@ void NitrosNode::startNitrosNode()
 
   // Load required extension files
   RCLCPP_INFO(get_logger(), "[NitrosNode] Loading extensions");
+  std::vector<std::pair<std::string, std::string>> combined_extensions = BUILTIN_EXTENSIONS;
+  combined_extensions.insert(
+    combined_extensions.end(),
+    extensions_.begin(),
+    extensions_.end());
   gxf_result_t code;
-  for (const auto & extension_pair : extensions_) {
+  for (const auto & extension_pair : combined_extensions) {
     const std::string package_directory =
       ament_index_cpp::get_package_share_directory(extension_pair.first);
     code = nitros_context_.loadExtension(package_directory, extension_pair.second);
@@ -363,26 +412,29 @@ void NitrosNode::startNitrosNode()
   // Load extensions of the registered NITROS types
   nitros_type_manager_->loadExtensions();
 
-  // Load graph
-  RCLCPP_INFO(get_logger(), "[NitrosNode] Loading graph to the optimizer");
-  auto load_graph_result =
-    optimizer_.loadGraph(package_share_directory_ + "/" + app_yaml_filename_);
-  if (!load_graph_result) {
-    std::stringstream error_msg;
-    error_msg << "[NitrosNode] optimizer_.loadGraph Error: " <<
-      GxfResultStr(load_graph_result.error());
-    RCLCPP_ERROR(get_logger(), error_msg.str().c_str());
-    throw std::runtime_error(error_msg.str().c_str());
-  }
+  if (!use_raw_graph_no_optimizer_) {
+    // Load graph
+    RCLCPP_INFO(get_logger(), "[NitrosNode] Loading graph to the optimizer");
+    auto load_graph_result =
+      optimizer_.loadGraph(package_share_directory_ + "/" + app_yaml_filename_);
+    if (!load_graph_result) {
+      std::stringstream error_msg;
+      error_msg << "[NitrosNode] optimizer_.loadGraph Error: " <<
+        GxfResultStr(load_graph_result.error());
+      RCLCPP_ERROR(get_logger(), error_msg.str().c_str());
+      throw std::runtime_error(error_msg.str().c_str());
+    }
 
-  // Run optimization
-  RCLCPP_INFO(get_logger(), "[NitrosNode] Running optimization");
-  auto optimize_result = optimizer_.optimize(nvidia::gxf::optimizer::gxf_cog_factor_t::THROUGHPUT);
-  if (!optimize_result) {
-    std::stringstream error_msg;
-    error_msg << "[NitrosNode] optimize Error: " << GxfResultStr(optimize_result.error());
-    RCLCPP_ERROR(get_logger(), error_msg.str().c_str());
-    throw std::runtime_error(error_msg.str().c_str());
+    // Run optimization
+    RCLCPP_INFO(get_logger(), "[NitrosNode] Running optimization");
+    auto optimize_result =
+      optimizer_.optimize(nvidia::gxf::optimizer::gxf_cog_factor_t::THROUGHPUT);
+    if (!optimize_result) {
+      std::stringstream error_msg;
+      error_msg << "[NitrosNode] optimize Error: " << GxfResultStr(optimize_result.error());
+      RCLCPP_ERROR(get_logger(), error_msg.str().c_str());
+      throw std::runtime_error(error_msg.str().c_str());
+    }
   }
 
   if (!use_custom_io_group_info_list_) {
@@ -440,21 +492,27 @@ void NitrosNode::postNegotiationCallback()
     configs.push_back(io_group_config);
   }
 
-  // Get the graph with the data formats assigned
-  RCLCPP_INFO(
-    get_logger(),
-    "[NitrosNode] Exporting the final graph based on the negotiation results");
-  auto export_result = optimizer_.exportGraphToFiles(
-    configs, package_share_directory_, graph_namespace_, graph_namespace_);
-  if (!export_result) {
-    std::stringstream error_msg;
-    error_msg << "[NitrosNode] exportGraphToFiles Error: " <<
-      GxfResultStr(export_result.error());
-    RCLCPP_ERROR(get_logger(), error_msg.str().c_str());
-    throw std::runtime_error(error_msg.str().c_str());
+  std::string temp_yaml_filename;
+  if (!use_raw_graph_no_optimizer_) {
+    // Get the graph with the data formats assigned
+    RCLCPP_INFO(
+      get_logger(),
+      "[NitrosNode] Exporting the final graph based on the negotiation results");
+    auto export_result = optimizer_.exportGraphToFiles(
+      configs, package_share_directory_, graph_namespace_, graph_namespace_);
+    if (!export_result) {
+      std::stringstream error_msg;
+      error_msg << "[NitrosNode] exportGraphToFiles Error: " <<
+        GxfResultStr(export_result.error());
+      RCLCPP_ERROR(get_logger(), error_msg.str().c_str());
+      throw std::runtime_error(error_msg.str().c_str());
+    }
+    temp_yaml_filename = package_share_directory_ + "/" + graph_namespace_ + ".yaml";
+  } else {
+    // Use the original graph intact
+    temp_yaml_filename = package_share_directory_ + "/" + app_yaml_filename_;
   }
 
-  std::string temp_yaml_filename = package_share_directory_ + "/" + graph_namespace_ + ".yaml";
   RCLCPP_INFO(
     get_logger(),
     "[NitrosNode] Wrote the final top level YAML graph to \"%s\"", temp_yaml_filename.c_str());
@@ -489,22 +547,70 @@ void NitrosNode::postNegotiationCallback()
         comp_info.component_name,
         comp_info.component_type_name,
         &pointer);
+      if (code != GXF_SUCCESS) {
+        std::stringstream error_msg;
+        error_msg <<
+          "[NitrosNode] Failed to get the pointer of " <<
+          comp_info.component_type_name.c_str() << " (" <<
+          comp_info.entity_name.c_str() << "/" <<
+          comp_info.component_name.c_str() << ") for linking a NitrosSubscriber: " <<
+          GxfResultStr(code);
+        RCLCPP_ERROR(get_logger(), error_msg.str().c_str());
+        throw std::runtime_error(error_msg.str().c_str());
+      }
       sub_ptr->setReceiverPointer(pointer);
       RCLCPP_DEBUG(get_logger(), "[NitrosNode] Setting a subscriber's pointer: %p", pointer);
+      if (heartbeat_eid_ == -1) {
+        nitros_context_.getEid(comp_info.entity_name, heartbeat_eid_);
+      }
     }
 
     // Publishers
     for (auto & pub_ptr : pub_sub_group_ptr->getNitrosPublishers()) {
       auto comp_info = pub_ptr->getComponentInfo();
-      void * pointer;
-      code = nitros_context_.getComponentPointer(
-        comp_info.entity_name,
-        comp_info.component_name,
-        comp_info.component_type_name,
-        &pointer);
-      pub_ptr->setVaultPointer(pointer);
-      RCLCPP_DEBUG(get_logger(), "[NitrosNode] Setting a publisher's pointer: %p", pointer);
-      pub_ptr->startGxfVaultPeriodicPollingTimer();
+      if (comp_info.component_type_name == kGxfVaultComponentTypeName) {
+        void * pointer = nullptr;
+        code = nitros_context_.getComponentPointer(
+          comp_info.entity_name,
+          comp_info.component_name,
+          comp_info.component_type_name,
+          &pointer);
+        pub_ptr->setVaultPointer(pointer);
+        RCLCPP_DEBUG(
+          get_logger(), "[NitrosNode] Set a publisher's pointer: %p", pointer);
+        pub_ptr->startGxfVaultPeriodicPollingTimer();
+      } else if (comp_info.component_type_name == kGxfMessageRelayComponentTypeName) {
+        // Set egress component's pointer
+        void * pointer = nullptr;
+        code = nitros_context_.getComponentPointer(
+          comp_info.entity_name,
+          comp_info.component_name,
+          comp_info.component_type_name,
+          &pointer);
+        pub_ptr->setMessageRelayPointer(pointer);
+        pub_ptr->enableNitrosPublisherWaitable();
+
+        // Set egress component's callback function
+        void * cb_func_pointer = &pub_ptr->getGxfMessageRelayCallbackFunc();
+        nitros_context_.setParameterInt64(
+          comp_info.entity_name, comp_info.component_type_name,
+          "callback_address",
+          reinterpret_cast<uintptr_t>(cb_func_pointer));
+        RCLCPP_DEBUG(
+          get_logger(), "[NitrosNode] Set a publisher's callback pointer: %p", cb_func_pointer);
+      } else {
+        std::stringstream error_msg;
+        error_msg <<
+          "[NitrosNode] Unsupported egress component type: " <<
+          comp_info.component_type_name.c_str() << " (" <<
+          comp_info.entity_name.c_str() << "/" <<
+          comp_info.component_name.c_str() << ")";
+        RCLCPP_ERROR(get_logger(), error_msg.str().c_str());
+        throw std::runtime_error(error_msg.str().c_str());
+      }
+      if (heartbeat_eid_ == -1) {
+        nitros_context_.getEid(comp_info.entity_name, heartbeat_eid_);
+      }
     }
   }
 
@@ -519,6 +625,64 @@ void NitrosNode::postNegotiationCallback()
     RCLCPP_ERROR(get_logger(), error_msg.str().c_str());
     throw std::runtime_error(error_msg.str().c_str());
   }
+
+  // Set the timer for checking the status of the underlying graph
+  if (heartbeat_eid_ != -1) {
+    RCLCPP_INFO(
+      get_logger(),
+      "[NitrosNode] Starting a heartbeat timer (eid=%ld)",
+      heartbeat_eid_);
+    gxf_heartbeat_timer_ = create_wall_timer(
+      std::chrono::milliseconds(1000),
+      [this]() -> void {
+        gxfHeartbeatCallback();
+      });
+  }
+}
+
+void NitrosNode::gxfHeartbeatCallback()
+{
+  std::stringstream nvtx_tag_name;
+  nvtx_tag_name <<
+    "[" << get_name() << "] NitrosNode::gxfHeartbeatCallback()";
+  nvtxRangePushWrapper(nvtx_tag_name.str().c_str(), CLR_GRAY);
+
+  if (heartbeat_eid_ == -1) {
+    RCLCPP_ERROR(get_logger(), "[NitrosNode] The heartbeat entity was not set");
+    nvtxRangePopWrapper();
+    rclcpp::shutdown();
+  }
+
+  // Check the status of the target heartbeat entity.
+  // gxf_entity_status_t is expected to be GXF_ENTITY_STATUS_STARTED (2)
+  // when the graph is running
+  gxf_entity_status_t entity_status;
+  gxf_result_t code =
+    GxfEntityGetStatus(nitros_context_.getContext(), heartbeat_eid_, &entity_status);
+  if (code == GXF_ENTITY_NOT_FOUND) {
+    RCLCPP_WARN(
+      get_logger(),
+      "[NitrosNode] The heartbeat entity (eid=%ld) was stopped. "
+      "The graph may have been terminated.",
+      heartbeat_eid_);
+    nvtxRangePopWrapper();
+    rclcpp::shutdown();
+  } else if (code != GXF_SUCCESS) {
+    RCLCPP_WARN(
+      get_logger(),
+      "[NitrosNode] Failed to get the heartbeat entity (eid=%ld) status: %s",
+      heartbeat_eid_,
+      GxfResultStr(code));
+    nvtxRangePopWrapper();
+    rclcpp::shutdown();
+  }
+  RCLCPP_DEBUG(
+    rclcpp::get_logger(
+      std::string("GXFMonitor.") + std::string(get_logger().get_name())),
+    "Heartbeat entity (eid=%ld) status: %d",
+    heartbeat_eid_,
+    static_cast<int>(entity_status));
+  nvtxRangePopWrapper();
 }
 
 void NitrosNode::preLoadGraphSetParameter(

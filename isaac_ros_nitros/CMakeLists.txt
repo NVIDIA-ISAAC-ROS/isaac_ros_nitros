@@ -1,4 +1,4 @@
-# Copyright (c) 2022, NVIDIA CORPORATION.  All rights reserved.
+# Copyright (c) 2022-2023, NVIDIA CORPORATION.  All rights reserved.
 #
 # NVIDIA CORPORATION and its licensors retain all intellectual property
 # and proprietary rights in and to this software, related documentation
@@ -24,14 +24,14 @@ if(USE_NVTX)
     link_libraries("nvToolsExt")
 endif()
 
-# Elbrus (register path and install)
-ament_index_register_resource(elbrus CONTENT share/${PROJECT_NAME}/elbrus)
-install(DIRECTORY lib/elbrus
+# cuVSLAM (register path and install)
+ament_index_register_resource(cuvslam CONTENT share/${PROJECT_NAME}/cuvslam)
+install(DIRECTORY lib/cuvslam
   DESTINATION "${CMAKE_INSTALL_PREFIX}/share/${PROJECT_NAME}")
 
-# nvapriltags (register path and install)
-ament_index_register_resource(nvapriltags CONTENT share/${PROJECT_NAME}/nvapriltags)
-install(DIRECTORY lib/nvapriltags
+# cuApriltags (register path and install)
+ament_index_register_resource(cuapriltags CONTENT share/${PROJECT_NAME}/cuapriltags)
+install(DIRECTORY lib/cuapriltags
   DESTINATION "${CMAKE_INSTALL_PREFIX}/share/${PROJECT_NAME}")
 
 # Dependencies
@@ -41,6 +41,7 @@ find_package(GXF ${ISAAC_ROS_GXF_VERSION} MODULE REQUIRED
     core
     multimedia
     gxf_optimizer
+    message_compositor
 )
 find_package(vpi REQUIRED)
 include(YamlCpp)
@@ -66,6 +67,7 @@ target_link_libraries(${PROJECT_NAME}
   GXF::core
   GXF::gxf_optimizer
   GXF::multimedia
+  GXF::message_compositor
   Eigen3::Eigen
   vpi
   yaml-cpp
@@ -80,6 +82,10 @@ ament_export_include_directories(${gxf_optimizer_includes})
 # Re-export isaac_messages headers embedded directory
 find_package(isaac_ros_gxf)
 ament_export_include_directories("${isaac_ros_gxf_DIR}/../gxf/include/gxf/isaac_messages")
+
+# Re-export message_compositor headers embedded directory
+ament_export_include_directories("${isaac_ros_gxf_DIR}/../gxf/include/gxf/message_compositor")
+
 
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)

@@ -190,6 +190,7 @@ class PoseTree {
   }
 
   // The last time at which the pose between two frames is specified.
+  // TODO(bbutin): Implement the following methods.
   // Expected<timed_pose_t> latest(frame_t lhs, frame_t rhs, version_t version) const;
   // Expected<timed_pose_t> latest(frame_t lhs, frame_t rhs) const;
 
@@ -274,6 +275,7 @@ class PoseTree {
     frame_t uid;
   };
   // Helper class to compare to const char*
+  // TODO(ben): Remove once we get rid of map
   struct CharMapCompare {
     bool operator()(const char* lhs, const char* rhs) const {
       return std::strcmp(lhs, rhs) < 0;
@@ -314,16 +316,20 @@ class PoseTree {
   // Lock to protect create_frame_callbacks_
   mutable std::shared_timed_mutex create_frame_callbacks_mutex_;
   // Callback functions for the create frame operation.
+  // TODO(dbhaskara): Replace with UniqueIndexMap once it supports iteration through all elements
   std::unordered_map<gxf_uid_t, CreateFrameCallback> create_frame_callbacks_;
 
   // Lock to protect set_edge_callbacks_
   mutable std::shared_timed_mutex set_edge_callbacks_mutex_;
   // Callback functions for the set edge operation.
+  // TODO(dbhaskara): Replace with UniqueIndexMap once it supports iteration through all elements
   std::unordered_map<gxf_uid_t, SetEdgeCallback> set_edge_callbacks_;
 
   // Mapping from a frame to it's index.
+  // TODO(ben): We need to get rid of std::map
   std::map<std::pair<frame_t, frame_t>, history_t> edges_map_;
 
+  // TODO(ben): We need to get rid of std::map, but for now UniqueIndexMap does not support
   // iterating through all the elements.
   std::map<const char*, frame_t, CharMapCompare> name_to_uid_map_;
 

@@ -227,6 +227,7 @@ class ParameterRegistrar {
       template <typename... Args>
       storage_impl(Args&&... args) : value(std::forward<Args>(args)...) {}
 
+      // FIXME: return c_str() directly for string types to avoid reinterpret_cast
       const void* get() const override { return &value; }
 
       std::unique_ptr<storage_base> clone() const override {

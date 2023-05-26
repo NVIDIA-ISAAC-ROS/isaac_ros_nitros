@@ -44,7 +44,7 @@ public:
               .use_compatible_format_only = true,
             }
           },
-          {"vault/vault",
+          {"sink/sink",
             {
               .type = NitrosPublisherSubscriberType::NEGOTIATED,
               .qos = rclcpp::QoS(1),
@@ -75,7 +75,7 @@ public:
     std::string compatible_format = declare_parameter<std::string>("compatible_format", "");
     if (!compatible_format.empty()) {
       config_map_["forward/input"].compatible_data_format = compatible_format;
-      config_map_["vault/vault"].compatible_data_format = compatible_format;
+      config_map_["sink/sink"].compatible_data_format = compatible_format;
     }
 
     registerSupportedType<nvidia::isaac_ros::nitros::NitrosPoseCovStamped>();

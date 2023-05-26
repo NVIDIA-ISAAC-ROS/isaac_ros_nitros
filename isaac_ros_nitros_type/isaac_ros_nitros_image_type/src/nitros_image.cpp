@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2022, NVIDIA CORPORATION.  All rights reserved.
+ * Copyright (c) 2022-2023, NVIDIA CORPORATION.  All rights reserved.
  *
  * NVIDIA CORPORATION and its licensors retain all intellectual property
  * and proprietary rights in and to this software, related documentation
@@ -52,6 +52,7 @@ const std::unordered_map<std::string, VideoFormat> g_ros_to_gxf_video_format({
     {img_encodings::BGR16, VideoFormat::GXF_VIDEO_FORMAT_BGR16},
     {img_encodings::MONO8, VideoFormat::GXF_VIDEO_FORMAT_GRAY},
     {img_encodings::MONO16, VideoFormat::GXF_VIDEO_FORMAT_GRAY16},
+    {img_encodings::TYPE_32FC1, VideoFormat::GXF_VIDEO_FORMAT_GRAY32},
     {img_encodings::NV24, VideoFormat::GXF_VIDEO_FORMAT_NV24_ER},
     {"nv12", VideoFormat::GXF_VIDEO_FORMAT_NV12_ER},
   });
@@ -66,6 +67,7 @@ const std::unordered_map<VideoFormat, std::string> g_gxf_to_ros_video_format({
     {VideoFormat::GXF_VIDEO_FORMAT_BGR16, img_encodings::BGR16},
     {VideoFormat::GXF_VIDEO_FORMAT_GRAY, img_encodings::MONO8},
     {VideoFormat::GXF_VIDEO_FORMAT_GRAY16, img_encodings::MONO16},
+    {VideoFormat::GXF_VIDEO_FORMAT_GRAY32, img_encodings::TYPE_32FC1},
     {VideoFormat::GXF_VIDEO_FORMAT_NV24_ER, img_encodings::NV24},
     {VideoFormat::GXF_VIDEO_FORMAT_NV12_ER, "nv12"},
   });
@@ -145,6 +147,14 @@ struct NoPaddingColorPlanes<VideoFormat::GXF_VIDEO_FORMAT_GRAY16>
 {
   NoPaddingColorPlanes(size_t width)
   : planes({nvidia::gxf::ColorPlane("GRAY", 2, width * 2)}) {}
+  std::array<nvidia::gxf::ColorPlane, 1> planes;
+};
+
+template<>
+struct NoPaddingColorPlanes<VideoFormat::GXF_VIDEO_FORMAT_GRAY32>
+{
+  NoPaddingColorPlanes(size_t width)
+  : planes({nvidia::gxf::ColorPlane("GRAY", 4, width * 4)}) {}
   std::array<nvidia::gxf::ColorPlane, 1> planes;
 };
 
@@ -248,6 +258,11 @@ void allocate_video_buffer(
 
     case VideoFormat::GXF_VIDEO_FORMAT_GRAY16:
       allocate_video_buffer_no_padding<VideoFormat::GXF_VIDEO_FORMAT_GRAY16>(
+        source.width, source.height, video_buff, allocator_handle);
+      break;
+
+    case VideoFormat::GXF_VIDEO_FORMAT_GRAY32:
+      allocate_video_buffer_no_padding<VideoFormat::GXF_VIDEO_FORMAT_GRAY32>(
         source.width, source.height, video_buff, allocator_handle);
       break;
 
@@ -558,6 +573,7 @@ const std::unordered_map<std::string, VideoFormat> g_nitros_to_gxf_video_format(
   {"nitros_image_bgr16", VideoFormat::GXF_VIDEO_FORMAT_BGR16},
   {"nitros_image_mono8", VideoFormat::GXF_VIDEO_FORMAT_GRAY},
   {"nitros_image_mono16", VideoFormat::GXF_VIDEO_FORMAT_GRAY16},
+  {"nitros_image_32FC1", VideoFormat::GXF_VIDEO_FORMAT_GRAY32},
   {"nitros_image_nv12", VideoFormat::GXF_VIDEO_FORMAT_NV12},
   {"nitros_image_nv24", VideoFormat::GXF_VIDEO_FORMAT_NV24}
 });
@@ -609,6 +625,11 @@ uint64_t calculate_image_size(const std::string image_type, uint32_t width, uint
     case VideoFormat::GXF_VIDEO_FORMAT_GRAY16:
       nvidia::gxf::VideoFormatSize<VideoFormat::GXF_VIDEO_FORMAT_GRAY16> format_size_gray16;
       image_size = format_size_gray16.size(width, height);
+      break;
+
+    case VideoFormat::GXF_VIDEO_FORMAT_GRAY32:
+      nvidia::gxf::VideoFormatSize<VideoFormat::GXF_VIDEO_FORMAT_GRAY32> format_size_gray32;
+      image_size = format_size_gray32.size(width, height);
       break;
 
     default:

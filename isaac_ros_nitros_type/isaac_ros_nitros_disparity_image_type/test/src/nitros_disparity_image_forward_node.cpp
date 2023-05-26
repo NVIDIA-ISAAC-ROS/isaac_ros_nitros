@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2022, NVIDIA CORPORATION.  All rights reserved.
+ * Copyright (c) 2022-2023, NVIDIA CORPORATION.  All rights reserved.
  *
  * NVIDIA CORPORATION and its licensors retain all intellectual property
  * and proprietary rights in and to this software, related documentation
@@ -44,7 +44,7 @@ public:
               .use_compatible_format_only = true,
             }
           },
-          {"vault/vault",
+          {"sink/sink",
             {
               .type = NitrosPublisherSubscriberType::NEGOTIATED,
               .qos = rclcpp::QoS(1),
@@ -71,7 +71,7 @@ public:
     std::string compatible_format = declare_parameter<std::string>("compatible_format", "");
     if (!compatible_format.empty()) {
       config_map_["forward/input"].compatible_data_format = compatible_format;
-      config_map_["vault/vault"].compatible_data_format = compatible_format;
+      config_map_["sink/sink"].compatible_data_format = compatible_format;
     }
 
     registerSupportedType<nvidia::isaac_ros::nitros::NitrosDisparityImage>();

@@ -132,6 +132,7 @@ class SO3 {
   }
   // Rotates a vector 3D by the given rotation
   friend Vector3<K> operator*(const SO3& rot, const Vector3<K>& vec) {
+    // TODO: faster implementation
     return (rot.quaternion_ * Quaternion<K>(K(0), vec.x(), vec.y(), vec.z()) *
             rot.quaternion_.conjugate())
         .coeffs()

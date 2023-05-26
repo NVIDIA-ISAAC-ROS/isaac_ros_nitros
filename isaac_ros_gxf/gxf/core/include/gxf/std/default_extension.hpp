@@ -146,7 +146,7 @@ class DefaultExtension : public Extension {
   std::string description_;
   std::string author_;
   std::string extension_version_;
-  std::string gxf_core_version_{kGxfCoreVersion};
+  std::string gxf_core_version_{kGxfCoreVersion};  // FIXME: Use setInfo() api to set this post 2.3
   std::string license_;
   std::string display_name_;
   std::string category_;

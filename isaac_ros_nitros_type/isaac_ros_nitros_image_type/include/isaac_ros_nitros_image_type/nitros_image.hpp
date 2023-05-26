@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2022, NVIDIA CORPORATION.  All rights reserved.
+ * Copyright (c) 2022-2023, NVIDIA CORPORATION.  All rights reserved.
  *
  * NVIDIA CORPORATION and its licensors retain all intellectual property
  * and proprietary rights in and to this software, related documentation
@@ -96,6 +96,12 @@ struct nitros_image_nv24_t
   static const inline std::string supported_type_name = "nitros_image_nv24";
 };
 
+struct nitros_image_32FC1_t
+{
+  using MsgT = NitrosImage;
+  static const inline std::string supported_type_name = "nitros_image_32FC1";
+};
+
 // NITROS data type registration factory
 NITROS_TYPE_FACTORY_BEGIN(NitrosImage)
 // Supported data formats
@@ -110,6 +116,7 @@ NITROS_FORMAT_ADD(nitros_image_mono8_t)
 NITROS_FORMAT_ADD(nitros_image_mono16_t)
 NITROS_FORMAT_ADD(nitros_image_nv12_t)
 NITROS_FORMAT_ADD(nitros_image_nv24_t)
+NITROS_FORMAT_ADD(nitros_image_32FC1_t)
 NITROS_FORMAT_FACTORY_END()
 // Required extensions
 NITROS_TYPE_EXTENSION_FACTORY_BEGIN()

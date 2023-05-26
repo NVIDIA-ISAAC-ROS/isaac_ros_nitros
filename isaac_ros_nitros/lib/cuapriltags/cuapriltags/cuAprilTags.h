@@ -21,37 +21,37 @@
 struct CUstream_st;
 
 // Decoded AprilTag
-typedef struct nvAprilTagsID_st
+typedef struct cuAprilTagsID_st
 {
     float2 corners[4];
     uint16_t id;
     uint8_t hamming_error;
     float orientation[9];   //!< Rotation transform, when expressed as a 3x3 matrix acting on a column vector, is column major.
     float translation[3];   //!< Translation vector from the camera, in the same units as used for the tag_size.
-}nvAprilTagsID_t;
+}cuAprilTagsID_t;
 
 // Input data type for image buffer
-typedef struct nvAprilTagsImageInput_st
+typedef struct cuAprilTagsImageInput_st
 {
     uchar3* dev_ptr;    //!< Device pointer to the buffer
     size_t pitch;       //!< Pitch in bytes
     uint16_t width;     //!< Width in pixels
     uint16_t height;    //!< Buffer height
-}nvAprilTagsImageInput_t;
+}cuAprilTagsImageInput_t;
 
-typedef struct nvAprilTagsCameraIntrinsics_st {
+typedef struct cuAprilTagsCameraIntrinsics_st {
     float fx, fy, cx, cy;
-}nvAprilTagsCameraIntrinsics_t;
+}cuAprilTagsCameraIntrinsics_t;
 
 typedef enum
 {
     NVAT_TAG36H11,                 // Default, currently the only tag family supported
     NVAT_ENUM_SIZE = 0x7fffffff    // Force int32_t
 }
-nvAprilTagsFamily;
+cuAprilTagsFamily;
 
 //! AprilTags Detector instance handle. Used to reference the detector after creation
-typedef struct nvAprilTagsHandle_st* nvAprilTagsHandle;
+typedef struct cuAprilTagsHandle_st* cuAprilTagsHandle;
 
 #ifdef __cplusplus
 extern "C" {
@@ -68,15 +68,15 @@ extern "C" {
     //! \param [in]     tag_dim             The linear dimension of the square tag. The translation will be expressed in the same units.
     //!
     //! \retval :: 0 - Success, else - Failure
-    int nvCreateAprilTagsDetector(nvAprilTagsHandle* hApriltags,
+    int nvCreateAprilTagsDetector(cuAprilTagsHandle* hApriltags,    //!< TODO: We usually return the result in the last parameter, not first.
         const uint32_t img_width, const uint32_t img_height,
-        const nvAprilTagsFamily tag_family,
-        const nvAprilTagsCameraIntrinsics_t *cam,
+        const cuAprilTagsFamily tag_family,
+        const cuAprilTagsCameraIntrinsics_t *cam,
         float tag_dim);
 
-    // FUNCTION NAME:   nvAprilTagsDetect
+    // FUNCTION NAME:   cuAprilTagsDetect
     //
-    //! DESCRIPTION:    Runs the algorithms to detect potential April tags in the image and decodes valid April tags 
+    //! DESCRIPTION:    Runs the algorithms to detect potential April tags in the image and decodes valid April tags
     //!
     //! \param [in]     hApriltags          AprilTags detector handle
     //! \param [in]     img_input           Input buffer containing the undistorted image on which to detect/decode April tags
@@ -86,18 +86,18 @@ extern "C" {
     //! \param [in]     input_stream        CUDA stream on which the computation is to occur, or 0 to use the default stream.
     //!
     //! \retval :: 0 - Success, else - Failure
-    int nvAprilTagsDetect(nvAprilTagsHandle hApriltags, const nvAprilTagsImageInput_t *img_input, 
-        nvAprilTagsID_t *tags_out, uint32_t *num_tags, const uint32_t max_tags,
+    int cuAprilTagsDetect(cuAprilTagsHandle hApriltags, const cuAprilTagsImageInput_t *img_input,
+        cuAprilTagsID_t *tags_out, uint32_t *num_tags, const uint32_t max_tags,
         CUstream_st* input_stream);
 
-    // FUNCTION NAME:   nvAprilTagsDestroy
+    // FUNCTION NAME:   cuAprilTagsDestroy
     //
     //! DESCRIPTION:    Destroys an instance of AprilTags detector
     //!
     //! \param [in]     hApriltags            AprilTags detector handle to be destroyed
     //!
     //! \retval :: 0 - Success, else - Failure
-    int nvAprilTagsDestroy(nvAprilTagsHandle hApriltags);
+    int cuAprilTagsDestroy(cuAprilTagsHandle hApriltags);
 
 #ifdef __cplusplus
 }

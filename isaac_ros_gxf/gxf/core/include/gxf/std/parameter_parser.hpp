@@ -137,6 +137,7 @@ struct ParameterParser<FixedString<N>> {
 
 // Specialization of ParameterParser for FixedVector with stack allocation.
 // Substitutes std::array for safety-critical components.
+// TODO(ayusmans): parsing support for FixedVector with heap allocation
 template <typename T, size_t N>
 struct ParameterParser<FixedVector<T, N>> {
   static Expected<FixedVector<T, N>> Parse(gxf_context_t context, gxf_uid_t component_uid,

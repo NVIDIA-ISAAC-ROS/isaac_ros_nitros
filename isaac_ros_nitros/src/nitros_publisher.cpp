@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2022, NVIDIA CORPORATION.  All rights reserved.
+ * Copyright (c) 2022-2023, NVIDIA CORPORATION.  All rights reserved.
  *
  * NVIDIA CORPORATION and its licensors retain all intellectual property
  * and proprietary rights in and to this software, related documentation
@@ -23,6 +23,77 @@ namespace isaac_ros
 namespace nitros
 {
 
+NitrosPublisherWaitable::NitrosPublisherWaitable(
+  rclcpp::Node & node,
+  NitrosPublisher & nitros_publisher)
+: rclcpp::Waitable(),
+  node_(node),
+  nitros_publisher_(nitros_publisher)
+{}
+
+void NitrosPublisherWaitable::trigger()
+{
+  std::stringstream nvtx_tag_name;
+  nvtx_tag_name <<
+    "[" << node_.get_name() << "] NitrosPublisherWaitable::trigger(" <<
+    nitros_publisher_.getConfig().topic_name << ")";
+  nvtxRangePushWrapper(nvtx_tag_name.str().c_str(), CLR_BLUE);
+
+  std::lock_guard<std::mutex> lock(guard_condition_mutex_);
+  guard_condition_.trigger();
+
+  nvtxRangePopWrapper();
+}
+
+bool NitrosPublisherWaitable::is_ready(rcl_wait_set_t * wait_set)
+{
+  std::stringstream nvtx_tag_name;
+  nvtx_tag_name <<
+    "[" << node_.get_name() << "] NitrosPublisherWaitable::is_ready(" <<
+    nitros_publisher_.getConfig().topic_name << ")";
+  nvtxRangePushWrapper(nvtx_tag_name.str().c_str(), CLR_BLUE);
+
+  std::lock_guard<std::mutex> lock(guard_condition_mutex_);
+  for (size_t ii = 0; ii < wait_set->size_of_guard_conditions; ++ii) {
+    auto rcl_guard_condition = wait_set->guard_conditions[ii];
+
+    if (nullptr == rcl_guard_condition) {
+      continue;
+    }
+
+    if (&guard_condition_.get_rcl_guard_condition() == rcl_guard_condition) {
+      nvtx_tag_name << " = true";
+      nvtxMarkExWrapper(nvtx_tag_name.str().c_str(), CLR_BLUE);
+      nvtxRangePopWrapper();
+      return true;
+    }
+  }
+
+  nvtx_tag_name << " = false";
+  nvtxMarkExWrapper(nvtx_tag_name.str().c_str(), CLR_BLUE);
+  nvtxRangePopWrapper();
+  return false;
+}
+
+void NitrosPublisherWaitable::execute(std::shared_ptr<void> & data)
+{
+  std::stringstream nvtx_tag_name;
+  nvtx_tag_name <<
+    "[" << node_.get_name() << "] NitrosPublisherWaitable::execute(" <<
+    nitros_publisher_.getConfig().topic_name << ")";
+  nvtxRangePushWrapper(nvtx_tag_name.str().c_str(), CLR_BLUE);
+
+  nitros_publisher_.extractMessagesFromGXF();
+
+  nvtxRangePopWrapper();
+}
+
+void NitrosPublisherWaitable::add_to_wait_set(rcl_wait_set_t * wait_set)
+{
+  std::lock_guard<std::mutex> lock(guard_condition_mutex_);
+  guard_condition_.add_to_wait_set(wait_set);
+}
+
 NitrosPublisher::NitrosPublisher(
   rclcpp::Node & node,
   std::shared_ptr<NitrosTypeManager> nitros_type_manager,
@@ -33,6 +104,11 @@ NitrosPublisher::NitrosPublisher(
 : NitrosPublisherSubscriberBase(
     node, nitros_type_manager, gxf_component_info, supported_data_formats, config)
 {
+  // Bind the callback function to be used by a message relay in GXF graph
+  gxf_message_relay_callback_func_ = std::bind(
+    &NitrosPublisher::gxfMessageRelayCallback,
+    this);
+
   if (config_.type == NitrosPublisherSubscriberType::NOOP) {
     return;
   }
@@ -206,60 +282,89 @@ void NitrosPublisher::postNegotiationCallback()
   }
 }
 
+std::function<void(void)> &
+NitrosPublisher::getGxfMessageRelayCallbackFunc()
+{
+  return gxf_message_relay_callback_func_;
+}
+
 void NitrosPublisher::setVaultPointer(void * gxf_vault_ptr)
 {
   gxf_vault_ptr_ = reinterpret_cast<nvidia::gxf::Vault *>(gxf_vault_ptr);
+}
+
+void NitrosPublisher::setMessageRelayPointer(void * gxf_message_relay_ptr)
+{
+  gxf_message_relay_ptr_ =
+    reinterpret_cast<nvidia::isaac_ros::MessageRelay *>(gxf_message_relay_ptr);
 }
 
 void NitrosPublisher::startGxfVaultPeriodicPollingTimer()
 {
   // Set the Vault data polling timer
   gxf_vault_periodic_polling_timer_ = node_.create_wall_timer(
-    std::chrono::microseconds(1),
+    std::chrono::microseconds(100),
     [this]() -> void {
-      gxfVaultPeriodicPollingCallback();
+      extractMessagesFromGXF();
     });
 }
 
-void NitrosPublisher::gxfVaultPeriodicPollingCallback()
+void NitrosPublisher::enableNitrosPublisherWaitable()
 {
-  // Check the status of the vault entity
-  // gxf_entity_status_t is expected to be GXF_ENTITY_STATUS_STARTED (2) when the graph is running
-  gxf_entity_status_t vault_entity_status;
-  gxf_result_t code = GxfEntityGetStatus(context_, gxf_vault_ptr_->eid(), &vault_entity_status);
-  if (code == GXF_ENTITY_NOT_FOUND) {
-    std::stringstream error_msg;
-    error_msg << "[NitrosPublisher] Vault (" <<
-      "\"" << gxf::optimizer::GenerateComponentKey(gxf_component_info_) << "\", "
-      "eid=" << gxf_vault_ptr_->eid() << ") was stopped. "
-      "The graph may have been terminated due to an error.";
-    RCLCPP_ERROR(node_.get_logger(), error_msg.str().c_str());
-    throw std::runtime_error(error_msg.str().c_str());
-  } else if (code != GXF_SUCCESS) {
-    std::stringstream error_msg;
-    error_msg << "[NitrosPublisher] Failed to get the vault entity's status "
-      "(GxfEntityGetStatus error): " << GxfResultStr(code);
-    RCLCPP_ERROR(node_.get_logger(), error_msg.str().c_str());
-    throw std::runtime_error(error_msg.str().c_str());
-  }
-  RCLCPP_DEBUG(
-    rclcpp::get_logger(
-      std::string("GXFMonitor.") + std::string(node_.get_logger().get_name())),
-    "[%s] Vault (eid=%ld) status: %d",
-    gxf::optimizer::GenerateComponentKey(gxf_component_info_).c_str(),
-    gxf_vault_ptr_->eid(), static_cast<int>(vault_entity_status));
+  auto waitable_interfaces = node_.get_node_waitables_interface();
+  waitable_ = std::make_shared<NitrosPublisherWaitable>(
+    node_,
+    *this
+  );
+  waitable_interfaces->add_waitable(waitable_, nullptr);
+}
 
-  // Get messages from the vault and publish
-  auto msg_eids = gxf_vault_ptr_->store(100);
-  if (msg_eids.size() > 0) {
-    RCLCPP_DEBUG(
-      node_.get_logger(),
-      "[NitrosPublisher] Obtained %ld messages from the vault", msg_eids.size());
+void NitrosPublisher::extractMessagesFromGXF()
+{
+  std::stringstream nvtx_tag_name;
+  nvtx_tag_name <<
+    "[" << node_.get_name() << "] NitrosPublisher::extractMessagesFromGXF(" <<
+    config_.topic_name << ")";
+  nvtxRangePushWrapper(nvtx_tag_name.str().c_str(), CLR_MAGENTA);
+
+  if (gxf_vault_ptr_ == nullptr && gxf_message_relay_ptr_ == nullptr) {
+    nvtxRangePopWrapper();
+    return;
   }
-  for (const auto msg_eid : msg_eids) {
-    publish(msg_eid);
-    gxf_vault_ptr_->free({msg_eid});
+
+  if (gxf_vault_ptr_ != nullptr) {
+    // Get messages from Vault
+    auto msg_eids = gxf_vault_ptr_->store(100);
+    if (msg_eids.size() > 0) {
+      RCLCPP_DEBUG(
+        node_.get_logger(),
+        "[NitrosPublisher] Obtained %ld messages from the vault", msg_eids.size());
+    }
+    for (const auto msg_eid : msg_eids) {
+      publish(msg_eid);
+      gxf_vault_ptr_->free({msg_eid});
+    }
+  } else {
+    // Get messgaes from MessageRelay
+    auto msg_eids = gxf_message_relay_ptr_->store(100);
+    if (msg_eids.size() > 0) {
+      RCLCPP_DEBUG(
+        node_.get_logger(),
+        "[NitrosPublisher] Obtained %ld messages from the message relay", msg_eids.size());
+    }
+    for (const auto msg_eid : msg_eids) {
+      publish(msg_eid);
+      gxf_message_relay_ptr_->free({msg_eid});
+    }
   }
+
+  nvtxRangePopWrapper();
+}
+
+void NitrosPublisher::gxfMessageRelayCallback()
+{
+  RCLCPP_DEBUG(node_.get_logger(), "[NitrosPublisher] gxfMessageRelayCallback");
+  waitable_->trigger();
 }
 
 void NitrosPublisher::publish(const int64_t handle)
@@ -362,7 +467,6 @@ void NitrosPublisher::publish(
 
 void NitrosPublisher::publish(NitrosTypeBase & base_msg)
 {
-  #if defined(USE_NVTX)
   {
     std::stringstream nvtx_tag_name;
     nvtx_tag_name <<
@@ -371,11 +475,9 @@ void NitrosPublisher::publish(NitrosTypeBase & base_msg)
       getTimestamp(base_msg) << ")";
     nvtxRangePushWrapper(nvtx_tag_name.str().c_str(), CLR_PURPLE);
   }
-  #endif
 
   // Invoke user-defined callback if needed
   if (config_.callback != nullptr) {
-    #if defined(USE_NVTX)
     {
       std::stringstream nvtx_tag_name;
       nvtx_tag_name <<
@@ -383,22 +485,19 @@ void NitrosPublisher::publish(NitrosTypeBase & base_msg)
         config_.topic_name << ")::config_.callback";
       nvtxRangePushWrapper(nvtx_tag_name.str().c_str(), CLR_PURPLE);
     }
-    #endif
+
     RCLCPP_DEBUG(
       node_.get_logger(),
       "[NitrosPublisher] Calling user-defined callback for an Nitros-typed "
       "message (eid=%ld)", base_msg.handle);
     config_.callback(context_, base_msg);
-    #if defined(USE_NVTX)
+
     nvtxRangePopWrapper();
-    #endif
   }
 
   // Skip publishing if its a noop type
   if (config_.type == NitrosPublisherSubscriberType::NOOP) {
-    #if defined(USE_NVTX)
     nvtxRangePopWrapper();
-    #endif
     return;
   }
 
@@ -425,9 +524,7 @@ void NitrosPublisher::publish(NitrosTypeBase & base_msg)
     updateStatistics();
   }
 
-  #if defined(USE_NVTX)
   nvtxRangePopWrapper();
-  #endif
 }
 
 }  // namespace nitros

@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2022, NVIDIA CORPORATION.  All rights reserved.
+ * Copyright (c) 2022-2023, NVIDIA CORPORATION.  All rights reserved.
  *
  * NVIDIA CORPORATION and its licensors retain all intellectual property
  * and proprietary rights in and to this software, related documentation
@@ -86,7 +86,7 @@ NitrosSubscriber::NitrosSubscriber(
 
   if (statistics_config_.enable_statistics) {
     // Initialize statistics variables and message fields
-    statistics_msg_.is_subscriber = false;
+    statistics_msg_.is_subscriber = true;
     initStatistics();
   }
 }
@@ -257,14 +257,12 @@ void NitrosSubscriber::subscriberCallback(
   NitrosTypeBase & msg_base,
   const std::string data_format_name)
 {
-  #if defined(USE_NVTX)
   std::stringstream nvtx_tag_name;
   nvtx_tag_name <<
     "[" << node_.get_name() << "] NitrosSubscriber::subscriberCallback(" <<
     config_.topic_name << ", t=" <<
     getTimestamp(msg_base) << ")";
   nvtxRangePushWrapper(nvtx_tag_name.str().c_str(), CLR_PURPLE);
-  #endif
 
   if (statistics_config_.enable_statistics) {
     updateStatistics();
@@ -311,9 +309,7 @@ void NitrosSubscriber::subscriberCallback(
 
   pushEntity(msg_base.handle);
 
-  #if defined(USE_NVTX)
   nvtxRangePopWrapper();
-  #endif
 }
 
 }  // namespace nitros

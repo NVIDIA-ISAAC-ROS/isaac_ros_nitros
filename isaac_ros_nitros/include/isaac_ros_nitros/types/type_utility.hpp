@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2022, NVIDIA CORPORATION.  All rights reserved.
+ * Copyright (c) 2022-2023, NVIDIA CORPORATION.  All rights reserved.
  *
  * NVIDIA CORPORATION and its licensors retain all intellectual property
  * and proprietary rights in and to this software, related documentation
@@ -62,6 +62,29 @@ static inline void nvtxRangePopWrapper()
 {
   #if defined(USE_NVTX)
   nvtxRangePop();
+  #endif
+}
+
+static inline void nvtxMarkExWrapper(const char * range_title, u_int range_color)
+{
+  #if defined(USE_NVTX)
+  nvtxEventAttributes_t eventAttrib = {
+    NVTX_VERSION,  // version
+    NVTX_EVENT_ATTRIB_STRUCT_SIZE,  // size
+    0,  // category
+    0,  // colorType
+    0,  // color
+    0,  // payloadType
+    0,  // reseverd0
+    0,  // payload
+    0,  // messageType
+    0,  // message
+  };
+  eventAttrib.messageType = NVTX_MESSAGE_TYPE_ASCII;
+  eventAttrib.colorType = NVTX_COLOR_ARGB;
+  eventAttrib.color = range_color;
+  eventAttrib.message.ascii = range_title;
+  nvtxMarkEx(&eventAttrib);
   #endif
 }
 
