@@ -63,6 +63,7 @@ extern "C" {
     //! \param [out]    hApriltags          Pointer to the handle of newly created AprilTags detector
     //! \param [in]     img_width           Width of images to be fed in to AprilTags detector
     //! \param [in]     img_height          Height of images to be fed in to AprilTags detector
+    //! \param [in]     tile_size           Tile size/ Window size used for adaptive thesholding
     //! \param [in]     tag_family          Enum representing the Tag Family to be detected; default NVAT_TAG36H11.
     //! \param [in]     cam                 Camera intrinsic parameters, or NULL, if the orientation and translation are not desired.
     //! \param [in]     tag_dim             The linear dimension of the square tag. The translation will be expressed in the same units.
@@ -70,6 +71,7 @@ extern "C" {
     //! \retval :: 0 - Success, else - Failure
     int nvCreateAprilTagsDetector(cuAprilTagsHandle* hApriltags,    //!< TODO: We usually return the result in the last parameter, not first.
         const uint32_t img_width, const uint32_t img_height,
+        const uint32_t tile_size,
         const cuAprilTagsFamily tag_family,
         const cuAprilTagsCameraIntrinsics_t *cam,
         float tag_dim);
