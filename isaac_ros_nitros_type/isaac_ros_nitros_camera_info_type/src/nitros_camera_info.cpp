@@ -260,6 +260,16 @@ void rclcpp::TypeAdapter<
     raw_gxf_camera_model.value()->distortion_type = distortion->second;
   }
 
+  if (source.d.size() > nvidia::gxf::CameraModel::kMaxDistortionCoefficients) {
+    std::stringstream error_msg;
+    error_msg <<
+      "[convert_to_custom] More number of coefficients for distortion model found [ # of coeff: " <<
+      source.d.size() << " > " << nvidia::gxf::CameraModel::kMaxDistortionCoefficients << "].";
+    RCLCPP_ERROR(
+      rclcpp::get_logger("NitrosCameraInfo"), error_msg.str().c_str());
+    throw std::runtime_error(error_msg.str().c_str());
+  }
+
   if (raw_gxf_camera_model.value()->distortion_type == DistortionType::Polynomial) {
     // prevents distortion parameters array access if its empty
     // simulators may send empty distortion parameter array since images are already rectified
