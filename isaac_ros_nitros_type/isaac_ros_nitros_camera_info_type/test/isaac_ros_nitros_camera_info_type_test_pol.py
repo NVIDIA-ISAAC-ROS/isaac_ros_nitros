@@ -69,6 +69,7 @@ class IsaacROSNitrosCameraInfoTest(IsaacROSBaseTest):
         """Expect the camera info from NitrosCameraInfo type to be compatible with source."""
         self.generate_namespace_lookup(['input', 'output'])
         received_messages = {}
+        kMaxDistortionCoefficients = 8
 
         received_message_sub = self.create_logging_subscribers(
             subscription_requests=[('output', CameraInfo)],
@@ -114,6 +115,8 @@ class IsaacROSNitrosCameraInfoTest(IsaacROSBaseTest):
 
             # Distortion model
             self.assertEqual(camera_info.distortion_model, received_camera_info.distortion_model)
+
+            self.assertLessEqual(len(received_camera_info.d), kMaxDistortionCoefficients)
 
             # D
             for i in range(min(len(camera_info.d), len(received_camera_info.d))):
