@@ -1,0 +1,75 @@
+{
+  "header": {
+    "frame_id": "tf_camera"
+  },
+  "detections": [
+    {
+      "results": [
+        {
+          "hypothesis": {
+            "class_id": "0",
+            "score": 0.25
+          }
+        },
+        {
+          "hypothesis": {
+            "class_id": "1",
+            "score": 0.45
+          }
+        }
+      ],
+      "bbox": {
+        "center": {
+          "position": {
+            "x": 4.0,
+            "y": 5.0,
+            "z": 6.0
+          },
+          "orientation": {
+            "x": 0.20056211618247968,
+            "y": 0.5319756777932487,
+            "z": 0.022260030365134766,
+            "w": 0.8223631842665151
+          }
+        },
+        "size_x": 11.0,
+        "size_y": 12.0,
+        "size_z": 13.0
+      }
+    },
+    {
+      "results": [
+        {
+          "hypothesis": {
+            "class_id": "2",
+            "score": 0.35
+          }
+        },
+        {
+          "hypothesis": {
+            "class_id": "3",
+            "score": 0.65
+          }
+        }
+      ],
+      "bbox": {
+        "center": {
+          "position": {
+            "x": 14.0,
+            "y": 15.0,
+            "z": 16.0
+          },
+          "orientation": {
+            "x": -0.015134439760121994,
+            "y": 0.08583164935454375,
+            "z": 0.17298738608664135,
+            "w": 0.9810602636724909
+          }
+        },
+        "size_x": 21.0,
+        "size_y": 22.0,
+        "size_z": 23.0
+      }
+    }
+  ]
+}

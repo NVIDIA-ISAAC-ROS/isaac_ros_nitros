@@ -1,4 +1,4 @@
 {
     "image": "NVIDIAprofile.png",
-    "encoding": "bgr8"
+    "encoding": "32FC1"
 }

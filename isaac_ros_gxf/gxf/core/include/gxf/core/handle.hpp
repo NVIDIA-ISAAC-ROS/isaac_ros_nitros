@@ -1,19 +1,19 @@
-/*
- * SPDX-FileCopyrightText: Copyright (c) 2021-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
- * SPDX-License-Identifier: Apache-2.0
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
+// Copyright (c) 2021-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
+// SPDX-License-Identifier: Apache-2.0
 #ifndef NVIDIA_GXF_CORE_HANDLE_HPP
 #define NVIDIA_GXF_CORE_HANDLE_HPP
 
@@ -92,7 +92,7 @@ class UntypedHandle {
 
   Expected<void> verifyPointer() const {
     if (pointer_ == nullptr) {
-      GXF_LOG_ERROR("Handle pointer must not be null");
+      GXF_LOG_ERROR("Handle pointer is null for component %s - id %ld", name(), cid());
       return Unexpected{GXF_FAILURE};
     }
     void* raw_pointer;
@@ -101,7 +101,8 @@ class UntypedHandle {
       return Unexpected{result};
     }
     if (raw_pointer != pointer_) {
-      GXF_LOG_ERROR("Handle pointers do not match: %p vs %p", raw_pointer, pointer_);
+      GXF_LOG_ERROR("Handle pointers do not match for component %s: %p vs %p",
+                    name(), raw_pointer, pointer_);
       return Unexpected{GXF_FAILURE};
     }
     return Success;

@@ -1,12 +1,19 @@
-/**
- * Copyright (c) 2022-2023, NVIDIA CORPORATION.  All rights reserved.
- *
- * NVIDIA CORPORATION and its licensors retain all intellectual property
- * and proprietary rights in and to this software, related documentation
- * and any modifications thereto.  Any use, reproduction, disclosure or
- * distribution of this software and related documentation without an express
- * license agreement from NVIDIA CORPORATION is strictly prohibited.
- */
+// SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
+// Copyright (c) 2022-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
+// SPDX-License-Identifier: Apache-2.0
 
 #ifndef ISAAC_ROS_NITROS__NITROS_PUBLISHER_SUBSCRIBER_BASE_HPP_
 #define ISAAC_ROS_NITROS__NITROS_PUBLISHER_SUBSCRIBER_BASE_HPP_
@@ -61,7 +68,7 @@ struct NitrosPublisherSubscriberConfig
   // Pin this pub/sub to use only the compatible format for negotiation
   bool use_compatible_format_only{false};
 
-  // Eanble NitrosNode to adjust the compatible format after an unsuccessful
+  // Enable NitrosNode to adjust the compatible format after an unsuccessful
   // negotiation. The compatible format is adjusted if the existing compatible
   // format, together with other selected data formats in the same pub/sub group,
   // cannot form a valid data format combination.
@@ -90,7 +97,7 @@ struct NitrosStatisticsConfig
   std::map<std::string, int> topic_name_expected_dt_map;
 
   // Tolerance for jitter from expected frame rate in microseconds
-  int jitter_tolerance_us;
+  int jitter_tolerance_us{5000};
 };
 
 using NitrosPublisherSubscriberConfigMap =
@@ -192,7 +199,14 @@ public:
       if (timestamp) {
         return timestamp.value()->acqtime;
       }
+    } else {
+      RCLCPP_FATAL(
+        node_.get_logger(),
+        "[NitrosPublisherSubscriberBase] Failed to resolve entity (eid=%ld) (error=%s)",
+        base_msg.handle, GxfResultStr(msg_entity.error()));
+      return 0;
     }
+
     RCLCPP_WARN(
       node_.get_logger(),
       "[NitrosPublisherSubscriberBase] Failed to get timestamp from a NITROS"
@@ -206,6 +220,31 @@ public:
 
   // To be called after negotiation timer is up
   virtual void postNegotiationCallback() = 0;
+
+  void throwOnUnsupportedCompatibleDataFormat()
+  {
+    if (std::find(
+        supported_data_formats_.begin(),
+        supported_data_formats_.end(),
+        config_.compatible_data_format) == supported_data_formats_.end())
+    {
+      std::stringstream error_msg;
+      error_msg <<
+        "[NitrosPublisherSubscriberBase] Specified compatible format " <<
+        "\"" << config_.compatible_data_format.c_str() << "\" was not listed in " <<
+        "the supported format list: [";
+      for (size_t i = 0; i < supported_data_formats_.size(); i++) {
+        if (i > 0) {
+          error_msg << ", ";
+        }
+        error_msg << supported_data_formats_[i].c_str();
+      }
+      error_msg << "]";
+      RCLCPP_ERROR(
+        node_.get_logger(), error_msg.str().c_str());
+      throw std::runtime_error(error_msg.str().c_str());
+    }
+  }
 
   // Update statistics numbers. To be called in nitros Subscriber and Publisher
   void updateStatistics()
@@ -313,7 +352,7 @@ protected:
   rclcpp::Node & node_;
 
   // The parent GXF context
-  gxf_context_t context_;
+  gxf_context_t context_ = nullptr;
 
   // Nitros type manager
   std::shared_ptr<NitrosTypeManager> nitros_type_manager_;

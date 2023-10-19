@@ -1,24 +1,25 @@
-/*
- * SPDX-FileCopyrightText: Copyright (c) 2021 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
- * SPDX-License-Identifier: Apache-2.0
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
+// Copyright (c) 2021-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
+// SPDX-License-Identifier: Apache-2.0
 #ifndef NVIDIA_GXF_CUDA_CUDA_STREAM_POOL_HPP_
 #define NVIDIA_GXF_CUDA_CUDA_STREAM_POOL_HPP_
 
 #include <cuda_runtime.h>
 
+#include <atomic>
 #include <memory>
 #include <mutex>
 #include <queue>
@@ -29,6 +30,7 @@
 #include "gxf/core/expected.hpp"
 #include "gxf/cuda/cuda_stream.hpp"
 #include "gxf/std/allocator.hpp"
+#include "gxf/std/resources.hpp"
 
 namespace nvidia {
 namespace gxf {
@@ -56,7 +58,7 @@ class CudaStreamPool : public Allocator {
   Expected<Entity> createNewStreamEntity();
   Expected<void> reserveStreams();
 
-  Parameter<int32_t> dev_id_;
+  Resource<Handle<GPUDevice>> gpu_device_;
   Parameter<uint32_t> stream_flags_;
   Parameter<int32_t> stream_priority_;
   Parameter<uint32_t> reserved_size_;
@@ -66,6 +68,9 @@ class CudaStreamPool : public Allocator {
   // map of <entity_id, Entity>
   std::unordered_map<gxf_uid_t, std::unique_ptr<Entity>> streams_;
   std::queue<Entity> reserved_streams_;
+  // Holds lifecycle stage of the allocator
+  std::atomic<AllocatorStage> stage_{AllocatorStage::kUninitialized};
+  int32_t dev_id_ = -1;
 };
 
 }  // namespace gxf

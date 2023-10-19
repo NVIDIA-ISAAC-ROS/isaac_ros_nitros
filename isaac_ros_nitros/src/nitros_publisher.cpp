@@ -1,12 +1,19 @@
-/**
- * Copyright (c) 2022-2023, NVIDIA CORPORATION.  All rights reserved.
- *
- * NVIDIA CORPORATION and its licensors retain all intellectual property
- * and proprietary rights in and to this software, related documentation
- * and any modifications thereto.  Any use, reproduction, disclosure or
- * distribution of this software and related documentation without an express
- * license agreement from NVIDIA CORPORATION is strictly prohibited.
- */
+// SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
+// Copyright (c) 2022-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
+// SPDX-License-Identifier: Apache-2.0
 
 #include "gxf/std/timestamp.hpp"
 
@@ -77,6 +84,7 @@ bool NitrosPublisherWaitable::is_ready(rcl_wait_set_t * wait_set)
 
 void NitrosPublisherWaitable::execute(std::shared_ptr<void> & data)
 {
+  (void)data;  // unused
   std::stringstream nvtx_tag_name;
   nvtx_tag_name <<
     "[" << node_.get_name() << "] NitrosPublisherWaitable::execute(" <<
@@ -112,6 +120,10 @@ NitrosPublisher::NitrosPublisher(
   if (config_.type == NitrosPublisherSubscriberType::NOOP) {
     return;
   }
+
+  // Check and throw error if the specified compatible data format is not supported
+  // from the underlying graph
+  throwOnUnsupportedCompatibleDataFormat();
 
   // Create the compatible data format publisher
   createCompatiblePublisher();
@@ -172,6 +184,18 @@ NitrosPublisher::NitrosPublisher(
     initStatistics();
   }
 }
+
+NitrosPublisher::NitrosPublisher(
+  rclcpp::Node & node,
+  const gxf_context_t context,
+  std::shared_ptr<NitrosTypeManager> nitros_type_manager,
+  const std::vector<std::string> & supported_data_formats,
+  const NitrosPublisherSubscriberConfig & config,
+  const NitrosStatisticsConfig & statistics_config)
+: NitrosPublisher(
+    node, context, nitros_type_manager, {}, supported_data_formats, config,
+    {}, statistics_config)
+{}
 
 std::shared_ptr<negotiated::NegotiatedPublisher> NitrosPublisher::getNegotiatedPublisher()
 {

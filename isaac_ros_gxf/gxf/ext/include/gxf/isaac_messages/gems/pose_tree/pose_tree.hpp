@@ -1,14 +1,20 @@
-/*
-Copyright (c) 2020-2023, NVIDIA CORPORATION. All rights reserved.
-
-NVIDIA CORPORATION and its licensors retain all intellectual property
-and proprietary rights in and to this software, related documentation
-and any modifications thereto. Any use, reproduction, disclosure or
-distribution of this software and related documentation without an express
-license agreement from NVIDIA CORPORATION is strictly prohibited.
-*/
-#ifndef NVIDIA_ISAAC_GEMS_POSE_TREE_POSE_TREE_HPP_
-#define NVIDIA_ISAAC_GEMS_POSE_TREE_POSE_TREE_HPP_
+// SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
+// Copyright (c) 2020-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
+// SPDX-License-Identifier: Apache-2.0
+#pragma once
 
 #include <map>
 #include <memory>
@@ -22,6 +28,7 @@ license agreement from NVIDIA CORPORATION is strictly prohibited.
 #include "engine/core/math/pose2.hpp"
 #include "engine/core/math/pose3.hpp"
 #include "gems/pose_tree/pose_tree_edge_history.hpp"
+#include "gxf/core/component.hpp"
 #include "gxf/std/gems/suballocators/first_fit_allocator.hpp"
 
 namespace nvidia {
@@ -34,7 +41,7 @@ namespace isaac {
 // acylic, bi-directional, not necessarily fully-connected graph.
 // This PoseTree assigned a different version id to each operation that affects it, and this version
 // can be used to make a query ignore later changes made to the tree.
-class PoseTree {
+class PoseTree : public gxf::Component {
  public:
   // Error codes used by this class.
   enum class Error {
@@ -87,15 +94,15 @@ class PoseTree {
   using CreateFrameCallback = std::function<void(frame_t frame)>;
   // Type for callback functions that are called every time an edge is set.
   using SetEdgeCallback = std::function<void(frame_t lhs, frame_t rhs, double time,
-                                             const ::isaac::Pose3d& lhs_T_rhs)>;
+                                             const ::nvidia::isaac::Pose3d& lhs_T_rhs)>;
 
   // Allocates space for a given number of total frames and total number of edges.
   // Total amount of memory required is approximately:
   //  number_frames * 128 + number_edges * 64 + history_length * 72.
-  Expected<void> initialize(int32_t number_frames, int32_t number_edges, int32_t history_length,
-                            int32_t default_number_edges, int32_t default_history_length,
-                            int32_t edges_chunk_size, int32_t history_chunk_size);
-  void deinitialize();
+  Expected<void> init(int32_t number_frames, int32_t number_edges, int32_t history_length,
+                      int32_t default_number_edges, int32_t default_history_length,
+                      int32_t edges_chunk_size, int32_t history_chunk_size);
+  void deinit();
 
   // Returns the current PoseTree version.
   version_t getPoseTreeVersion() const;
@@ -147,44 +154,50 @@ class PoseTree {
   Expected<version_t> disconnectEdge(frame_t lhs, frame_t rhs, double time);
 
   // Disable all the implicit cast (to make sure to catch a call with the wrong type for the time)
-  template <class ... Args> Expected<::isaac::Pose3d> disconnectFrame(Args&&... args) = delete;
-  template <class ... Args> Expected<::isaac::Pose3d> disconnectEdge(Args&&... args) = delete;
+  template <class ... Args> Expected<::nvidia::isaac::Pose3d>
+  disconnectFrame(Args&&... args) = delete;
+  template <class ... Args> Expected<::nvidia::isaac::Pose3d>
+  disconnectEdge(Args&&... args) = delete;
 
   // Gets the name of a frame.
   Expected<const char*> getFrameName(frame_t uid) const;
 
   // Gets the latest pose between two frames as well as the time of that pose.
   // The two poses needs to be directly linked
-  Expected<std::pair<::isaac::Pose3d, double>> getLatest(frame_t lhs, frame_t rhs) const;
-  Expected<std::pair<::isaac::Pose3d, double>> getLatest(const char* lhs, const char* rhs) const;
+  Expected<std::pair<::nvidia::isaac::Pose3d, double>> getLatest(frame_t lhs, frame_t rhs) const;
+  Expected<std::pair<::nvidia::isaac::Pose3d, double>>
+  getLatest(const char* lhs, const char* rhs) const;
 
   // Gets the pose lhs_T_rhs between two frames in the PoseTree at the given time. If the poses are
   // not connected exactly at the given time, the indicated method is used to interpolate the data.
-  Expected<::isaac::Pose3d> get(frame_t lhs, frame_t rhs, double time,
+  Expected<::nvidia::isaac::Pose3d> get(frame_t lhs, frame_t rhs, double time,
                                 PoseTreeEdgeHistory::AccessMethod method,
                                 version_t version) const;
-  Expected<::isaac::Pose3d> get(frame_t lhs, frame_t rhs, double time, version_t version) const;
-  Expected<::isaac::Pose3d> get(frame_t lhs, frame_t rhs, double time,
+  Expected<::nvidia::isaac::Pose3d> get(frame_t lhs,
+                                        frame_t rhs,
+                                        double time,
+                                        version_t version) const;
+  Expected<::nvidia::isaac::Pose3d> get(frame_t lhs, frame_t rhs, double time,
                                 PoseTreeEdgeHistory::AccessMethod method) const;
-  Expected<::isaac::Pose3d> get(frame_t lhs, frame_t rhs, double time) const;
+  Expected<::nvidia::isaac::Pose3d> get(frame_t lhs, frame_t rhs, double time) const;
 
   // Same as above, but using the name as interface.
-  Expected<::isaac::Pose3d> get(const char* lhs, const char* rhs, double time,
+  Expected<::nvidia::isaac::Pose3d> get(const char* lhs, const char* rhs, double time,
                                 PoseTreeEdgeHistory::AccessMethod method,
                                 version_t version) const;
-  Expected<::isaac::Pose3d> get(const char* lhs, const char* rhs, double time,
+  Expected<::nvidia::isaac::Pose3d> get(const char* lhs, const char* rhs, double time,
                                 version_t version) const;
-  Expected<::isaac::Pose3d> get(const char* lhs, const char* rhs, double time,
+  Expected<::nvidia::isaac::Pose3d> get(const char* lhs, const char* rhs, double time,
                                 PoseTreeEdgeHistory::AccessMethod method) const;
-  Expected<::isaac::Pose3d> get(const char* lhs, const char* rhs, double time) const;
+  Expected<::nvidia::isaac::Pose3d> get(const char* lhs, const char* rhs, double time) const;
 
   // Disable all the implicit cast (to make sure to catch a call with the wrong type for the time)
-  template <class ... Args> Expected<::isaac::Pose3d> get(Args&&... args) const = delete;
+  template <class ... Args> Expected<::nvidia::isaac::Pose3d> get(Args&&... args) const = delete;
 
   // Helper function to get a Pose2d instead of Pose3d
   template <class ... Args>
-  Expected<::isaac::Pose2d> getPose2XY(Args&&... args) const {
-    return get(std::forward<Args>(args)...).map([](const ::isaac::Pose3d& pose_3d) {
+  Expected<::nvidia::isaac::Pose2d> getPose2XY(Args&&... args) const {
+    return get(std::forward<Args>(args)...).map([](const ::nvidia::isaac::Pose3d& pose_3d) {
       return pose_3d.toPose2XY();
     });
   }
@@ -200,20 +213,20 @@ class PoseTree {
   // linked. If more than the maximum number of allowed poses are set the oldest pose is deleted.
   // Upon success, it returns the version id of the change.
   Expected<version_t> set(frame_t lhs, frame_t rhs, double time,
-                          const ::isaac::Pose3d& lhs_T_rhs);
+                          const ::nvidia::isaac::Pose3d& lhs_T_rhs);
   // Same as above, but using the name as interface.
   Expected<version_t> set(const char* lhs, const char* rhs, double time,
-                          const ::isaac::Pose3d& lhs_T_rhs);
+                          const ::nvidia::isaac::Pose3d& lhs_T_rhs);
 
   // Helper function to set a Pose2d instead of Pose3d
   Expected<version_t> set(frame_t lhs, frame_t rhs, double time,
-                          const ::isaac::Pose2d& lhs_T_rhs) {
-    return set(lhs, rhs, time, ::isaac::Pose3d::FromPose2XY(lhs_T_rhs));
+                          const ::nvidia::isaac::Pose2d& lhs_T_rhs) {
+    return set(lhs, rhs, time, ::nvidia::isaac::Pose3d::FromPose2XY(lhs_T_rhs));
   }
   // Same as above, but using the name as interface.
   Expected<version_t> set(const char* lhs, const char* rhs, double time,
-                          const ::isaac::Pose2d& lhs_T_rhs) {
-    return set(lhs, rhs, time, ::isaac::Pose3d::FromPose2XY(lhs_T_rhs));
+                          const ::nvidia::isaac::Pose2d& lhs_T_rhs) {
+    return set(lhs, rhs, time, ::nvidia::isaac::Pose3d::FromPose2XY(lhs_T_rhs));
   }
 
   // Disable all the implicit cast (to make sure to catch a call with the wrong type for the time)
@@ -297,11 +310,11 @@ class PoseTree {
   Expected<void> updateRoot(frame_t root);
   // Implementation of get using the pre-computed path to the root as a hint. If it fails, it falls
   // back to getDfsImpl.
-  Expected<::isaac::Pose3d> getImpl(frame_t lhs, frame_t rhs, double time,
+  Expected<::nvidia::isaac::Pose3d> getImpl(frame_t lhs, frame_t rhs, double time,
                                     PoseTreeEdgeHistory::AccessMethod method,
                                     version_t version) const;
   // Implementation of get that do a dfs to see if a path exists at a given time.
-  Expected<::isaac::Pose3d> getDfsImpl(frame_t lhs, frame_t rhs, double time,
+  Expected<::nvidia::isaac::Pose3d> getDfsImpl(frame_t lhs, frame_t rhs, double time,
                                        PoseTreeEdgeHistory::AccessMethod method,
                                        version_t version) const;
 
@@ -337,7 +350,7 @@ class PoseTree {
   UniqueIndexMap<FrameInfo> frame_map_;
 
   // Used to implement a dfs.
-  std::unique_ptr<frame_t> frames_stack_;
+  std::unique_ptr<frame_t[]> frames_stack_;
 
   // Store the list of PoseTreeEdgeHistory used by the frames. Each PoseTreeEdgeHistory correspond
   // to a bi-directional edge.
@@ -362,5 +375,3 @@ class PoseTree {
 
 }  // namespace isaac
 }  // namespace nvidia
-
-#endif  // NVIDIA_ISAAC_GEMS_POSE_TREE_POSE_TREE_HPP_

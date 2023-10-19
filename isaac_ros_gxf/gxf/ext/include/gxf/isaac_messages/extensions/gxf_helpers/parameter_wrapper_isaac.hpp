@@ -1,14 +1,20 @@
-/*
-Copyright (c) 2022, NVIDIA CORPORATION. All rights reserved.
-
-NVIDIA CORPORATION and its licensors retain all intellectual property
-and proprietary rights in and to this software, related documentation
-and any modifications thereto. Any use, reproduction, disclosure or
-distribution of this software and related documentation without an express
-license agreement from NVIDIA CORPORATION is strictly prohibited.
-*/
-#ifndef NVIDIA_ISAAC_EXTENSIONS_GXF_HELPERS_PARAMETER_WRAPPER_ISAAC_HPP_
-#define NVIDIA_ISAAC_EXTENSIONS_GXF_HELPERS_PARAMETER_WRAPPER_ISAAC_HPP_
+// SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
+// Copyright (c) 2022-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
+// SPDX-License-Identifier: Apache-2.0
+#pragma once
 
 #include <string>
 #include <unordered_map>
@@ -22,6 +28,7 @@ license agreement from NVIDIA CORPORATION is strictly prohibited.
 #include "engine/gems/geometry/n_cuboid.hpp"
 #include "engine/gems/geometry/n_sphere.hpp"
 #include "engine/gems/geometry/polygon.hpp"
+#include "engine/gems/uuid/uuid.hpp"
 #include "gxf/core/expected.hpp"
 #include "gxf/core/gxf.h"
 #include "gxf/std/parameter_wrapper.hpp"
@@ -41,8 +48,9 @@ struct ParameterWrapper<uint8_t> {
 };
 
 template <typename T, int N>
-struct ParameterWrapper<::isaac::Vector<T, N>> {
-  static Expected<YAML::Node> Wrap(gxf_context_t context, const ::isaac::Vector<T, N>& value) {
+struct ParameterWrapper<::nvidia::isaac::Vector<T, N>> {
+  static Expected<YAML::Node> Wrap(
+      gxf_context_t context, const ::nvidia::isaac::Vector<T, N>& value) {
     YAML::Node node(YAML::NodeType::Sequence);
 
     for (uint32_t i = 0; i < value.size(); i++) {
@@ -59,8 +67,9 @@ struct ParameterWrapper<::isaac::Vector<T, N>> {
 // Parameter support for matrices (row-major specification)
 // Example format: [[1.0, 2.2, -3.7], [0.3, -1.1, 2.7]]
 template <typename T, int N, int M>
-struct ParameterWrapper<::isaac::Matrix<T, N, M>> {
-  static Expected<YAML::Node> Wrap(gxf_context_t context, const ::isaac::Matrix<T, N, M>& value) {
+struct ParameterWrapper<::nvidia::isaac::Matrix<T, N, M>> {
+  static Expected<YAML::Node> Wrap(
+      gxf_context_t context, const ::nvidia::isaac::Matrix<T, N, M>& value) {
     YAML::Node node(YAML::NodeType::Sequence);
 
     for (int32_t i = 0; i < N; i++) {
@@ -79,13 +88,13 @@ struct ParameterWrapper<::isaac::Matrix<T, N, M>> {
 // Parameter support for matrices (row-major specification)
 // Example format: [[1.0, 2.2, -3.7], [0.3, -1.1, 2.7]]
 template <typename T, int N, int M>
-struct ParameterWrapper<std::vector<::isaac::Matrix<T, N, M>>> {
+struct ParameterWrapper<std::vector<::nvidia::isaac::Matrix<T, N, M>>> {
   static Expected<YAML::Node> Wrap(gxf_context_t context,
-                                   const std::vector<::isaac::Matrix<T, N, M>>& value) {
+                                   const std::vector<::nvidia::isaac::Matrix<T, N, M>>& value) {
     YAML::Node node(YAML::NodeType::Sequence);
 
     for (auto &v : value) {
-      const auto maybe = ParameterWrapper<::isaac::Matrix<T, N, M>>::Wrap(context, v);
+      const auto maybe = ParameterWrapper<::nvidia::isaac::Matrix<T, N, M>>::Wrap(context, v);
       if (!maybe) {
         return ForwardError(maybe);
       }
@@ -103,8 +112,8 @@ struct ParameterWrapper<std::vector<::isaac::Matrix<T, N, M>>> {
 //      translation: [12.2, 8.7]
 //      rotation_deg: 90.0 # degrees
 template <typename T>
-struct ParameterWrapper<::isaac::Pose2<T>> {
-  static Expected<YAML::Node> Wrap(gxf_context_t context, const ::isaac::Pose2<T>& value) {
+struct ParameterWrapper<::nvidia::isaac::Pose2<T>> {
+  static Expected<YAML::Node> Wrap(gxf_context_t context, const ::nvidia::isaac::Pose2<T>& value) {
     YAML::Node node(YAML::NodeType::Map);
 
     // translation
@@ -128,12 +137,12 @@ struct ParameterWrapper<::isaac::Pose2<T>> {
 
 // Support for std::vector of Pose2
 template <typename T>
-struct ParameterWrapper<std::vector<::isaac::Pose2<T>>> {
+struct ParameterWrapper<std::vector<::nvidia::isaac::Pose2<T>>> {
   static Expected<YAML::Node> Wrap(gxf_context_t context,
-                                   const std::vector<::isaac::Pose2<T>>& value) {
+                                   const std::vector<::nvidia::isaac::Pose2<T>>& value) {
     YAML::Node node(YAML::NodeType::Sequence);
     for (auto &v : value) {
-      const auto maybe = ParameterWrapper<::isaac::Pose2<T>>::Wrap(context, v);
+      const auto maybe = ParameterWrapper<::nvidia::isaac::Pose2<T>>::Wrap(context, v);
       if (!maybe) {
         return ForwardError(maybe);
       }
@@ -151,8 +160,8 @@ struct ParameterWrapper<std::vector<::isaac::Pose2<T>>> {
 //      translation: [2.2, 8.7, 0.0]
 //      rotation: [-0.393, -0.469, -0.725, 0.314] # (w, x, y, z) values forming the quaternion
 template <typename T>
-struct ParameterWrapper<::isaac::Pose3<T>> {
-  static Expected<YAML::Node> Wrap(gxf_context_t context, const ::isaac::Pose3<T>& value) {
+struct ParameterWrapper<::nvidia::isaac::Pose3<T>> {
+  static Expected<YAML::Node> Wrap(gxf_context_t context, const ::nvidia::isaac::Pose3<T>& value) {
     YAML::Node node(YAML::NodeType::Map);
     // translation
     const auto maybe_translation =
@@ -164,9 +173,9 @@ struct ParameterWrapper<::isaac::Pose3<T>> {
 
     // rotation
     Eigen::Matrix<T, 3, 1> angle = value.rotation.eulerAnglesRPY();
-    angle(0, 0) = ::isaac::RadToDeg(angle(0, 0));
-    angle(1, 0) = ::isaac::RadToDeg(angle(1, 0));
-    angle(2, 0) = ::isaac::RadToDeg(angle(2, 0));
+    angle(0, 0) = ::nvidia::isaac::RadToDeg(angle(0, 0));
+    angle(1, 0) = ::nvidia::isaac::RadToDeg(angle(1, 0));
+    angle(2, 0) = ::nvidia::isaac::RadToDeg(angle(2, 0));
     const auto maybe_rotation =
         ParameterWrapper<Eigen::Matrix<T, 3, 1>>::Wrap(context, angle);
     if (!maybe_rotation) {
@@ -179,12 +188,12 @@ struct ParameterWrapper<::isaac::Pose3<T>> {
 
 // Support for std::array of Pose3
 template <typename T>
-struct ParameterWrapper<std::array<::isaac::Pose3<T>, 4>> {
+struct ParameterWrapper<std::array<::nvidia::isaac::Pose3<T>, 4>> {
   static Expected<YAML::Node> Wrap(gxf_context_t context,
-                                   const std::array<::isaac::Pose3<T>, 4>& value) {
+                                   const std::array<::nvidia::isaac::Pose3<T>, 4>& value) {
     YAML::Node node(YAML::NodeType::Sequence);
     for (uint32_t i = 0; i < 4; i++) {
-      const auto maybe = ParameterWrapper<::isaac::Pose3<T>>::Wrap(context, value[i]);
+      const auto maybe = ParameterWrapper<::nvidia::isaac::Pose3<T>>::Wrap(context, value[i]);
       if (!maybe) {
         return ForwardError(maybe);
       }
@@ -195,12 +204,12 @@ struct ParameterWrapper<std::array<::isaac::Pose3<T>, 4>> {
 };
 
 template <typename T>
-struct ParameterWrapper<std::vector<::isaac::Pose3<T>>> {
+struct ParameterWrapper<std::vector<::nvidia::isaac::Pose3<T>>> {
   static Expected<YAML::Node> Wrap(gxf_context_t context,
-                                   const std::vector<::isaac::Pose3<T>>& value) {
+                                   const std::vector<::nvidia::isaac::Pose3<T>>& value) {
     YAML::Node node(YAML::NodeType::Sequence);
     for (auto &v : value) {
-      const auto maybe = ParameterWrapper<::isaac::Pose3<T>>::Wrap(context, v);
+      const auto maybe = ParameterWrapper<::nvidia::isaac::Pose3<T>>::Wrap(context, v);
       if (!maybe) {
         return ForwardError(maybe);
       }
@@ -215,14 +224,14 @@ struct ParameterWrapper<std::vector<::isaac::Pose3<T>>> {
 //      center: [X, Y [, ...]]
 //      radius: 3.0
 template <typename T, int N>
-struct ParameterWrapper<::isaac::geometry::NSphere<T, N>> {
+struct ParameterWrapper<::nvidia::isaac::geometry::NSphere<T, N>> {
   static Expected<YAML::Node> Wrap(gxf_context_t context,
-                                   const ::isaac::geometry::NSphere<T, N>& value) {
+                                   const ::nvidia::isaac::geometry::NSphere<T, N>& value) {
     YAML::Node node(YAML::NodeType::Map);
 
     // center
     const auto maybe_center =
-      ParameterWrapper<::isaac::Vector<T, N>>::Wrap(context, value.center);
+      ParameterWrapper<::nvidia::isaac::Vector<T, N>>::Wrap(context, value.center);
     if (!maybe_center) {
       return ForwardError(maybe_center);
     }
@@ -242,12 +251,14 @@ struct ParameterWrapper<::isaac::geometry::NSphere<T, N>> {
 
 // Support for std::array of NSphere
 template <typename T, int N>
-struct ParameterWrapper<std::vector<::isaac::geometry::NSphere<T, N>>> {
-  static Expected<YAML::Node> Wrap(gxf_context_t context,
-                                   const std::vector<::isaac::geometry::NSphere<T, N>>& value) {
+struct ParameterWrapper<std::vector<::nvidia::isaac::geometry::NSphere<T, N>>> {
+  static Expected<YAML::Node> Wrap(
+      gxf_context_t context,
+      const std::vector<::nvidia::isaac::geometry::NSphere<T, N>>& value) {
     YAML::Node node(YAML::NodeType::Sequence);
     for (auto &v : value) {
-      const auto maybe = ParameterWrapper<::isaac::geometry::NSphere<T, N>>::Wrap(context, v);
+      const auto maybe =
+        ParameterWrapper<::nvidia::isaac::geometry::NSphere<T, N>>::Wrap(context, v);
       if (!maybe) {
         return ForwardError(maybe);
       }
@@ -262,20 +273,22 @@ struct ParameterWrapper<std::vector<::isaac::geometry::NSphere<T, N>>> {
 // Example: [[-1.0, 1.0], [-2.0, 2.0]] represents a rectangle with the x dimension spanning -1.0 to
 // 1.0 and the y dimension spanning -2.0 to 2.0.
 template <typename T, int N>
-struct ParameterWrapper<::isaac::geometry::NCuboid<T, N>> {
+struct ParameterWrapper<::nvidia::isaac::geometry::NCuboid<T, N>> {
   static Expected<YAML::Node> Wrap(gxf_context_t context,
-                                   const ::isaac::geometry::NCuboid<T, N>& value) {
+                                   const ::nvidia::isaac::geometry::NCuboid<T, N>& value) {
     YAML::Node node(YAML::NodeType::Sequence);
 
     // min
-    const auto maybe_min = ParameterWrapper<::isaac::Vector<T, N>>::Wrap(context, value.min());
+    const auto maybe_min =
+      ParameterWrapper<::nvidia::isaac::Vector<T, N>>::Wrap(context, value.min());
     if (!maybe_min) {
       return ForwardError(maybe_min);
     }
     node.push_back(maybe_min.value());
 
     // max
-    const auto maybe_max = ParameterWrapper<::isaac::Vector<T, N>>::Wrap(context, value.max());
+    const auto maybe_max =
+      ParameterWrapper<::nvidia::isaac::Vector<T, N>>::Wrap(context, value.max());
     if (!maybe_max) {
       return ForwardError(maybe_max);
     }
@@ -286,12 +299,14 @@ struct ParameterWrapper<::isaac::geometry::NCuboid<T, N>> {
 
 // Support for std::vector of NCuboid
 template <typename T, int N>
-struct ParameterWrapper<std::vector<::isaac::geometry::NCuboid<T, N>>> {
-  static Expected<YAML::Node> Wrap(gxf_context_t context,
-                                   const std::vector<::isaac::geometry::NCuboid<T, N>>& value) {
+struct ParameterWrapper<std::vector<::nvidia::isaac::geometry::NCuboid<T, N>>> {
+  static Expected<YAML::Node> Wrap(
+      gxf_context_t context,
+      const std::vector<::nvidia::isaac::geometry::NCuboid<T, N>>& value) {
     YAML::Node node(YAML::NodeType::Sequence);
     for (auto &v : value) {
-      const auto maybe = ParameterWrapper<::isaac::geometry::NCuboid<T, N>>::Wrap(context, v);
+      const auto maybe =
+        ParameterWrapper<::nvidia::isaac::geometry::NCuboid<T, N>>::Wrap(context, v);
       if (!maybe) {
         return ForwardError(maybe);
       }
@@ -305,12 +320,12 @@ struct ParameterWrapper<std::vector<::isaac::geometry::NCuboid<T, N>>> {
 // [[60, -104], [32, -96], [-6, -88], [-52, -81], [-95, -82]]
 // This would form a polygon with 5 points in 2D. Each point consist of [x, y] values.
 template <typename T>
-struct ParameterWrapper<::isaac::geometry::Polygon2<T>> {
+struct ParameterWrapper<::nvidia::isaac::geometry::Polygon2<T>> {
   static Expected<YAML::Node> Wrap(gxf_context_t context,
-                                   const ::isaac::geometry::Polygon2<T>& value) {
+                                   const ::nvidia::isaac::geometry::Polygon2<T>& value) {
     YAML::Node node(YAML::NodeType::Sequence);
     for (auto &point : value.points) {
-      const auto maybe = ParameterWrapper<::isaac::Vector<T, 2>>::Wrap(context, point);
+      const auto maybe = ParameterWrapper<::nvidia::isaac::Vector<T, 2>>::Wrap(context, point);
       if (!maybe) {
         return ForwardError(maybe);
       }
@@ -322,12 +337,13 @@ struct ParameterWrapper<::isaac::geometry::Polygon2<T>> {
 
 // Support for std::vector of Polygon2
 template <typename T>
-struct ParameterWrapper<std::vector<::isaac::geometry::Polygon2<T>>> {
-  static Expected<YAML::Node> Wrap(gxf_context_t context,
-                                   const std::vector<::isaac::geometry::Polygon2<T>>& value) {
+struct ParameterWrapper<std::vector<::nvidia::isaac::geometry::Polygon2<T>>> {
+  static Expected<YAML::Node> Wrap(
+      gxf_context_t context,
+      const std::vector<::nvidia::isaac::geometry::Polygon2<T>>& value) {
     YAML::Node node(YAML::NodeType::Sequence);
     for (auto &v : value) {
-      const auto maybe = ParameterWrapper<::isaac::geometry::Polygon2<T>>::Wrap(context, v);
+      const auto maybe = ParameterWrapper<::nvidia::isaac::geometry::Polygon2<T>>::Wrap(context, v);
       if (!maybe) {
         return ForwardError(maybe);
       }
@@ -342,20 +358,20 @@ struct ParameterWrapper<std::vector<::isaac::geometry::Polygon2<T>>> {
 // This would form a line segment between (-100.0, 0.0) and (20.0, 5.0).
 // Each point consist of (x, y) values.
 template <typename T, int N>
-struct ParameterWrapper<::isaac::geometry::LineSegment<T, N>> {
+struct ParameterWrapper<::nvidia::isaac::geometry::LineSegment<T, N>> {
   static Expected<YAML::Node> Wrap(gxf_context_t context,
-                                   const ::isaac::geometry::LineSegment<T, N>& value) {
+                                   const ::nvidia::isaac::geometry::LineSegment<T, N>& value) {
     YAML::Node node(YAML::NodeType::Sequence);
 
     // vector_a
-    const auto maybe_a = ParameterWrapper<::isaac::Vector<T, N>>::Wrap(context, value.a());
+    const auto maybe_a = ParameterWrapper<::nvidia::isaac::Vector<T, N>>::Wrap(context, value.a());
     if (!maybe_a) {
       return ForwardError(maybe_a);
     }
     node.push_back(maybe_a.value());
 
     // vector_b
-    const auto maybe_b = ParameterWrapper<::isaac::Vector<T, N>>::Wrap(context, value.b());
+    const auto maybe_b = ParameterWrapper<::nvidia::isaac::Vector<T, N>>::Wrap(context, value.b());
     if (!maybe_b) {
       return ForwardError(maybe_b);
     }
@@ -366,12 +382,14 @@ struct ParameterWrapper<::isaac::geometry::LineSegment<T, N>> {
 
 // Support for std::vector of LineSegment
 template <typename T, int N>
-struct ParameterWrapper<std::vector<::isaac::geometry::LineSegment<T, N>>> {
-  static Expected<YAML::Node> Wrap(gxf_context_t context,
-                                   const std::vector<::isaac::geometry::LineSegment<T, N>>& value) {
+struct ParameterWrapper<std::vector<::nvidia::isaac::geometry::LineSegment<T, N>>> {
+  static Expected<YAML::Node> Wrap(
+      gxf_context_t context,
+      const std::vector<::nvidia::isaac::geometry::LineSegment<T, N>>& value) {
     YAML::Node node(YAML::NodeType::Sequence);
     for (auto &v : value) {
-      const auto maybe = ParameterWrapper<::isaac::geometry::LineSegment<T, N>>::Wrap(context, v);
+      const auto maybe =
+        ParameterWrapper<::nvidia::isaac::geometry::LineSegment<T, N>>::Wrap(context, v);
       if (!maybe) {
         return ForwardError(maybe);
       }
@@ -416,7 +434,13 @@ struct ParameterWrapper<std::unordered_map<std::string, T>> {
   }
 };
 
+// Parameter support for Uuid.
+template<>
+struct ParameterWrapper<::nvidia::isaac::Uuid> {
+  static Expected<YAML::Node> Wrap(gxf_context_t context, const ::nvidia::isaac::Uuid& uuid) {
+    return ParameterWrapper<std::string>::Wrap(context, uuid.str());
+  }
+};
+
 }  // namespace gxf
 }  // namespace nvidia
-
-#endif  // NVIDIA_ISAAC_EXTENSIONS_GXF_HELPERS_PARAMETER_WRAPPER_ISAAC_HPP_

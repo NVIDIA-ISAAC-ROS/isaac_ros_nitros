@@ -1,25 +1,27 @@
-/*
- * SPDX-FileCopyrightText: Copyright (c) 2021 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
- * SPDX-License-Identifier: Apache-2.0
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
+// Copyright (c) 2021-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
+// SPDX-License-Identifier: Apache-2.0
 #ifndef NVIDIA_COMMON_LOGGER_HPP_
 #define NVIDIA_COMMON_LOGGER_HPP_
 
 #include <cstdarg>
 #include <cstdio>
 #include <vector>
+
+#include "common/singleton.hpp"
 
 // Logs a verbose message
 #define GXF_LOG_VERBOSE(...) \
@@ -65,11 +67,14 @@ enum class Severity {
 };
 
 // Function which is used for logging. It can be changed to intercept the logged messages.
-extern void (*LoggingFunction)(const char* file, int line, Severity severity, const char* log, void* arg);
+// Additional arguments can be supplied via LoggingFunctionArg.
+extern void (*LoggingFunction)(const char* file, int line, Severity severity,
+                               const char* log, void* arg);
 extern void* LoggingFunctionArg;
 
 // Default implementation of the logging function which prints to console
-void DefaultConsoleLogging(const char* file, int line, Severity severity, const char* log, void* arg);
+void DefaultConsoleLogging(const char* file, int line, Severity severity,
+                           const char* log, void* arg);
 
 // Redirects the output for a given log severity.
 void Redirect(std::FILE* file, Severity severity = Severity::ALL);
@@ -82,6 +87,9 @@ Severity GetSeverity();
 
 // Converts the message and argument into a string and pass it to LoggingFunction.
 template<typename... Args>
+void Log(const char* file, int line, Severity severity, const char* txt, ...) __attribute__((format(printf, 4, 5))); // NOLINT
+
+template<typename... Args>
 void Log(const char* file, int line, Severity severity, const char* txt, ...) {
   va_list args1;
   va_start(args1, txt);
@@ -93,6 +101,11 @@ void Log(const char* file, int line, Severity severity, const char* txt, ...) {
   va_end(args2);
   LoggingFunction(file, line, severity, buf.data(), LoggingFunctionArg);
 }
+
+// The output severity which might limit certain levels of severity
+struct SeverityContainer {
+  Severity r = Severity::INFO;
+};
 
 }  // namespace nvidia
 

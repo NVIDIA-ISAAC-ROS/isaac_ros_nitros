@@ -1,19 +1,19 @@
-/*
- * SPDX-FileCopyrightText: Copyright (c) 2021 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
- * SPDX-License-Identifier: Apache-2.0
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
+// Copyright (c) 2021-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
+// SPDX-License-Identifier: Apache-2.0
 #ifndef NVIDIA_COMMON_EXPECTED_HPP_
 #define NVIDIA_COMMON_EXPECTED_HPP_
 
@@ -222,14 +222,16 @@ class ExpectedBase {
   }
 
   template <class G>
-  constexpr ExpectedBase(const Unexpected<G>& error) : is_error_{true} {
+  constexpr ExpectedBase(const Unexpected<G>& error, const char* error_message = "")
+    : is_error_{true}, error_message_{error_message} {
     static_assert(IsConvertible_v<G, E>,
         "Cannot construct Unexpected from type with unconvertible error type.");
     InplaceConstruct<Unexpected<E>>(buffer_, error.value());
   }
 
   template <class G>
-  constexpr ExpectedBase(Unexpected<G>&& error) : is_error_{true} {
+  constexpr ExpectedBase(Unexpected<G>&& error, const char* error_message = "")
+    : is_error_{true}, error_message_{error_message} {
     static_assert(IsConvertible_v<G, E>,
         "Cannot construct Unexpected from type with unconvertible error type.");
     InplaceConstruct<Unexpected<E>>(buffer_, std::move(error.value()));
@@ -313,6 +315,11 @@ class ExpectedBase {
   constexpr       E&  error() &      { return unexpected().value(); }
   constexpr       E&& error() &&     { return std::move(unexpected()).value(); }
 
+  constexpr const char* get_error_message() {
+    GXF_ASSERT(is_error_, "Expected does not have an error. Check before accessing.");
+    return error_message_;
+  }
+
   ///-----------------------------------------------------------------------------------------------
   /// Logging
   ///-----------------------------------------------------------------------------------------------
@@ -329,7 +336,12 @@ class ExpectedBase {
   }
   template <class... Args>
   constexpr Derived&& log_error(Args&&... args) && {
+  // GCC is not able to do format security validation when the string is coming from a variadic template, even if the string is originally a char*
+  // ignore this warning until a more recent GCC version fixes this behavior
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wformat-security"
     if (is_error_) { GXF_LOG_ERROR(std::forward<Args>(args)...); }
+#pragma GCC diagnostic pop
     return static_cast<Derived&&>(std::move(*this));
   }
 
@@ -743,6 +755,7 @@ class ExpectedBase {
   }
 
   bool is_error_ = true;
+  const char* error_message_{};
   static constexpr uint32_t kAlign =
       (alignof(Unexpected<E>) < alignof(T)) ? alignof(T) : alignof(Unexpected<E>);
   static constexpr uint32_t kSize =

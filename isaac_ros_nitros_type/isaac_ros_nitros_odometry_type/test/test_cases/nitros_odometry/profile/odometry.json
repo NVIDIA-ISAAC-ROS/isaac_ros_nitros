@@ -1,0 +1,39 @@
+{
+  "header": {
+    "frame_id": "test_frame_id",
+    "stamp": {
+      "sec": 213,
+      "nanosec": 1245
+    }
+  },
+  "child_frame_id": "test_child_frame_id",
+  "pose": {
+    "pose": {
+      "position": {
+        "x": 4.0,
+        "y": 5.0,
+        "z": 6.0
+      },
+      "orientation": {
+        "x": 0.0,
+        "y": 0.0,
+        "z": 0.0,
+        "w": 1.0
+      }
+    }
+  },
+  "twist": {
+    "twist": {
+      "linear": {
+        "x": 6.0,
+        "y": 2.0,
+        "z": 16.0
+      },
+      "angular": {
+        "x": 1.0,
+        "y": 2.0,
+        "z": 3.0
+      }
+    }
+  }
+}

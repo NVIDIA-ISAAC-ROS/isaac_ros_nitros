@@ -1,12 +1,19 @@
-/**
- * Copyright (c) 2022-2023, NVIDIA CORPORATION.  All rights reserved.
- *
- * NVIDIA CORPORATION and its licensors retain all intellectual property
- * and proprietary rights in and to this software, related documentation
- * and any modifications thereto.  Any use, reproduction, disclosure or
- * distribution of this software and related documentation without an express
- * license agreement from NVIDIA CORPORATION is strictly prohibited.
- */
+// SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
+// Copyright (c) 2022-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
+// SPDX-License-Identifier: Apache-2.0
 
 #ifndef ISAAC_ROS_NITROS__NITROS_PUBLISHER_HPP_
 #define ISAAC_ROS_NITROS__NITROS_PUBLISHER_HPP_
@@ -108,6 +115,15 @@ public:
     const negotiated::NegotiatedPublisherOptions & negotiated_pub_options,
     const NitrosStatisticsConfig & statistics_config);
 
+  // Constructor for creating a publisher without an associated gxf egress port
+  NitrosPublisher(
+    rclcpp::Node & node,
+    const gxf_context_t context,
+    std::shared_ptr<NitrosTypeManager> nitros_type_manager,
+    const std::vector<std::string> & supported_data_formats,
+    const NitrosPublisherSubscriberConfig & config,
+    const NitrosStatisticsConfig & statistics_config);
+
   // Getter for the negotiated_pub_
   std::shared_ptr<negotiated::NegotiatedPublisher> getNegotiatedPublisher();
 
@@ -175,10 +191,10 @@ private:
   std::shared_ptr<rclcpp::PublisherBase> compatible_pub_{nullptr};
 
   // A pointer to the associated vault component for retrieving data from the running graph
-  nvidia::gxf::Vault * gxf_vault_ptr_ = nullptr;
+  nvidia::gxf::Vault * gxf_vault_ptr_{nullptr};
 
   // A pointer to the associated MessageRelay component for retrieving data from the running graph
-  nvidia::isaac_ros::MessageRelay * gxf_message_relay_ptr_ = nullptr;
+  nvidia::isaac_ros::MessageRelay * gxf_message_relay_ptr_{nullptr};
 
   // The function pointer that is used by a MessageRelay component to call
   // the actual callback function (gxfMessageRelayCallback)

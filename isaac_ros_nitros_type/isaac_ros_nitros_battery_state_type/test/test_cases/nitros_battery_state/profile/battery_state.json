@@ -1,0 +1,24 @@
+{
+  "header": {
+    "frame_id": "battery_state_header",
+    "stamp": {
+      "sec": 22125,
+      "nanosec": 45172
+    }
+  },
+  "voltage": 11.1,
+  "temperature": 25.0,
+  "current": 10.0,
+  "charge": 1.0,
+  "capacity": 5.0,
+  "design_capacity": 5.2,
+  "percentage": 0.2,
+  "power_supply_status": 1,
+  "power_supply_health": 1,
+  "power_supply_technology": 3,
+  "present": true,
+  "cell_voltage": [3.7, 3.7, 3.7],
+  "cell_temperature": [30.0, 30.0, 30.0],
+  "location": "unknown_location",
+  "serial_number": "test_serial_number"
+}

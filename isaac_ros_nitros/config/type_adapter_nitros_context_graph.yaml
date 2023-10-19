@@ -42,3 +42,5 @@ components:
       initial_pose:
         translation: [0.0, 0.0, 0.0]
         rotation_rpy: [0.0, 0.0, 0.0]
+  - name: composite_schema_server
+    type: nvidia::isaac::CompositeSchemaServer

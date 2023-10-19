@@ -1,19 +1,19 @@
-/*
- * SPDX-FileCopyrightText: Copyright (c) 2021 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
- * SPDX-License-Identifier: Apache-2.0
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
+// Copyright (c) 2021-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
+// SPDX-License-Identifier: Apache-2.0
 #ifndef NVIDIA_GXF_COMMON_FIXED_VECTOR_HPP_
 #define NVIDIA_GXF_COMMON_FIXED_VECTOR_HPP_
 
@@ -41,6 +41,7 @@ namespace nvidia {
 template <typename T>
 class FixedVectorBase {
  public:
+  // Use STL naming convension for compatibility with STL algorithms
   using value_type             = T;
   using size_type              = size_t;
   using iterator               = RandomAccessIterator<FixedVectorBase>;
@@ -61,8 +62,6 @@ class FixedVectorBase {
   // Expected type which uses class specific errors
   template <typename U>
   using Expected = Expected<U, Error>;
-  // Special value for returning a success
-  const Expected<void> Success{};
 
   constexpr bool operator==(const FixedVectorBase& other) const {
     if (size_ != other.size_) {
@@ -173,7 +172,7 @@ class FixedVectorBase {
     }
     InplaceConstruct<T>(BytePointer(&data_[index]), std::forward<Args>(args)...);
     size_++;
-    return Success;
+    return kSuccess;
   }
 
   // Creates a new object with the provided arguments and adds it to the end of the vector
@@ -206,7 +205,7 @@ class FixedVectorBase {
     if (index < size_) {
       ArrayMoveConstruct(BytePointer(&data_[index]), &data_[index + 1], size_ - index);
     }
-    return Success;
+    return kSuccess;
   }
 
   // Removes the object at the end of the vector and destroys it
@@ -231,7 +230,7 @@ class FixedVectorBase {
     while (count < size_) {
       pop_back();
     }
-    return Success;
+    return kSuccess;
   }
 
   // Resizes the vector by removing objects from the end if shrinking
@@ -246,11 +245,14 @@ class FixedVectorBase {
     while (count < size_) {
       pop_back();
     }
-    return Success;
+    return kSuccess;
   }
 
  protected:
-  FixedVectorBase() = default;
+  // Special value for returning a success
+  const Expected<void> kSuccess{};
+
+  FixedVectorBase() : data_{nullptr}, capacity_{0}, size_{0} {};
 
   // Pointer to an array of objects
   T* data_;
@@ -260,30 +262,37 @@ class FixedVectorBase {
   size_t size_;
 };
 
+// Special value used to instantiate a FixedVector with heap memory allocation
+constexpr ssize_t kFixedVectorHeap = -1;
+
 // Vector with stack memory allocation
-template <typename T, size_t N = 0>
+template <typename T, ssize_t N = kFixedVectorHeap>
 class FixedVector : public FixedVectorBase<T> {
  public:
+  static_assert(N >= 0, "N must be non-negative");
+
   constexpr FixedVector() {
     data_ = ValuePointer<T>(pool_);
     capacity_ = N;
-    size_ = 0;
   }
   constexpr FixedVector(const FixedVector& other) { *this = other; }
   constexpr FixedVector(FixedVector&& other) { *this = std::move(other); }
   constexpr FixedVector& operator=(const FixedVector& other) {
-    data_ = ValuePointer<T>(pool_);
-    capacity_ = N;
-    size_ = other.size_;
-    ArrayCopyConstruct(BytePointer(data_), other.data_, size_);
+    if (this != &other) {
+      data_ = ValuePointer<T>(pool_);
+      capacity_ = N;
+      ArrayCopyConstruct(BytePointer(data_), other.data_, other.size_);
+      size_ = other.size_;
+    }
     return *this;
   }
   constexpr FixedVector& operator=(FixedVector&& other) {
-    data_ = ValuePointer<T>(pool_);
-    capacity_ = N;
-    size_ = other.size_;
-    ArrayMoveConstruct(BytePointer(data_), other.data_, size_);
-    other.size_ = 0;
+    if (this != &other) {
+      data_ = ValuePointer<T>(pool_);
+      capacity_ = N;
+      ArrayMoveConstruct(BytePointer(data_), other.data_, other.size_);
+      std::swap(size_, other.size_);
+    }
     return *this;
   }
   ~FixedVector() { FixedVectorBase<T>::clear(); }
@@ -301,29 +310,26 @@ class FixedVector : public FixedVectorBase<T> {
 
 // Vector with heap memory allocation
 template <typename T>
-class FixedVector<T, 0> : public FixedVectorBase<T> {
+class FixedVector<T, kFixedVectorHeap> : public FixedVectorBase<T> {
  public:
-  using Error = typename FixedVectorBase<T>::Error;
-
   template<typename U>
   using Expected = typename FixedVectorBase<T>::template Expected<U>;
-  using FixedVectorBase<T>::Success;
 
-  constexpr FixedVector() { reset(); }
+  constexpr FixedVector() = default;
   constexpr FixedVector(const FixedVector& other) = delete;
   constexpr FixedVector(FixedVector&& other) { *this = std::move(other); }
   constexpr FixedVector& operator=(const FixedVector& other) = delete;
   constexpr FixedVector& operator=(FixedVector&& other) {
-    data_ = other.data_;
-    capacity_ = other.capacity_;
-    size_ = other.size_;
-    other.reset();
+    if (this != &other) {
+      std::swap(data_, other.data_);
+      std::swap(capacity_, other.capacity_);
+      std::swap(size_, other.size_);
+    }
     return *this;
   }
   ~FixedVector() {
     FixedVectorBase<T>::clear();
     DeallocateArray<T>(data_);
-    reset();
   }
 
   // Copies the contents of the given vector
@@ -336,7 +342,7 @@ class FixedVector<T, 0> : public FixedVectorBase<T> {
     FixedVectorBase<T>::clear();
     size_ = other.size_;
     ArrayCopyConstruct(BytePointer(data_), other.data_, size_);
-    return Success;
+    return kSuccess;
   }
 
   // Allocates memory to hold the specified number of elements
@@ -351,7 +357,7 @@ class FixedVector<T, 0> : public FixedVectorBase<T> {
       data_ = data;
       capacity_ = capacity;
     }
-    return Success;
+    return kSuccess;
   }
 
   // Shrinks memory allocation to fit current number of elements
@@ -366,20 +372,15 @@ class FixedVector<T, 0> : public FixedVectorBase<T> {
       data_ = data;
       capacity_ = size_;
     }
-    return Success;
+    return kSuccess;
   }
 
  private:
+  using Error = typename FixedVectorBase<T>::Error;
+  using FixedVectorBase<T>::kSuccess;
   using FixedVectorBase<T>::data_;
   using FixedVectorBase<T>::capacity_;
   using FixedVectorBase<T>::size_;
-
-  // Resets class members to default values
-  constexpr void reset() {
-    data_ = nullptr;
-    capacity_ = 0;
-    size_ = 0;
-  }
 };
 
 }  // namespace nvidia

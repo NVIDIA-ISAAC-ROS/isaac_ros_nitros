@@ -1,12 +1,19 @@
-/*
-Copyright (c) 2020-2023, NVIDIA CORPORATION. All rights reserved.
-
-NVIDIA CORPORATION and its licensors retain all intellectual property
-and proprietary rights in and to this software, related documentation
-and any modifications thereto. Any use, reproduction, disclosure or
-distribution of this software and related documentation without an express
-license agreement from NVIDIA CORPORATION is strictly prohibited.
-*/
+// SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
+// Copyright (c) 2020-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
+// SPDX-License-Identifier: Apache-2.0
 #pragma once
 
 #include <shared_mutex>
@@ -73,7 +80,7 @@ class PoseTreeEdgeHistory {
   // Helper structure to store the pose at a given time on the edge.
   struct TimedPose {
     // 3D pose that transforms the lhs frame into the rhs frame.
-    ::isaac::Pose3d pose;
+    ::nvidia::isaac::Pose3d pose;
     // Time of the pose. Needs to be strictly increasing.
     double time;
     // Version ID of the pose. Needs to be strictly increasing.
@@ -96,7 +103,7 @@ class PoseTreeEdgeHistory {
   // returned, otherwise if a pose already exist and `time` or `version` <= pose.time/version then
   // Error::kOutOfOrder is returned. Otherwise it will succeed, and if the history already
   // contained maximum_size_ element, then the oldest pose will be forgotten.
-  Expected<void> set(double time, const ::isaac::Pose3d& pose, version_t version);
+  Expected<void> set(double time, const ::nvidia::isaac::Pose3d& pose, version_t version);
 
   // Returns the TimedPose at a given position. If index is negative Error::kInvalidArgument will be
   // returned, and if index >= size, then Error::kOutOfRange will be returned.
@@ -105,7 +112,7 @@ class PoseTreeEdgeHistory {
   // Returns the Pose3d at a given time using the given version of the PoseTree.
   // If no pose existed at the given time, Error::kFramesNotLinked will be returned.
   // The desired method can be provided, for kExtrapolateLinearly, at least two poses are required.
-  Expected<::isaac::Pose3d> get(double time, AccessMethod method, version_t version) const;
+  Expected<::nvidia::isaac::Pose3d> get(double time, AccessMethod method, version_t version) const;
 
   // Disconnects a frame at a given time.
   Expected<void> disconnect(double time, version_t version);

@@ -1,19 +1,19 @@
-/*
- * SPDX-FileCopyrightText: Copyright (c) 2021 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
- * SPDX-License-Identifier: Apache-2.0
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
+// Copyright (c) 2021-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
+// SPDX-License-Identifier: Apache-2.0
 #ifndef NVIDIA_GXF_COMMON_FIXED_STRING_HPP_
 #define NVIDIA_GXF_COMMON_FIXED_STRING_HPP_
 
@@ -31,6 +31,7 @@ namespace nvidia {
 template <size_t N>
 class FixedString {
  public:
+  // Use STL naming convension for compatibility with STL algorithms
   using value_type             = char;
   using size_type              = size_t;
   using const_iterator         = ConstRandomAccessIterator<FixedString>;
@@ -53,8 +54,6 @@ class FixedString {
   // Expected type which uses class specific errors
   template <typename U>
   using Expected = Expected<U, Error>;
-  // Special value for returning a success
-  const Expected<void> Success{};
 
   // Constructors
   constexpr FixedString() { clear(); }
@@ -154,7 +153,7 @@ class FixedString {
     std::memcpy(&data_[size_], str, length);
     size_ += length;
     data_[size_] = '\0';
-    return Success;
+    return kSuccess;
   }
 
   // Appends a character array to the end of the string
@@ -216,6 +215,9 @@ class FixedString {
   static constexpr size_t kCapacity = N + 1;
   // Maximum length of the string
   static constexpr size_t kMaxSize = N;
+
+  // Special value for returning a success
+  const Expected<void> kSuccess{};
 
   // String length
   size_t size_;

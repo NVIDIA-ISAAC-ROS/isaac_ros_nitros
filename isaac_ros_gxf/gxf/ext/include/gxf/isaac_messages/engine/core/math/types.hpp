@@ -1,16 +1,26 @@
-/*
-Copyright (c) 2018, NVIDIA CORPORATION. All rights reserved.
-
-NVIDIA CORPORATION and its licensors retain all intellectual property
-and proprietary rights in and to this software, related documentation
-and any modifications thereto. Any use, reproduction, disclosure or
-distribution of this software and related documentation without an express
-license agreement from NVIDIA CORPORATION is strictly prohibited.
-*/
+// SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
+// Copyright (c) 2018-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
+// SPDX-License-Identifier: Apache-2.0
 #pragma once
 
 #include <Eigen/Eigen>
 
+#include "engine/core/math/macros.hpp"
+
+namespace nvidia {
 namespace isaac {
 
 template <typename K, int N, int M>
@@ -123,17 +133,17 @@ using Quaternionf = Quaternion<float>;
 
 // Helper function to compute the sum of two quaternions
 template <typename K>
-Quaternion<K> operator+(const Quaternion<K>& lhs, const Quaternion<K>& rhs) {
+CUDA_BOTH Quaternion<K> operator+(const Quaternion<K>& lhs, const Quaternion<K>& rhs) {
   return Quaternion<K>(lhs.coeffs() + rhs.coeffs());
 }
 // Helper function to compute the difference of two quaternions
 template <typename K>
-Quaternion<K> operator-(const Quaternion<K>& lhs, const Quaternion<K>& rhs) {
+CUDA_BOTH Quaternion<K> operator-(const Quaternion<K>& lhs, const Quaternion<K>& rhs) {
   return Quaternion<K>(lhs.coeffs() - rhs.coeffs());
 }
 // Unary - operator for a quaternion
 template <typename K>
-Quaternion<K> operator-(const Quaternion<K>& q) {
+CUDA_BOTH Quaternion<K> operator-(const Quaternion<K>& q) {
   return Quaternion<K>(-q.coeffs());
 }
 
@@ -182,7 +192,7 @@ using EigenRowVectorConstView = Eigen::Map<const Eigen::Matrix<K, 1, Cols, Eigen
 
 // Creates a Vector from an initializer list
 template <typename K, size_t N>
-Vector<K, N> MakeVector(const K (&elements)[N]) {
+CUDA_BOTH Vector<K, N> MakeVector(const K (&elements)[N]) {
   Vector<K, N> result;
   for (size_t i = 0; i < N; i++) {
     result[i] = elements[i];
@@ -191,3 +201,4 @@ Vector<K, N> MakeVector(const K (&elements)[N]) {
 }
 
 }  // namespace isaac
+}  // namespace nvidia

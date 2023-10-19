@@ -1,19 +1,19 @@
-/*
- * SPDX-FileCopyrightText: Copyright (c) 2021-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
- * SPDX-License-Identifier: Apache-2.0
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
+// Copyright (c) 2021-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
+// SPDX-License-Identifier: Apache-2.0
 #ifndef NVIDIA_GXF_CORE_GXF_H_
 #define NVIDIA_GXF_CORE_GXF_H_
 
@@ -96,7 +96,14 @@ typedef enum {
   GXF_NOT_FINISHED,
 
   GXF_HTTP_GET_FAILURE,
-  GXF_HTTP_POST_FAILURE
+  GXF_HTTP_POST_FAILURE,
+
+  GXF_ENTITY_GROUP_NOT_FOUND,
+  GXF_RESOURCE_NOT_INITIALIZED,
+  GXF_RESOURCE_NOT_FOUND,
+
+  GXF_CONNECTION_BROKEN,
+  GXF_CONNECTION_ATTEMPTS_EXCEEDED
 } gxf_result_t;
 
 /// @brief Gets a string describing an GXF error code.
@@ -159,7 +166,7 @@ typedef void* gxf_context_t;
 #define kNullContext nullptr
 
 /// @brief GXF Core Version
-#define kGxfCoreVersion "2.5.0"
+#define kGxfCoreVersion "3.0.0"
 
 /// @brief Creates a new GXF context
 ///
@@ -248,15 +255,13 @@ gxf_result_t GxfRegisterComponent(gxf_context_t context, gxf_tid_t tid, const ch
 /// @brief Maximum number of entities in a context
 #define kMaxEntities 1024
 
-// ATTENTION! there are two definitions of entity status and one of them is
-// inside entity executor.
-// This is error prone and even worse than using generic types such as an integer.
+/// @brief various lifecycle states of an entity
 typedef enum {
   GXF_ENTITY_STATUS_NOT_STARTED = 0,
   GXF_ENTITY_STATUS_START_PENDING,
   GXF_ENTITY_STATUS_STARTED,
   GXF_ENTITY_STATUS_TICK_PENDING,
-  GXF_ENTITY_STATUS_TIKCING,
+  GXF_ENTITY_STATUS_TICKING,
   GXF_ENTITY_STATUS_IDLE,
   GXF_ENTITY_STATUS_STOP_PENDING,
   GXF_ENTITY_MAX
@@ -417,14 +422,14 @@ gxf_result_t GxfEntityEventNotify(gxf_context_t context, gxf_uid_t eid);
 // --  Components  ---------------------------------------------------------------------------------
 
 /// @brief Maximum number of components in an entity or extension
-#define kMaxComponents 1024
+#define kMaxComponents 10240
 
 /// @brief Gets the GXF unique type ID (TID) of a component
 ///
 /// Get the unique type ID which was used to register the component with GXF. The function expects
 /// the fully qualified C++ type name of the component including namespaces.
 ///
-/// Example of a valid component type name: "nvidia::gxf::test::PingTx"
+/// Example of a valid component type name: "nvidia::gxf::PingTx"
 ///
 /// @param context A valid GXF context
 /// @param name The fully qualified C++ type name of the component
@@ -585,6 +590,9 @@ typedef uint32_t gxf_parameter_flags_t;
 // Sets a 64-bit floating point parameter
 gxf_result_t GxfParameterSetFloat64(gxf_context_t context, gxf_uid_t uid, const char* key,
                                     double value);
+// Sets a 32-bit floating point parameter
+gxf_result_t GxfParameterSetFloat32(gxf_context_t context, gxf_uid_t uid, const char* key,
+                                    float value);
 // Sets a 64-bit signed integer parameter
 gxf_result_t GxfParameterSetInt64(gxf_context_t context, gxf_uid_t uid, const char* key,
                                   int64_t value);
@@ -658,6 +666,10 @@ gxf_result_t GxfParameterSet2DInt32Vector(gxf_context_t context, gxf_uid_t uid, 
 gxf_result_t GxfParameterSetFromYamlNode(gxf_context_t context, gxf_uid_t uid, const char* key,
                                          void* yaml_node, const char* prefix);
 
+// Sets a FilePath parameter
+gxf_result_t GxfParameterSetPath(gxf_context_t context, gxf_uid_t uid, const char* key,
+                                const char* value);
+
 // Gets a parameter as a YAML node. The YAML node pointer should be a type of 'YAML::Node*'.
 gxf_result_t GxfParameterGetAsYamlNode(gxf_context_t context, gxf_uid_t uid, const char* key,
                                        void* yaml_node);
@@ -665,6 +677,9 @@ gxf_result_t GxfParameterGetAsYamlNode(gxf_context_t context, gxf_uid_t uid, con
 // Gets a 64-bit floating point parameter
 gxf_result_t GxfParameterGetFloat64(gxf_context_t context, gxf_uid_t uid, const char* key,
                                     double* value);
+// Gets a 32-bit floating point parameter
+gxf_result_t GxfParameterGetFloat32(gxf_context_t context, gxf_uid_t uid, const char* key,
+                                    float* value);
 // Gets a 64-bit signed integer parameter
 gxf_result_t GxfParameterGetInt64(gxf_context_t context, gxf_uid_t uid, const char* key,
                                   int64_t* value);
@@ -789,7 +804,9 @@ gxf_result_t GxfGraphLoadFile(gxf_context_t context, const char* filename,
 gxf_result_t GxfGraphLoadFileExtended(gxf_context_t context, const char* filename,
                                       const char* entity_prefix,
                                       const char* parameters_override[] = nullptr,
-                                      const uint32_t num_overrides = 0);
+                                      const uint32_t num_overrides = 0,
+                                      gxf_uid_t parent_eid = kNullUid,
+                                      void* prerequisites = nullptr);
 
 // Saves a list of entities to a YAML file.
 gxf_result_t GxfGraphSaveToFile(gxf_context_t context, const char* filename);

@@ -1,12 +1,19 @@
-/*
-Copyright (c) 2022, NVIDIA CORPORATION. All rights reserved.
-
-NVIDIA CORPORATION and its licensors retain all intellectual property
-and proprietary rights in and to this software, related documentation
-and any modifications thereto. Any use, reproduction, disclosure or
-distribution of this software and related documentation without an express
-license agreement from NVIDIA CORPORATION is strictly prohibited.
-*/
+// SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
+// Copyright (c) 2022-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
+// SPDX-License-Identifier: Apache-2.0
 
 #ifndef ISAAC_ROS_NITROS_DISPARITY_IMAGE_TYPE__NITROS_DISPARITY_IMAGE_HPP_
 #define ISAAC_ROS_NITROS_DISPARITY_IMAGE_TYPE__NITROS_DISPARITY_IMAGE_HPP_
@@ -36,12 +43,6 @@ namespace nitros
 struct NitrosDisparityImage;
 
 // Formats
-struct nitros_disparity_image_bgr8_t
-{
-  using MsgT = NitrosDisparityImage;
-  static const inline std::string supported_type_name = "nitros_disparity_image_bgr8";
-};
-
 struct nitros_disparity_image_32FC1_t
 {
   using MsgT = NitrosDisparityImage;
@@ -52,13 +53,22 @@ struct nitros_disparity_image_32FC1_t
 NITROS_TYPE_FACTORY_BEGIN(NitrosDisparityImage)
 // Supported data formats
 NITROS_FORMAT_FACTORY_BEGIN()
-NITROS_FORMAT_ADD(nitros_disparity_image_bgr8_t)
 NITROS_FORMAT_ADD(nitros_disparity_image_32FC1_t)
 NITROS_FORMAT_FACTORY_END()
 // Required extensions
 NITROS_TYPE_EXTENSION_FACTORY_BEGIN()
 NITROS_TYPE_EXTENSION_ADD("isaac_ros_gxf", "gxf/lib/std/libgxf_std.so")
 NITROS_TYPE_EXTENSION_ADD("isaac_ros_gxf", "gxf/lib/multimedia/libgxf_multimedia.so")
+// for nvidia::gxf::ComponentSerializer
+NITROS_TYPE_EXTENSION_ADD("isaac_ros_gxf", "gxf/lib/serialization/libgxf_serialization.so")
+// for nvidia::isaac::StringProvider
+NITROS_TYPE_EXTENSION_ADD("isaac_ros_gxf", "gxf/lib/libgxf_gxf_helpers.so")
+// for nvidia::isaac::SightReceiver
+NITROS_TYPE_EXTENSION_ADD("isaac_ros_gxf", "gxf/lib/libgxf_sight.so")
+// for nvidia::isaac::PoseTree
+NITROS_TYPE_EXTENSION_ADD("isaac_ros_gxf", "gxf/lib/libgxf_atlas.so")
+// for nvidia::isaac::PoseFrameUid
+NITROS_TYPE_EXTENSION_ADD("isaac_ros_gxf", "gxf/lib/libgxf_isaac_messages.so")
 NITROS_TYPE_EXTENSION_FACTORY_END()
 NITROS_TYPE_FACTORY_END()
 

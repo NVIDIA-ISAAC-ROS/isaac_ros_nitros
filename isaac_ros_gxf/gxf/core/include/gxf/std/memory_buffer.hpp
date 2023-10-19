@@ -1,19 +1,19 @@
-/*
- * SPDX-FileCopyrightText: Copyright (c) 2020 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
- * SPDX-License-Identifier: Apache-2.0
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
+// Copyright (c) 2020-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
+// SPDX-License-Identifier: Apache-2.0
 #ifndef NVIDIA_GXF_STD_MEMORY_BUFFER_HPP_
 #define NVIDIA_GXF_STD_MEMORY_BUFFER_HPP_
 
@@ -76,8 +76,9 @@ class MemoryBuffer {
 
     const auto maybe = allocator->allocate(size, storage_type);
     if (!maybe) {
-      GXF_LOG_ERROR("%s Failed to allocate %d size of memory of type %d. Error code: %s",
-                      allocator->name(), size, storage_type, GxfResultStr(maybe.error()));
+      GXF_LOG_ERROR("%s Failed to allocate %ld size of memory of type %d. Error code: %s",
+                    allocator->name(), size, static_cast<int32_t>(storage_type),
+                    GxfResultStr(maybe.error()));
       return ForwardError(maybe);
     }
 

@@ -1,23 +1,24 @@
-/*
- * SPDX-FileCopyrightText: Copyright (c) 2021 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
- * SPDX-License-Identifier: Apache-2.0
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
+// Copyright (c) 2021-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
+// SPDX-License-Identifier: Apache-2.0
 #ifndef NVIDIA_GXF_SERIALIZATION_ENDPOINT_HPP_
 #define NVIDIA_GXF_SERIALIZATION_ENDPOINT_HPP_
 
 #include "gxf/core/component.hpp"
+#include "gxf/std/allocator.hpp"
 
 namespace nvidia {
 namespace gxf {
@@ -35,12 +36,17 @@ class Endpoint : public Component {
   virtual gxf_result_t write_abi(const void* data, size_t size, size_t* bytes_written) = 0;
   // Reads data from the endpoint and returns the number of bytes read
   virtual gxf_result_t read_abi(void* data, size_t size, size_t* bytes_read) = 0;
+  // Writes pointer to the data and size of the data to a vector
+  virtual gxf_result_t write_ptr_abi(const void* pointer, size_t size, MemoryStorageType type) {
+    return GXF_NOT_IMPLEMENTED;
+  }
 
   // C++ API wrappers
   bool isWriteAvailable();
   bool isReadAvailable();
   Expected<size_t> write(const void* data, size_t size);
   Expected<size_t> read(void* data, size_t size);
+  Expected<void> write_ptr(const void* pointer, size_t size, MemoryStorageType type);
 
   // Writes an object of type T to the endpoint
   template <typename T>

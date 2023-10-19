@@ -1,12 +1,19 @@
-/*
-Copyright (c) 2018-2021, NVIDIA CORPORATION. All rights reserved.
-
-NVIDIA CORPORATION and its licensors retain all intellectual property
-and proprietary rights in and to this software, related documentation
-and any modifications thereto. Any use, reproduction, disclosure or
-distribution of this software and related documentation without an express
-license agreement from NVIDIA CORPORATION is strictly prohibited.
-*/
+// SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
+// Copyright (c) 2018-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
+// SPDX-License-Identifier: Apache-2.0
 #pragma once
 
 #include <cstdarg>
@@ -15,20 +22,21 @@ license agreement from NVIDIA CORPORATION is strictly prohibited.
 
 // Logs a debug message
 #define LOG_DEBUG(...) \
-  ::isaac::logger::Log(__FILE__, __LINE__, ::isaac::logger::Severity::DEBUG, __VA_ARGS__)
+  ::nvidia::isaac::logger::Log(__FILE__, __LINE__, ::nvidia::isaac::logger::Severity::DEBUG, __VA_ARGS__)
 
 // Logs an informational message
 #define LOG_INFO(...) \
-  ::isaac::logger::Log(__FILE__, __LINE__, ::isaac::logger::Severity::INFO, __VA_ARGS__)
+  ::nvidia::isaac::logger::Log(__FILE__, __LINE__, ::nvidia::isaac::logger::Severity::INFO, __VA_ARGS__)
 
 // Logs a warning
 #define LOG_WARNING(...) \
-  ::isaac::logger::Log(__FILE__, __LINE__, ::isaac::logger::Severity::WARNING, __VA_ARGS__)
+  ::nvidia::isaac::logger::Log(__FILE__, __LINE__, ::nvidia::isaac::logger::Severity::WARNING, __VA_ARGS__)
 
 // Logs an error
 #define LOG_ERROR(...) \
-  ::isaac::logger::Log(__FILE__, __LINE__, ::isaac::logger::Severity::ERROR, __VA_ARGS__)
+  ::nvidia::isaac::logger::Log(__FILE__, __LINE__, ::nvidia::isaac::logger::Severity::ERROR, __VA_ARGS__)
 
+namespace nvidia {
 namespace isaac {
 namespace logger {
 
@@ -81,3 +89,4 @@ struct SeverityContainer {
 
 }  // namespace logger
 }  // namespace isaac
+}  // namespace nvidia

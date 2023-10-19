@@ -1,12 +1,19 @@
-/*
-Copyright (c) 2020-2022, NVIDIA CORPORATION. All rights reserved.
-
-NVIDIA CORPORATION and its licensors retain all intellectual property
-and proprietary rights in and to this software, related documentation
-and any modifications thereto. Any use, reproduction, disclosure or
-distribution of this software and related documentation without an express
-license agreement from NVIDIA CORPORATION is strictly prohibited.
-*/
+// SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
+// Copyright (c) 2020-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
+// SPDX-License-Identifier: Apache-2.0
 
 #ifndef NVIDIA_GXF_COMMON_UNIQUE_INDEX_MAP_HPP_
 #define NVIDIA_GXF_COMMON_UNIQUE_INDEX_MAP_HPP_
@@ -61,6 +68,7 @@ class UniqueIndexMap {
 
   UniqueIndexMap<T>& operator=(const UniqueIndexMap<T>& other) = delete;
   UniqueIndexMap<T>& operator=(UniqueIndexMap<T>&& other) {
+    deinitialize();
     uids_ = other.uids_;
     data_ = other.data_;
     capacity_ = other.capacity_;
@@ -72,6 +80,11 @@ class UniqueIndexMap {
   }
 
   ~UniqueIndexMap() {
+    deinitialize();
+  }
+
+  // Deallocates the memory allocated in initialize
+  void deinitialize() {
     for (uint64_t i = 0; i < capacity_; ++i) {
       if (GetIndex(uids_[i]) == i) {
         data_[i].~T();
@@ -80,6 +93,7 @@ class UniqueIndexMap {
 
     delete[] uids_;
     ::operator delete(data_);
+    reset_values();
   }
 
   // Allocate memory up to the provided capacity and initialize values for implicit free list.

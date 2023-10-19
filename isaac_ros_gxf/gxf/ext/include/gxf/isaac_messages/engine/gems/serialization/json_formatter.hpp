@@ -1,12 +1,19 @@
-/*
-Copyright (c) 2018, NVIDIA CORPORATION. All rights reserved.
-
-NVIDIA CORPORATION and its licensors retain all intellectual property
-and proprietary rights in and to this software, related documentation
-and any modifications thereto. Any use, reproduction, disclosure or
-distribution of this software and related documentation without an express
-license agreement from NVIDIA CORPORATION is strictly prohibited.
-*/
+// SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
+// Copyright (c) 2018-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
+// SPDX-License-Identifier: Apache-2.0
 #pragma once
 
 #include <array>
@@ -28,6 +35,7 @@ license agreement from NVIDIA CORPORATION is strictly prohibited.
 #include "engine/gems/geometry/n_sphere.hpp"
 #include "engine/gems/serialization/json.hpp"
 
+namespace nvidia {
 namespace isaac {
 using Json = nlohmann::json;
 
@@ -45,11 +53,15 @@ void Set(Json& json, T value);
 // object, or if the type does not match the desired type nullopt will be returned.
 template <typename T>
 std::optional<T> TryGetFromMap(const Json& json, const std::string& key) {
-  const auto it = json.find(key);
-  if (it == json.end()) {
+  try {
+    const auto it = json.find(key);
+    if (it == json.end()) {
+      return std::nullopt;
+    } else {
+      return TryGet<T>(*it);
+    }
+  } catch (...) {
     return std::nullopt;
-  } else {
-    return TryGet<T>(*it);
   }
 }
 
@@ -95,13 +107,13 @@ namespace json_formatter_details {
 template <typename T>
 struct JsonSerializer {
   static std::optional<T> TryGet(const Json& json) {
-    T x;
     try {
+      T x;
       from_json(json, x);
+      return std::move(x);
     } catch(...) {
       return std::nullopt;
     }
-    return std::move(x);
   }
   static void Set(Json& json, T value) {
     to_json(json, value);
@@ -176,7 +188,7 @@ struct JsonSerializer<Vector<K, N>> {
     }
     Vector<K, N> result(json_size);
     for (int i = 0; i < json_size; i++) {
-      auto maybe = ::isaac::serialization::TryGet<K>(json[i]);
+      auto maybe = ::nvidia::isaac::serialization::TryGet<K>(json[i]);
       if (!maybe) {
         return std::nullopt;
       }
@@ -208,7 +220,7 @@ struct JsonSerializer<std::vector<T>> {
     std::vector<T> result;
     result.reserve(size);
     for (size_t i = 0; i < size; i++) {
-      auto maybe = ::isaac::serialization::TryGet<T>(json[i]);
+      auto maybe = ::nvidia::isaac::serialization::TryGet<T>(json[i]);
       if (!maybe) {
         return std::nullopt;
       }
@@ -220,7 +232,7 @@ struct JsonSerializer<std::vector<T>> {
     json = Json::array();
     for (const auto& v : value) {
       Json vjson;
-      ::isaac::serialization::Set(vjson, v);
+      ::nvidia::isaac::serialization::Set(vjson, v);
       json.push_back(vjson);
     }
   }
@@ -238,7 +250,7 @@ struct JsonSerializer<std::array<T, N>> {
     }
     std::array<T, N> result;
     for (size_t i = 0; i < N; i++) {
-      auto maybe = ::isaac::serialization::TryGet<T>(json[i]);
+      auto maybe = ::nvidia::isaac::serialization::TryGet<T>(json[i]);
       if (!maybe) {
         return std::nullopt;
       }
@@ -251,7 +263,7 @@ struct JsonSerializer<std::array<T, N>> {
     // TODO reserve
     for (const auto& v : value) {
       Json vjson;
-      ::isaac::serialization::Set(vjson, v);
+      ::nvidia::isaac::serialization::Set(vjson, v);
       json.push_back(vjson);
     }
   }
@@ -267,11 +279,11 @@ struct JsonSerializer<std::pair<T1, T2>> {
     if (json.size() != 2) {
       return std::nullopt;
     }
-    auto maybe1 = ::isaac::serialization::TryGet<T1>(json[0]);
+    auto maybe1 = ::nvidia::isaac::serialization::TryGet<T1>(json[0]);
     if (!maybe1) {
       return std::nullopt;
     }
-    auto maybe2 = ::isaac::serialization::TryGet<T2>(json[1]);
+    auto maybe2 = ::nvidia::isaac::serialization::TryGet<T2>(json[1]);
     if (!maybe2) {
       return std::nullopt;
     }
@@ -279,9 +291,9 @@ struct JsonSerializer<std::pair<T1, T2>> {
   }
   static void Set(Json& json, const std::pair<T1, T2>& value) {
     Json value1;
-    ::isaac::serialization::Set(value1, value.first);
+    ::nvidia::isaac::serialization::Set(value1, value.first);
     Json value2;
-    ::isaac::serialization::Set(value2, value.second);
+    ::nvidia::isaac::serialization::Set(value2, value.second);
     json = Json::array({value1, value2});
   }
 };
@@ -297,7 +309,7 @@ struct JsonSerializer<std::map<std::string, T>> {
     }
     std::map<std::string, T> result;
     for (const auto& val : json.items()) {
-      auto maybe = ::isaac::serialization::TryGet<T>(val.value());
+      auto maybe = ::nvidia::isaac::serialization::TryGet<T>(val.value());
       if (!maybe) {
         return std::nullopt;
       }
@@ -455,7 +467,7 @@ struct JsonSerializer<geometry::NSphere<K, N>> {
     return std::nullopt;
   }
   static void Set(Json& json, const Sphere_t& value) {
-    ::isaac::serialization::Set(json, std::pair<Vector_t, Scalar_t>{value.center, value.radius});
+    ::nvidia::isaac::serialization::Set(json, std::pair<Vector_t, Scalar_t>{value.center, value.radius});
   }
 };
 
@@ -534,7 +546,7 @@ struct JsonSerializer<geometry::NCuboid<K, N>> {
     for (size_t dim = 0; dim < N; dim++) {
       bounds[dim] = Vector2K(value.min()[dim], value.max()[dim]);
     }
-    ::isaac::serialization::Set(json, ArrayNVector2K{bounds});
+    ::nvidia::isaac::serialization::Set(json, ArrayNVector2K{bounds});
   }
 };
 
@@ -579,7 +591,7 @@ struct JsonSerializer<geometry::LineSegment<K, N>> {
     return std::nullopt;
   }
   static void Set(Json& json, const LineSegment_t& value) {
-    ::isaac::serialization::Set(json, std::pair<Vector_t, Vector_t>{value.a(), value.b()});
+    ::nvidia::isaac::serialization::Set(json, std::pair<Vector_t, Vector_t>{value.a(), value.b()});
   }
 };
 
@@ -730,19 +742,20 @@ void Set(Json& json, T value) {
 
 }  // namespace serialization
 }  // namespace isaac
+}  // namespace nvidia
 
 namespace Eigen {
 
 // Conversion from Eigen types like Vector2d to Json
 template <typename T>
 void to_json(nlohmann::json& json, const T& value) {
-  ::isaac::serialization::Set(json, value);
+  ::nvidia::isaac::serialization::Set(json, value);
 }
 
 // Conversion from Json to Eigen types like Vector2d
 template <typename T>
 void from_json(const nlohmann::json& json, T& value) {
-  if (auto maybe = ::isaac::serialization::TryGet<T>(json)) {
+  if (auto maybe = ::nvidia::isaac::serialization::TryGet<T>(json)) {
     value = *maybe;
   }
 }

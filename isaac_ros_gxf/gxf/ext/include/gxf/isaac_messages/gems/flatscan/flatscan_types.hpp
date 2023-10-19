@@ -1,16 +1,23 @@
-/*
-Copyright (c) 2021-2023, NVIDIA CORPORATION. All rights reserved.
-
-NVIDIA CORPORATION and its licensors retain all intellectual property
-and proprietary rights in and to this software, related documentation
-and any modifications thereto. Any use, reproduction, disclosure or
-distribution of this software and related documentation without an express
-license agreement from NVIDIA CORPORATION is strictly prohibited.
-*/
+// SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
+// Copyright (c) 2021-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
+// SPDX-License-Identifier: Apache-2.0
 #pragma once
 
 #include "gems/composite/composite_view.hpp"
-#include "packages/composite/gems/schema.hpp"
+#include "gems/composite/schema.hpp"
 
 namespace nvidia {
 namespace isaac {
@@ -34,15 +41,13 @@ struct FlatscanIndices {
   };
 };
 
-inline ::isaac::composite::Schema FlatscanCompositeSchema() {
-  return ::isaac::composite::Schema({
-      ::isaac::composite::Quantity::Scalar("angle", ::isaac::composite::Measure::kRotation),
-      ::isaac::composite::Quantity::Scalar("range_start", ::isaac::composite::Measure::kPosition),
-      ::isaac::composite::Quantity::Scalar("range_end", ::isaac::composite::Measure::kPosition),
-      ::isaac::composite::Quantity::Scalar(
-          "visibility_range", ::isaac::composite::Measure::kPosition),
-      ::isaac::composite::Quantity::Scalar(
-          "relative_time", ::isaac::composite::Measure::kTime),
+inline composite::Schema FlatscanCompositeSchema() {
+  return composite::Schema({
+      composite::Quantity::Scalar("angle", composite::Measure::kRotation),
+      composite::Quantity::Scalar("range_start", composite::Measure::kPosition),
+      composite::Quantity::Scalar("range_end", composite::Measure::kPosition),
+      composite::Quantity::Scalar("visibility_range", composite::Measure::kPosition),
+      composite::Quantity::Scalar("relative_time", composite::Measure::kTime),
   });
 }
 

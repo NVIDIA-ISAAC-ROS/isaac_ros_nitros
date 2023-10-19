@@ -1,12 +1,19 @@
-/**
- * Copyright (c) 2022, NVIDIA CORPORATION.  All rights reserved.
- *
- * NVIDIA CORPORATION and its licensors retain all intellectual property
- * and proprietary rights in and to this software, related documentation
- * and any modifications thereto.  Any use, reproduction, disclosure or
- * distribution of this software and related documentation without an express
- * license agreement from NVIDIA CORPORATION is strictly prohibited.
- */
+// SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
+// Copyright (c) 2022-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
+// SPDX-License-Identifier: Apache-2.0
 
 #include <dlfcn.h>
 
@@ -30,7 +37,7 @@ namespace nitros
 
 gxf_context_t NitrosContext::shared_context_ = nullptr;
 std::mutex NitrosContext::shared_context_mutex_;
-std::set<std::string> NitrosContext::loaded_extension_filenames_;
+std::set<std::string> NitrosContext::loaded_extension_file_paths_;
 
 std::vector<std::string> SplitStrings(const std::string & list_of_files)
 {
@@ -233,8 +240,8 @@ void NitrosContext::preLoadGraphSetParameter(
 {
   graph_param_override_string_list_.push_back(
     graph_namespace_ + "_" + entity_name +
-    "=" + component_name +
-    "=" + parameter_name +
+    "/" + component_name +
+    "/" + parameter_name +
     "=" + value);
 }
 
@@ -248,8 +255,9 @@ gxf_result_t NitrosContext::loadExtension(
   // As the underlying context is shared across multiple NitrosNodes, we only need to load
   // those extensions that have not been loaded. Loading same extensions twice will throw an
   // error and GxfLoadExtensions() will stop.
+  std::string extension_file_path = base_dir + "/" + extension;
   gxf_result_t code;
-  if (NitrosContext::loaded_extension_filenames_.count(extension) > 0) {
+  if (NitrosContext::loaded_extension_file_paths_.count(extension_file_path) > 0) {
     // This extension has been loaded before
     return GXF_SUCCESS;
   }
@@ -258,7 +266,6 @@ gxf_result_t NitrosContext::loadExtension(
     "[NitrosContext] Loading extension: %s", extension.c_str());
 
   // Set the log severity level for the extension
-  std::string extension_file_path = base_dir + "/" + extension;
   void * handle = dlopen(extension_file_path.c_str(), RTLD_LAZY);
   if (!handle) {
     RCLCPP_ERROR(
@@ -283,7 +290,7 @@ gxf_result_t NitrosContext::loadExtension(
   }
 
   // Actually load the extension
-  NitrosContext::loaded_extension_filenames_.insert(extension);
+  NitrosContext::loaded_extension_file_paths_.insert(extension_file_path);
   const char * extension_array[] = {extension.c_str()};
   const GxfLoadExtensionsInfo load_extension_info{
     extension_array, 1, nullptr, 0, base_dir.c_str()};
@@ -514,6 +521,35 @@ gxf_result_t NitrosContext::setParameterUInt16(
     RCLCPP_ERROR(
       get_logger(),
       "[NitrosContext] GxfParameterSetUInt16 Error: %s", GxfResultStr(code));
+    return code;
+  }
+  return GXF_SUCCESS;
+  // End Mutex: shared_context_mutex_
+}
+
+gxf_result_t NitrosContext::setParameterFloat32(
+  const std::string & entity_name,
+  const std::string & codelet_type,
+  const std::string & parameter_name,
+  const float parameter_value)
+{
+  // Mutex: shared_context_mutex_
+  const std::lock_guard<std::mutex> lock(NitrosContext::shared_context_mutex_);
+
+  gxf_result_t code;
+  gxf_uid_t cid;
+  code = getCid(entity_name, codelet_type, cid);
+  if (code != GXF_SUCCESS) {
+    RCLCPP_ERROR(
+      get_logger(),
+      "[NitrosContext] Failed to get CID for setting parameters");
+    return code;
+  }
+  code = GxfParameterSetFloat32(context_, cid, parameter_name.c_str(), parameter_value);
+  if (code != GXF_SUCCESS) {
+    RCLCPP_ERROR(
+      get_logger(),
+      "[NitrosContext] GxfParameterSetFloat32 Error: %s", GxfResultStr(code));
     return code;
   }
   return GXF_SUCCESS;

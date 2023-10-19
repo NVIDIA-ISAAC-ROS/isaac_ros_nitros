@@ -1,12 +1,19 @@
-/**
- * Copyright (c) 2022-2023, NVIDIA CORPORATION.  All rights reserved.
- *
- * NVIDIA CORPORATION and its licensors retain all intellectual property
- * and proprietary rights in and to this software, related documentation
- * and any modifications thereto.  Any use, reproduction, disclosure or
- * distribution of this software and related documentation without an express
- * license agreement from NVIDIA CORPORATION is strictly prohibited.
- */
+// SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
+// Copyright (c) 2022-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
+// SPDX-License-Identifier: Apache-2.0
 
 #include <ament_index_cpp/get_package_share_directory.hpp>
 
@@ -227,14 +234,14 @@ NitrosNode::NitrosNode(
 : Node("NitrosNode", options),
   gxf_io_group_info_list_(gxf_io_group_info_list),
   use_custom_io_group_info_list_(use_custom_io_group_info_list),
-  use_raw_graph_no_optimizer_(use_raw_graph_no_optimizer),
   config_map_(config_map),
   app_yaml_filename_(app_yaml_filename),
   extension_spec_preset_names_(extension_spec_preset_names),
   extension_spec_filenames_(extension_spec_filenames),
   generator_rule_filenames_(generator_rule_filenames),
   extensions_(extensions),
-  package_name_(package_name)
+  package_name_(package_name),
+  use_raw_graph_no_optimizer_(use_raw_graph_no_optimizer)
 {
   RCLCPP_INFO(get_logger(), "[NitrosNode] Initializing NitrosNode");
 
@@ -260,10 +267,10 @@ NitrosNode::NitrosNode(
       declare_parameter<int>("jitter_tolerance_us", 5000.0);
     // List of expected topic names
     std::vector<std::string> topics_name_list =
-      declare_parameter<std::vector<std::string>>("topics_list", {});
+      declare_parameter<std::vector<std::string>>("topics_list", std::vector<std::string>());
     // List of fps for each expected topic
     std::vector<double> expected_fps_list =
-      declare_parameter<std::vector<double>>("expected_fps_list", {});
+      declare_parameter<std::vector<double>>("expected_fps_list", std::vector<double>());
     if (topics_name_list.size() !=
       expected_fps_list.size())
     {
@@ -273,7 +280,7 @@ NitrosNode::NitrosNode(
       throw std::runtime_error(error_msg.str().c_str());
     }
     // Populate the topic_name -> expected time difference
-    for (int i = 0; i < topics_name_list.size(); i++) {
+    for (size_t i = 0; i < topics_name_list.size(); i++) {
       statistics_config_->topic_name_expected_dt_map[topics_name_list[i]] = 1000000 /
         expected_fps_list[i];
     }
@@ -284,6 +291,14 @@ NitrosNode::NitrosNode(
     static_cast<gxf_severity_t>(declare_parameter<uint16_t>(
       "extension_log_level",
       gxf_severity_t::GXF_SEVERITY_WARNING)));
+
+  // Data type negotiation duration
+  type_negotiation_duration_s_ =
+    declare_parameter<int>("type_negotiation_duration_s", 1);
+  RCLCPP_DEBUG(
+    get_logger(),
+    "[NitrosNode] Type negotiation duration (seconds) = %ld",
+    type_negotiation_duration_s_);
 
   if (use_raw_graph_no_optimizer_) {
     graph_namespace_ = "";
@@ -455,6 +470,40 @@ void NitrosNode::startNitrosNode()
     RCLCPP_INFO(get_logger(), "[NitrosNode] Use the given graph IO group info");
   }
 
+  // Print all the supported data formats
+  RCLCPP_DEBUG(get_logger().get_child("NitrosNode"), "Supported data format combinations:");
+  for (size_t group_index = 0; group_index < gxf_io_group_info_list_.size(); group_index++) {
+    RCLCPP_DEBUG(get_logger().get_child("NitrosNode"), "#%ld I/O group:", group_index + 1);
+    const auto & gxf_io_group = gxf_io_group_info_list_[group_index];
+    for (size_t combo_index = 0;
+      combo_index < gxf_io_group.supported_data_types.size();
+      combo_index++)
+    {
+      const auto & supported_data_type_map = gxf_io_group.supported_data_types[combo_index];
+      RCLCPP_DEBUG(
+        get_logger().get_child("NitrosNode"), "\t#%ld format combination:",
+        combo_index + 1);
+      // ingress ports
+      for (const auto & ingress_comp_info : gxf_io_group.ingress_infos) {
+        const std::string component_key =
+          gxf::optimizer::GenerateComponentKey(ingress_comp_info);
+        const std::string supported_format = supported_data_type_map.at(component_key);
+        RCLCPP_DEBUG(
+          get_logger().get_child("NitrosNode"), "\t\t[in]\t%s: %s",
+          component_key.c_str(), supported_format.c_str());
+      }
+      // egress ports
+      for (const auto & egress_comp_info : gxf_io_group.egress_infos) {
+        const std::string component_key =
+          gxf::optimizer::GenerateComponentKey(egress_comp_info);
+        const std::string supported_format = supported_data_type_map.at(component_key);
+        RCLCPP_DEBUG(
+          get_logger().get_child("NitrosNode"), "\t\t[out]\t%s: %s",
+          component_key.c_str(), supported_format.c_str());
+      }
+    }
+  }
+
   // Create publishers and subscribers from each GXF ingress-egress group
   RCLCPP_INFO(get_logger(), "[NitrosNode] Creating negotiated publishers/subscribers");
   for (const auto & gxf_io_group : gxf_io_group_info_list_) {
@@ -472,7 +521,7 @@ void NitrosNode::startNitrosNode()
 
   // Set the negotiation timer
   negotiation_timer_ = create_wall_timer(
-    std::chrono::seconds(1),
+    std::chrono::seconds(type_negotiation_duration_s_),
     [this]() -> void {
       negotiation_timer_->cancel();
       postNegotiationCallback();

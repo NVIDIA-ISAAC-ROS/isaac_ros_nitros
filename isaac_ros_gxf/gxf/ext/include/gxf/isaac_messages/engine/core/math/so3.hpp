@@ -1,17 +1,26 @@
-/*
-Copyright (c) 2018, NVIDIA CORPORATION. All rights reserved.
-
-NVIDIA CORPORATION and its licensors retain all intellectual property
-and proprietary rights in and to this software, related documentation
-and any modifications thereto. Any use, reproduction, disclosure or
-distribution of this software and related documentation without an express
-license agreement from NVIDIA CORPORATION is strictly prohibited.
-*/
+// SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
+// Copyright (c) 2018-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
+// SPDX-License-Identifier: Apache-2.0
 #pragma once
 
+#include "engine/core/math/macros.hpp"
 #include "engine/core/math/so2.hpp"
 #include "engine/core/math/types.hpp"
 
+namespace nvidia {
 namespace isaac {
 
 // Class for 3D rotation
@@ -26,9 +35,9 @@ class SO3 {
   SO3() {}
 
   // Return identity rotation
-  static SO3 Identity() { return SO3(Quaternion<K>::Identity()); }
+  CUDA_BOTH static SO3 Identity() { return SO3(Quaternion<K>::Identity()); }
   // Creates a rotation which rotates by around the given axes by the magnitude of the axis
-  static SO3 FromScaledAxis(const Vector3<K>& axis_angle) {
+  CUDA_BOTH static SO3 FromScaledAxis(const Vector3<K>& axis_angle) {
     const K norm = axis_angle.norm();
     if (IsAlmostZero(norm)) {
       return SO3::Identity();
@@ -37,46 +46,46 @@ class SO3 {
     }
   }
   // Creates a rotation which rotates by an angle around a given (not necessarily normalized) axis
-  static SO3 FromAxisAngle(const Vector3<K>& axis, K angle) {
+  CUDA_BOTH static SO3 FromAxisAngle(const Vector3<K>& axis, K angle) {
     return SO3(Quaternion<K>(Eigen::AngleAxis<K>(angle, axis.normalized())));
   }
-  static SO3 FromAngleAxis(K angle, const Vector3<K>& axis) {
+  CUDA_BOTH static SO3 FromAngleAxis(K angle, const Vector3<K>& axis) {
     return SO3(Quaternion<K>(Eigen::AngleAxis<K>(angle, axis.normalized())));
   }
   // Creates rotation from a (not necessarily normalized) quaternion
-  static SO3 FromQuaternion(const Quaternion<K>& quaternion) {
+  CUDA_BOTH static SO3 FromQuaternion(const Quaternion<K>& quaternion) {
     return SO3(quaternion.normalized());
   }
   // Creates rotation from a normalized quaternion
   // Note: This will assert if the quaternion does not have unit length.
-  static SO3 FromNormalizedQuaternion(const Quaternion<K>& quaternion) {
+  CUDA_BOTH static SO3 FromNormalizedQuaternion(const Quaternion<K>& quaternion) {
     ASSERT(IsAlmostEqualRelative(quaternion.squaredNorm(), K(1)),
            "Given cos/sin vector is not normalized: %lf", quaternion.norm());
     return SO3(quaternion);
   }
   // Creates a 3D rotation from a 2D rotation in the XY plane
-  static SO3 FromSO2XY(const SO2<K>& rotation) {
+  CUDA_BOTH static SO3 FromSO2XY(const SO2<K>& rotation) {
     return FromAxisAngle({K(0), K(0), K(1)}, rotation.angle());
   }
   // Creates rotation from a 3x3 rotation matrix
-  static SO3 FromMatrix(const Matrix<K, 3, 3>& matrix) {
-    return SO3(Quaternion<K>(matrix));
+  CUDA_BOTH static SO3 FromMatrix(const Matrix<K, 3, 3>& matrix) {
+    return SO3(Quaternion<K>(matrix).normalized());
   }
 
   // Returns the rotation axis
-  Vector3<K> axis() const { return quaternion_.coeffs().head(3).normalized(); }
+  CUDA_BOTH Vector3<K> axis() const { return quaternion_.coeffs().head(3).normalized(); }
   // Returns the angle of rotation around the axis
   // Note: This calls a trigonometric function.
-  K angle() const {
+  CUDA_BOTH K angle() const {
     return K(2) * std::atan2(quaternion_.coeffs().head(3).norm(), quaternion_.coeffs().w());
   }
   // Returns the quaternion representation of the rotation
-  const Quaternion<K>& quaternion() const { return quaternion_; }
+  CUDA_BOTH const Quaternion<K>& quaternion() const { return quaternion_; }
   // Returns the matrix representation of the rotation
-  Matrix3<K> matrix() const { return quaternion_.toRotationMatrix(); }
+  CUDA_BOTH Matrix3<K> matrix() const { return quaternion_.toRotationMatrix(); }
 
   // Returns the roll, pitch, yaw euler angles of the rotation
-  Vector3<K> eulerAnglesRPY() const {
+  CUDA_BOTH Vector3<K> eulerAnglesRPY() const {
     const Vector3d euler_angles = quaternion_.toRotationMatrix().eulerAngles(0, 1, 2);
     // Make sure the roll is in range [-Pi/2, Pi/2]
     if (std::abs(euler_angles[0]) > Pi<K> * K(0.5)) {
@@ -88,25 +97,25 @@ class SO3 {
   }
 
   // Returns the inverse rotation.
-  SO3 inverse() const {
+  CUDA_BOTH SO3 inverse() const {
     // conjugate == inverse iff quaternion_.norm() == 1
     return SO3(quaternion_.conjugate());
   }
 
   // Casts to a different type
   template <typename S, typename std::enable_if_t<!std::is_same<S, K>::value, int> = 0>
-  SO3<S> cast() const {
+  CUDA_BOTH SO3<S> cast() const {
     // We need to re-normalize in the new type
     return SO3<S>::FromQuaternion(quaternion().template cast<S>());
   }
   template <typename S, typename std::enable_if_t<std::is_same<S, K>::value, int> = 0>
-  const SO3& cast() const {
+  CUDA_BOTH const SO3& cast() const {
     // Nothing to do as the type does not change
     return *this;
   }
 
   // Converts to a 2D rotation in the XY plane
-  SO2<K> toSO2XY() const {
+  CUDA_BOTH SO2<K> toSO2XY() const {
     // 2D rotation matrix:
     //   cos(a)   -sin(a)
     //   sin(a)    cos(a)
@@ -127,11 +136,11 @@ class SO3 {
   }
 
   // Rotation composition
-  friend SO3 operator*(const SO3& lhs, const SO3& rhs) {
+  CUDA_BOTH friend SO3 operator*(const SO3& lhs, const SO3& rhs) {
     return FromQuaternion(lhs.quaternion_ * rhs.quaternion_);
   }
   // Rotates a vector 3D by the given rotation
-  friend Vector3<K> operator*(const SO3& rot, const Vector3<K>& vec) {
+  CUDA_BOTH friend Vector3<K> operator*(const SO3& rot, const Vector3<K>& vec) {
     // TODO: faster implementation
     return (rot.quaternion_ * Quaternion<K>(K(0), vec.x(), vec.y(), vec.z()) *
             rot.quaternion_.conjugate())
@@ -140,20 +149,20 @@ class SO3 {
   }
 
   // Create rotation from roll/pitch/yaw Euler angles
-  static SO3 FromEulerAnglesRPY(K roll_angle, K pitch_angle, K yaw_angle) {
+  CUDA_BOTH static SO3 FromEulerAnglesRPY(K roll_angle, K pitch_angle, K yaw_angle) {
     SO3 roll = SO3::FromAngleAxis(roll_angle, {K(1), K(0), K(0)});
     SO3 pitch = SO3::FromAngleAxis(pitch_angle, {K(0), K(1), K(0)});
     SO3 yaw = SO3::FromAngleAxis(yaw_angle, {K(0), K(0), K(1)});
     return roll * pitch * yaw;
   }
   // Create rotation from Euler angles in order (roll, pitch, yaw)
-  static SO3 FromEulerAnglesRPY(const Vector3d& roll_pitch_yaw) {
+  CUDA_BOTH static SO3 FromEulerAnglesRPY(const Vector3d& roll_pitch_yaw) {
     return FromEulerAnglesRPY(roll_pitch_yaw[0], roll_pitch_yaw[1], roll_pitch_yaw[2]);
   }
 
   // Computes the jacobian of the rotation of normal vector. Plane normal only has rotation
   // component.
-  Matrix<K, 3, 4> vectorRotationJacobian(const Vector3<K>& n) const {
+  CUDA_BOTH Matrix<K, 3, 4> vectorRotationJacobian(const Vector3<K>& n) const {
     // Ref: https://www.weizmann.ac.il/sci-tea/benari/sites/sci-tea.benari/files/uploads/
     // softwareAndLearningMaterials/quaternion-tutorial-2-0-1.pdf
     // Rotation Matrix in Quaternion (R):
@@ -192,3 +201,4 @@ using SO3d = SO3<double>;
 using SO3f = SO3<float>;
 
 }  // namespace isaac
+}  // namespace nvidia
