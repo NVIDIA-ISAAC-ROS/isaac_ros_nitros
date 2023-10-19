@@ -1,19 +1,19 @@
-/*
- * SPDX-FileCopyrightText: Copyright (c) 2021 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
- * SPDX-License-Identifier: Apache-2.0
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
+// Copyright (c) 2021-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
+// SPDX-License-Identifier: Apache-2.0
 
 #ifndef NVIDIA_GXF_MULTIMEDIA_VIDEO_HPP_
 #define NVIDIA_GXF_MULTIMEDIA_VIDEO_HPP_
@@ -41,6 +41,26 @@ static constexpr const uint16_t kGxfAlignValue = 256;
 // Align frame stride to kGxfAlignValue
 static constexpr uint32_t StrideAlign(uint32_t stride) {
   return (stride % kGxfAlignValue == 0) ? stride : ((stride / kGxfAlignValue + 1) * kGxfAlignValue);
+}
+
+// Compute strides for video buffer
+//
+// If stride is non zero, use it as it is
+// If stride is not set and align is enabled (default), use align(w * bytes)
+// If stride is not set and align is disabled, use (w * bytes)
+static constexpr uint32_t ComputeStrides(bool stride_align, uint32_t width,
+                                         uint32_t bytes_per_pixel,
+                                         uint32_t stride) {
+  if (stride != 0) {
+    // Use existing stride without alignment
+    return stride;
+  } else if (stride_align) {
+    // unset stride, align based on width
+    return StrideAlign(width * bytes_per_pixel);
+  } else {
+    // return unaligned buffer
+    return width * bytes_per_pixel;
+  }
 }
 
 // Round up to the closest even number
@@ -85,6 +105,18 @@ enum class VideoFormat : std::int64_t {
   GXF_VIDEO_FORMAT_B32_G32_R32,    // BGR - signed 32 bit multiplanar
   GXF_VIDEO_FORMAT_NV24,           // multi planar 4:4:4 YUV with interleaved UV
   GXF_VIDEO_FORMAT_NV24_ER,        // multi planar 4:4:4 YUV ER with interleaved UV
+  GXF_VIDEO_FORMAT_R8_G8_B8_D8,    // RGBD unsigned 8 bit multiplanar
+  GXF_VIDEO_FORMAT_R16_G16_B16_D16,  // RGBD unsigned 16 bit multiplanar
+  GXF_VIDEO_FORMAT_R32_G32_B32_D32,  // RGBD unsigned 32 bit multiplanar
+  GXF_VIDEO_FORMAT_RGBD8,         // RGBD 8 bit unsigned single plane
+  GXF_VIDEO_FORMAT_RGBD16,        // RGBD 16 bit unsigned single plane
+  GXF_VIDEO_FORMAT_RGBD32,        // RGBD 32 bit unsigned single plane
+  GXF_VIDEO_FORMAT_D32F,          // Depth 32 bit float single plane
+  GXF_VIDEO_FORMAT_D64F,          // Depth 64 bit float single plane
+  GXF_VIDEO_FORMAT_RAW16_RGGB,    // RGGB-16-16-16-16 single plane
+  GXF_VIDEO_FORMAT_RAW16_BGGR,    // BGGR-16-16-16-16 single plane
+  GXF_VIDEO_FORMAT_RAW16_GRBG,    // GRBG-16-16-16-16 single plane
+  GXF_VIDEO_FORMAT_RAW16_GBRG,    // GBRG-16-16-16-16 single plane
 };
 
 // Supported surface memory types
@@ -139,18 +171,31 @@ GXF_VIDEO_TYPE_TRAITS(GXF_VIDEO_FORMAT_R32_G32_B32);
 GXF_VIDEO_TYPE_TRAITS(GXF_VIDEO_FORMAT_B32_G32_R32);
 GXF_VIDEO_TYPE_TRAITS(GXF_VIDEO_FORMAT_NV24);
 GXF_VIDEO_TYPE_TRAITS(GXF_VIDEO_FORMAT_NV24_ER);
+GXF_VIDEO_TYPE_TRAITS(GXF_VIDEO_FORMAT_R8_G8_B8_D8);
+GXF_VIDEO_TYPE_TRAITS(GXF_VIDEO_FORMAT_R16_G16_B16_D16);
+GXF_VIDEO_TYPE_TRAITS(GXF_VIDEO_FORMAT_R32_G32_B32_D32);
+GXF_VIDEO_TYPE_TRAITS(GXF_VIDEO_FORMAT_RGBD8);
+GXF_VIDEO_TYPE_TRAITS(GXF_VIDEO_FORMAT_RGBD16);
+GXF_VIDEO_TYPE_TRAITS(GXF_VIDEO_FORMAT_RGBD32);
+GXF_VIDEO_TYPE_TRAITS(GXF_VIDEO_FORMAT_D32F);
+GXF_VIDEO_TYPE_TRAITS(GXF_VIDEO_FORMAT_D64F);
+GXF_VIDEO_TYPE_TRAITS(GXF_VIDEO_FORMAT_RAW16_RGGB);
+GXF_VIDEO_TYPE_TRAITS(GXF_VIDEO_FORMAT_RAW16_BGGR);
+GXF_VIDEO_TYPE_TRAITS(GXF_VIDEO_FORMAT_RAW16_GRBG);
+GXF_VIDEO_TYPE_TRAITS(GXF_VIDEO_FORMAT_RAW16_GBRG);
 
 // Struct to hold the information regarding a single color plane
 struct ColorPlane {
   std::string color_space;
-  uint8_t bytes_per_pixel;
-  int32_t stride;
+  uint8_t bytes_per_pixel = 0;
+  uint32_t stride = 0;
   uint32_t offset = 0;
   uint32_t width = 0;
   uint32_t height = 0;
   uint64_t size = 0;
 
-  ColorPlane(const char* c_space, uint8_t c_depth, int32_t c_stride = -1)
+  ColorPlane() {}
+  ColorPlane(const char* c_space, uint8_t c_depth, uint32_t c_stride = 0)
       : color_space(c_space), bytes_per_pixel(c_depth), stride(c_stride) {}
 };
 
@@ -158,9 +203,11 @@ struct ColorPlane {
 // for different color formats
 template <VideoFormat T, typename Enabler = void>
 struct VideoFormatSize {
-  uint64_t size(uint32_t width, uint32_t height) { return 0; }
+  uint64_t size(uint32_t width, uint32_t height,
+                bool stride_align = true) { return 0; }
 
-  std::vector<ColorPlane> getDefaultColorPlanes(uint32_t width, uint32_t height) { return {}; }
+  std::vector<ColorPlane> getDefaultColorPlanes(uint32_t width, uint32_t height,
+                                                bool stride_align = true) { return {}; }
 };
 
 //  Specifies YUV420 multi-planar variants
@@ -172,7 +219,8 @@ struct VideoFormatSize<T, std::enable_if_t<T == VideoFormat::GXF_VIDEO_FORMAT_YU
   std::array<ColorPlane, 3> default_yuv{ColorPlane("Y", 1), ColorPlane("U", 1), ColorPlane("V", 1)};
 
   uint64_t fillColorPlanes(uint32_t width, uint32_t height,
-                           std::array<ColorPlane, 3>& color_planes) {
+                           std::array<ColorPlane, 3>& color_planes,
+                           bool stride_align = true) {
     uint32_t widthEven = AlignToEvenDimension(width);
     uint32_t heightEven = AlignToEvenDimension(height);
     color_planes[0].width = widthEven;
@@ -185,13 +233,11 @@ struct VideoFormatSize<T, std::enable_if_t<T == VideoFormat::GXF_VIDEO_FORMAT_YU
     uint64_t size = 0;
     for (size_t i = 0; i < color_planes.size(); ++i) {
       if (i == 0) {
-        color_planes[i].stride =
-            color_planes[i].stride == -1
-                ? StrideAlign(color_planes[i].width * color_planes[i].bytes_per_pixel)
-                : color_planes[i].stride;
-      } else {
-        color_planes[i].stride =
-            color_planes[i].stride == -1 ? color_planes[0].stride / 2 : color_planes[i].stride;
+        color_planes[i].stride = ComputeStrides(stride_align, color_planes[i].width,
+                                color_planes[i].bytes_per_pixel, color_planes[i].stride);
+      } else if (color_planes[i].stride == 0) {
+          // YUV formats require UV planes stride to be half of Y plane
+          color_planes[i].stride = color_planes[0].stride / 2;
       }
       color_planes[i].size = color_planes[i].stride * color_planes[i].height;
       color_planes[i].offset = size;
@@ -200,19 +246,21 @@ struct VideoFormatSize<T, std::enable_if_t<T == VideoFormat::GXF_VIDEO_FORMAT_YU
     return size;
   }
 
-  std::vector<ColorPlane> getDefaultColorPlanes(uint32_t width, uint32_t height) {
+  std::vector<ColorPlane> getDefaultColorPlanes(uint32_t width, uint32_t height,
+                                                bool stride_align = true) {
     auto yuv = default_yuv;
-    fillColorPlanes(width, height, yuv);
+    fillColorPlanes(width, height, yuv, stride_align);
     std::vector<ColorPlane> result(yuv.begin(), yuv.end());
     return result;
   }
 
-  uint64_t size(uint32_t width, uint32_t height, std::array<ColorPlane, 3>& color_planes) {
-    return fillColorPlanes(width, height, color_planes);
+  uint64_t size(uint32_t width, uint32_t height, std::array<ColorPlane, 3>& color_planes,
+                bool stride_align = true) {
+    return fillColorPlanes(width, height, color_planes, stride_align);
   }
 
-  uint64_t size(uint32_t width, uint32_t height) {
-    return fillColorPlanes(width, height, default_yuv);
+  uint64_t size(uint32_t width, uint32_t height, bool stride_align = true) {
+    return fillColorPlanes(width, height, default_yuv, stride_align);
   }
 };
 
@@ -223,7 +271,8 @@ struct VideoFormatSize<T, std::enable_if_t<T == VideoFormat::GXF_VIDEO_FORMAT_NV
   std::array<ColorPlane, 2> default_yuv{ColorPlane("Y", 1), ColorPlane("UV", 2)};
 
   uint64_t fillColorPlanes(uint32_t width, uint32_t height,
-                           std::array<ColorPlane, 2>& color_planes) {
+                           std::array<ColorPlane, 2>& color_planes,
+                           bool stride_align = true) {
     uint32_t widthEven = AlignToEvenDimension(width);
     uint32_t heightEven = AlignToEvenDimension(height);
 
@@ -231,10 +280,8 @@ struct VideoFormatSize<T, std::enable_if_t<T == VideoFormat::GXF_VIDEO_FORMAT_NV
     for (size_t i = 0; i < color_planes.size(); ++i) {
       color_planes[i].width = widthEven;
       color_planes[i].height = heightEven;
-      color_planes[i].stride =
-          color_planes[i].stride == -1
-              ? StrideAlign(color_planes[i].width * color_planes[i].bytes_per_pixel)
-              : color_planes[i].stride;
+      color_planes[i].stride = ComputeStrides(stride_align, color_planes[i].width,
+                                color_planes[i].bytes_per_pixel, color_planes[i].stride);
       color_planes[i].size = color_planes[i].stride * color_planes[i].height;
       color_planes[i].offset = size;
       size += color_planes[i].size;
@@ -242,19 +289,21 @@ struct VideoFormatSize<T, std::enable_if_t<T == VideoFormat::GXF_VIDEO_FORMAT_NV
     return size;
   }
 
-  std::vector<ColorPlane> getDefaultColorPlanes(uint32_t width, uint32_t height) {
+  std::vector<ColorPlane> getDefaultColorPlanes(uint32_t width, uint32_t height,
+                                                bool stride_align = true) {
     auto yuv = default_yuv;
-    fillColorPlanes(width, height, yuv);
+    fillColorPlanes(width, height, yuv, stride_align);
     std::vector<ColorPlane> result(yuv.begin(), yuv.end());
     return result;
   }
 
-  uint64_t size(uint32_t width, uint32_t height, std::array<ColorPlane, 2>& color_planes) {
-    return fillColorPlanes(width, height, color_planes);
+  uint64_t size(uint32_t width, uint32_t height, std::array<ColorPlane, 2>& color_planes,
+                bool stride_align = true) {
+    return fillColorPlanes(width, height, color_planes, stride_align);
   }
 
-  uint64_t size(uint32_t width, uint32_t height) {
-    return fillColorPlanes(width, height, default_yuv);
+  uint64_t size(uint32_t width, uint32_t height, bool stride_align = true) {
+    return fillColorPlanes(width, height, default_yuv, stride_align);
   }
 };
 
@@ -267,7 +316,8 @@ struct VideoFormatSize<T, std::enable_if_t<T == VideoFormat::GXF_VIDEO_FORMAT_NV
   std::array<ColorPlane, 2> default_yuv{ColorPlane("Y", 1), ColorPlane("UV", 2)};
 
   uint64_t fillColorPlanes(uint32_t width, uint32_t height,
-                           std::array<ColorPlane, 2>& color_planes) {
+                           std::array<ColorPlane, 2>& color_planes,
+                           bool stride_align = true) {
     uint32_t widthEven = AlignToEvenDimension(width);
     uint32_t heightEven = AlignToEvenDimension(height);
     color_planes[0].width = widthEven;
@@ -277,10 +327,8 @@ struct VideoFormatSize<T, std::enable_if_t<T == VideoFormat::GXF_VIDEO_FORMAT_NV
 
     uint64_t size = 0;
     for (size_t i = 0; i < color_planes.size(); ++i) {
-      color_planes[i].stride =
-          color_planes[i].stride == -1
-              ? StrideAlign(color_planes[i].width * color_planes[i].bytes_per_pixel)
-              : color_planes[i].stride;
+      color_planes[i].stride = ComputeStrides(stride_align, color_planes[i].width,
+                                color_planes[i].bytes_per_pixel, color_planes[i].stride);
       color_planes[i].size = color_planes[i].stride * color_planes[i].height;
       color_planes[i].offset = size;
       size += color_planes[i].size;
@@ -288,19 +336,21 @@ struct VideoFormatSize<T, std::enable_if_t<T == VideoFormat::GXF_VIDEO_FORMAT_NV
     return size;
   }
 
-  std::vector<ColorPlane> getDefaultColorPlanes(uint32_t width, uint32_t height) {
+  std::vector<ColorPlane> getDefaultColorPlanes(uint32_t width, uint32_t height,
+                                                bool stride_align = true) {
     auto yuv = default_yuv;
-    fillColorPlanes(width, height, yuv);
+    fillColorPlanes(width, height, yuv, stride_align);
     std::vector<ColorPlane> result(yuv.begin(), yuv.end());
     return result;
   }
 
-  uint64_t size(uint32_t width, uint32_t height, std::array<ColorPlane, 2>& color_planes) {
-    return fillColorPlanes(width, height, color_planes);
+  uint64_t size(uint32_t width, uint32_t height, std::array<ColorPlane, 2>& color_planes,
+                bool stride_align = true) {
+    return fillColorPlanes(width, height, color_planes, stride_align);
   }
 
-  uint64_t size(uint32_t width, uint32_t height) {
-    return fillColorPlanes(width, height, default_yuv);
+  uint64_t size(uint32_t width, uint32_t height, bool stride_align = true) {
+    return fillColorPlanes(width, height, default_yuv, stride_align);
   }
 };
 
@@ -316,7 +366,7 @@ struct VideoFormatSize<
     if (T == VideoFormat::GXF_VIDEO_FORMAT_RGBA) {
       return {ColorPlane("RGBA", 4)};
     } else if (T == VideoFormat::GXF_VIDEO_FORMAT_BGRA) {
-      return {ColorPlane("BRGA", 4)};
+      return {ColorPlane("BGRA", 4)};
     } else if (T == VideoFormat::GXF_VIDEO_FORMAT_ARGB) {
       return {ColorPlane("ARGB", 4)};
     } else if (T == VideoFormat::GXF_VIDEO_FORMAT_ABGR) {
@@ -324,7 +374,7 @@ struct VideoFormatSize<
     } else if (T == VideoFormat::GXF_VIDEO_FORMAT_RGBX) {
       return {ColorPlane("RGBX", 4)};
     } else if (T == VideoFormat::GXF_VIDEO_FORMAT_BGRX) {
-      return {ColorPlane("BRGX", 4)};
+      return {ColorPlane("BGRX", 4)};
     } else if (T == VideoFormat::GXF_VIDEO_FORMAT_XRGB) {
       return {ColorPlane("XRGB", 4)};
     } else {  // T == VideoFormat::GXF_VIDEO_FORMAT_XBGR
@@ -333,33 +383,35 @@ struct VideoFormatSize<
   }
 
   uint64_t fillColorPlanes(uint32_t width, uint32_t height,
-                           std::array<ColorPlane, 1>& color_plane) {
+                           std::array<ColorPlane, 1>& color_plane,
+                           bool stride_align = true) {
     uint32_t widthEven = AlignToEvenDimension(width);
     uint32_t heightEven = AlignToEvenDimension(height);
     color_plane[0].width = widthEven;
     color_plane[0].height = heightEven;
-    color_plane[0].stride = color_plane[0].stride == -1
-                                ? StrideAlign(color_plane[0].width * color_plane[0].bytes_per_pixel)
-                                : color_plane[0].stride;
+    color_plane[0].stride = ComputeStrides(stride_align, color_plane[0].width,
+                            color_plane[0].bytes_per_pixel, color_plane[0].stride);
     color_plane[0].size = color_plane[0].stride * color_plane[0].height;
     color_plane[0].offset = 0;
     return color_plane[0].size;
   }
 
-  std::vector<ColorPlane> getDefaultColorPlanes(uint32_t width, uint32_t height) {
+  std::vector<ColorPlane> getDefaultColorPlanes(uint32_t width, uint32_t height,
+                                                bool stride_align = true) {
     auto rgba = defaultRGBA();
-    fillColorPlanes(width, height, rgba);
+    fillColorPlanes(width, height, rgba, stride_align);
     std::vector<ColorPlane> result(rgba.begin(), rgba.end());
     return result;
   }
 
-  uint64_t size(uint32_t width, uint32_t height, std::array<ColorPlane, 1>& color_planes) {
-    return fillColorPlanes(width, height, color_planes);
+  uint64_t size(uint32_t width, uint32_t height, std::array<ColorPlane, 1>& color_planes,
+                bool stride_align = true) {
+    return fillColorPlanes(width, height, color_planes, stride_align);
   }
 
-  uint64_t size(uint32_t width, uint32_t height) {
+  uint64_t size(uint32_t width, uint32_t height, bool stride_align = true) {
     auto rgba = defaultRGBA();
-    return fillColorPlanes(width, height, rgba);
+    return fillColorPlanes(width, height, rgba, stride_align);
   }
 };
 
@@ -387,33 +439,35 @@ struct VideoFormatSize<
   }
 
   uint64_t fillColorPlanes(uint32_t width, uint32_t height,
-                           std::array<ColorPlane, 1>& color_plane) {
+                           std::array<ColorPlane, 1>& color_plane,
+                           bool stride_align = true) {
     uint32_t widthEven = AlignToEvenDimension(width);
     uint32_t heightEven = AlignToEvenDimension(height);
     color_plane[0].width = widthEven;
     color_plane[0].height = heightEven;
-    color_plane[0].stride = color_plane[0].stride == -1
-                                ? StrideAlign(color_plane[0].width * color_plane[0].bytes_per_pixel)
-                                : color_plane[0].stride;
+    color_plane[0].stride = ComputeStrides(stride_align, color_plane[0].width,
+                            color_plane[0].bytes_per_pixel, color_plane[0].stride);
     color_plane[0].size = color_plane[0].stride * color_plane[0].height;
     color_plane[0].offset = 0;
     return color_plane[0].size;
   }
 
-  std::vector<ColorPlane> getDefaultColorPlanes(uint32_t width, uint32_t height) {
+  std::vector<ColorPlane> getDefaultColorPlanes(uint32_t width, uint32_t height,
+                                                bool stride_align = true) {
     auto rgb = defaultRGB();
-    fillColorPlanes(width, height, rgb);
+    fillColorPlanes(width, height, rgb, stride_align);
     std::vector<ColorPlane> result(rgb.begin(), rgb.end());
     return result;
   }
 
-  uint64_t size(uint32_t width, uint32_t height, std::array<ColorPlane, 1>& color_planes) {
-    return fillColorPlanes(width, height, color_planes);
+  uint64_t size(uint32_t width, uint32_t height, std::array<ColorPlane, 1>& color_planes,
+                bool stride_align = true) {
+    return fillColorPlanes(width, height, color_planes, stride_align);
   }
 
-  uint64_t size(uint32_t width, uint32_t height) {
+  uint64_t size(uint32_t width, uint32_t height, bool stride_align = true) {
     auto rgb = defaultRGB();
-    return fillColorPlanes(width, height, rgb);
+    return fillColorPlanes(width, height, rgb, stride_align);
   }
 };
 
@@ -442,7 +496,8 @@ struct VideoFormatSize<T, std::enable_if_t<T == VideoFormat::GXF_VIDEO_FORMAT_R8
   }
 
   uint64_t fillColorPlanes(uint32_t width, uint32_t height,
-                           std::array<ColorPlane, 3>& color_planes) {
+                           std::array<ColorPlane, 3>& color_planes,
+                           bool stride_align = true) {
     uint32_t widthEven = AlignToEvenDimension(width);
     uint32_t heightEven = AlignToEvenDimension(height);
 
@@ -450,10 +505,9 @@ struct VideoFormatSize<T, std::enable_if_t<T == VideoFormat::GXF_VIDEO_FORMAT_R8
     for (size_t i = 0; i < color_planes.size(); ++i) {
       color_planes[i].width = widthEven;
       color_planes[i].height = heightEven;
-      color_planes[i].stride =
-          color_planes[i].stride == -1
-              ? StrideAlign(color_planes[i].width * color_planes[i].bytes_per_pixel)
-              : color_planes[i].stride;
+      color_planes[i].stride = ComputeStrides(stride_align, color_planes[i].width,
+                            color_planes[i].bytes_per_pixel, color_planes[i].stride);
+      color_planes[i].size = color_planes[i].stride * color_planes[i].height;
       color_planes[i].size = color_planes[i].stride * color_planes[i].height;
       color_planes[i].offset = size;
       size += color_planes[i].size;
@@ -461,22 +515,173 @@ struct VideoFormatSize<T, std::enable_if_t<T == VideoFormat::GXF_VIDEO_FORMAT_R8
     return size;
   }
 
-  std::vector<ColorPlane> getDefaultColorPlanes(uint32_t width, uint32_t height) {
+  std::vector<ColorPlane> getDefaultColorPlanes(uint32_t width, uint32_t height,
+                                                bool stride_align = true) {
     auto rgb = defaultRGB();
-    fillColorPlanes(width, height, rgb);
+    fillColorPlanes(width, height, rgb, stride_align);
     std::vector<ColorPlane> result(rgb.begin(), rgb.end());
     return result;
   }
 
-  uint64_t size(uint32_t width, uint32_t height, std::array<ColorPlane, 3>& color_planes) {
-    return fillColorPlanes(width, height, color_planes);
+  uint64_t size(uint32_t width, uint32_t height, std::array<ColorPlane, 3>& color_planes,
+                bool stride_align = true) {
+    return fillColorPlanes(width, height, color_planes, stride_align);
   }
 
-  uint64_t size(uint32_t width, uint32_t height) {
+  uint64_t size(uint32_t width, uint32_t height, bool stride_align = true) {
     auto rgb = defaultRGB();
-    return fillColorPlanes(width, height, rgb);
+    return fillColorPlanes(width, height, rgb, stride_align);
   }
 };
+
+// Specifies x-x-x(8/16/32) bit multi planar RGBD variants
+template <VideoFormat T>
+struct VideoFormatSize<T, std::enable_if_t<T == VideoFormat::GXF_VIDEO_FORMAT_R8_G8_B8_D8 ||
+                                           T == VideoFormat::GXF_VIDEO_FORMAT_R16_G16_B16_D16 ||
+                                           T == VideoFormat::GXF_VIDEO_FORMAT_R32_G32_B32_D32>> {
+  std::array<ColorPlane, 4> defaultRGBD() {
+    if (T == VideoFormat::GXF_VIDEO_FORMAT_R8_G8_B8_D8) {
+      return {ColorPlane("R", 1), ColorPlane("G", 1), ColorPlane("B", 1), ColorPlane("D", 1)};
+    } else if (T == VideoFormat::GXF_VIDEO_FORMAT_R16_G16_B16_D16) {
+      return {ColorPlane("R", 2), ColorPlane("G", 2), ColorPlane("B", 2), ColorPlane("D", 2)};
+    } else if (T == VideoFormat::GXF_VIDEO_FORMAT_R32_G32_B32_D32) {
+      return {ColorPlane("R", 4), ColorPlane("G", 4), ColorPlane("B", 4), ColorPlane("D", 4)};
+    }
+  }
+
+  uint64_t fillColorPlanes(uint32_t width, uint32_t height,
+                           std::array<ColorPlane, 4>& color_planes,
+                           bool stride_align = true) {
+    uint32_t widthEven = AlignToEvenDimension(width);
+    uint32_t heightEven = AlignToEvenDimension(height);
+
+    uint64_t size = 0;
+    for (size_t i = 0; i < color_planes.size(); ++i) {
+      color_planes[i].width = widthEven;
+      color_planes[i].height = heightEven;
+      color_planes[i].stride = ComputeStrides(stride_align, color_planes[i].width,
+                            color_planes[i].bytes_per_pixel, color_planes[i].stride);
+      color_planes[i].size = color_planes[i].stride * color_planes[i].height;
+      color_planes[i].offset = size;
+      size += color_planes[i].size;
+    }
+    return size;
+  }
+
+  std::vector<ColorPlane> getDefaultColorPlanes(uint32_t width, uint32_t height,
+                                                bool stride_align = true) {
+    auto rgbd = defaultRGBD();
+    fillColorPlanes(width, height, rgbd, stride_align);
+    std::vector<ColorPlane> result(rgbd.begin(), rgbd.end());
+    return result;
+  }
+
+  uint64_t size(uint32_t width, uint32_t height, std::array<ColorPlane, 4>& color_planes,
+                bool stride_align = true) {
+    return fillColorPlanes(width, height, color_planes, stride_align);
+  }
+
+  uint64_t size(uint32_t width, uint32_t height, bool stride_align = true) {
+    auto rgbd = defaultRGBD();
+    return fillColorPlanes(width, height, rgbd, stride_align);
+  }
+};
+
+// Specifies x-x-x-x(8/16/32) bit float single plane RGBD variants
+template <VideoFormat T>
+struct VideoFormatSize<T, std::enable_if_t<T == VideoFormat::GXF_VIDEO_FORMAT_RGBD8 ||
+                                           T == VideoFormat::GXF_VIDEO_FORMAT_RGBD16 ||
+                                           T == VideoFormat::GXF_VIDEO_FORMAT_RGBD32>> {
+  std::array<ColorPlane, 1> defaultRGBD() {
+    if (T == VideoFormat::GXF_VIDEO_FORMAT_RGBD8) {
+      return {ColorPlane("RGBD", 4)};
+    } else if (T == VideoFormat::GXF_VIDEO_FORMAT_RGBD16) {
+      return {ColorPlane("RGBD", 8)};
+    } else if (T == VideoFormat::GXF_VIDEO_FORMAT_RGBD32) {
+      return {ColorPlane("RGBD", 16)};
+    }
+  }
+
+  uint64_t fillColorPlanes(uint32_t width, uint32_t height,
+                           std::array<ColorPlane, 1>& color_plane,
+                           bool stride_align = true) {
+    uint32_t widthEven = AlignToEvenDimension(width);
+    uint32_t heightEven = AlignToEvenDimension(height);
+
+    color_plane[0].width = widthEven;
+    color_plane[0].height = heightEven;
+    color_plane[0].stride = ComputeStrides(stride_align, color_plane[0].width,
+                            color_plane[0].bytes_per_pixel, color_plane[0].stride);
+    color_plane[0].size = color_plane[0].stride * color_plane[0].height;
+    color_plane[0].offset = 0;
+    return color_plane[0].size;
+  }
+
+  std::vector<ColorPlane> getDefaultColorPlanes(uint32_t width, uint32_t height,
+                                                bool stride_align = true) {
+    auto rgbd = defaultRGBD();
+    fillColorPlanes(width, height, rgbd, stride_align);
+    std::vector<ColorPlane> result(rgbd.begin(), rgbd.end());
+    return result;
+  }
+
+  uint64_t size(uint32_t width, uint32_t height, std::array<ColorPlane, 1>& color_planes,
+                bool stride_align = true) {
+    return fillColorPlanes(width, height, color_planes, stride_align);
+  }
+
+  uint64_t size(uint32_t width, uint32_t height, bool stride_align = true) {
+    auto rgbd = defaultRGBD();
+    return fillColorPlanes(width, height, rgbd, stride_align);
+  }
+};
+
+// Specifies 32/64 bit float single plane Depth
+template <VideoFormat T>
+struct VideoFormatSize<T, std::enable_if_t<T == VideoFormat::GXF_VIDEO_FORMAT_D32F ||
+                                           T == VideoFormat::GXF_VIDEO_FORMAT_D64F >> {
+  std::array<ColorPlane, 1> defaultDepth() {
+    if (T == VideoFormat::GXF_VIDEO_FORMAT_D32F) {
+      return {ColorPlane("D", 4)};
+    } else if (T == VideoFormat::GXF_VIDEO_FORMAT_D64F) {
+      return {ColorPlane("D", 8)};
+    }
+  }
+
+  uint64_t fillColorPlanes(uint32_t width, uint32_t height,
+                           std::array<ColorPlane, 1>& color_plane,
+                           bool stride_align = true) {
+    uint32_t widthEven = AlignToEvenDimension(width);
+    uint32_t heightEven = AlignToEvenDimension(height);
+
+    color_plane[0].width = widthEven;
+    color_plane[0].height = heightEven;
+    color_plane[0].stride = ComputeStrides(stride_align, color_plane[0].width,
+                            color_plane[0].bytes_per_pixel, color_plane[0].stride);
+    color_plane[0].size = color_plane[0].stride * color_plane[0].height;
+    color_plane[0].offset = 0;
+    return color_plane[0].size;
+  }
+
+  std::vector<ColorPlane> getDefaultColorPlanes(uint32_t width, uint32_t height,
+                                                bool stride_align = true) {
+    auto depth = defaultDepth();
+    fillColorPlanes(width, height, depth, stride_align);
+    std::vector<ColorPlane> result(depth.begin(), depth.end());
+    return result;
+  }
+
+  uint64_t size(uint32_t width, uint32_t height, std::array<ColorPlane, 1>& color_planes,
+                bool stride_align = true) {
+    return fillColorPlanes(width, height, color_planes, stride_align);
+  }
+
+  uint64_t size(uint32_t width, uint32_t height, bool stride_align = true) {
+    auto depth = defaultDepth();
+    return fillColorPlanes(width, height, depth, stride_align);
+  }
+};
+
 
 // Specifies x-x-x(8/16/32) bit single plane GRAY scale
 template <VideoFormat T>
@@ -495,33 +700,86 @@ struct VideoFormatSize<T, std::enable_if_t<T == VideoFormat::GXF_VIDEO_FORMAT_GR
   }
 
   uint64_t fillColorPlanes(uint32_t width, uint32_t height,
-                           std::array<ColorPlane, 1>& color_plane) {
+                           std::array<ColorPlane, 1>& color_plane,
+                           bool stride_align = true) {
     uint32_t widthEven = AlignToEvenDimension(width);
     uint32_t heightEven = AlignToEvenDimension(height);
     color_plane[0].width = widthEven;
     color_plane[0].height = heightEven;
-    color_plane[0].stride = color_plane[0].stride == -1
-                                ? StrideAlign(color_plane[0].width * color_plane[0].bytes_per_pixel)
-                                : color_plane[0].stride;
+    color_plane[0].stride = ComputeStrides(stride_align, color_plane[0].width,
+                              color_plane[0].bytes_per_pixel, color_plane[0].stride);
     color_plane[0].size = color_plane[0].stride * color_plane[0].height;
     color_plane[0].offset = 0;
     return color_plane[0].size;
   }
 
-  std::vector<ColorPlane> getDefaultColorPlanes(uint32_t width, uint32_t height) {
+  std::vector<ColorPlane> getDefaultColorPlanes(uint32_t width, uint32_t height,
+                                                bool stride_align = true) {
     auto gray = defaultGray();
-    fillColorPlanes(width, height, gray);
+    fillColorPlanes(width, height, gray, stride_align);
     std::vector<ColorPlane> result(gray.begin(), gray.end());
     return result;
   }
 
-  uint64_t size(uint32_t width, uint32_t height, std::array<ColorPlane, 1>& color_plane) {
-    return fillColorPlanes(width, height, color_plane);
+  uint64_t size(uint32_t width, uint32_t height, std::array<ColorPlane, 1>& color_plane,
+                bool stride_align = true) {
+    return fillColorPlanes(width, height, color_plane, stride_align);
   }
 
-  uint64_t size(uint32_t width, uint32_t height) {
+  uint64_t size(uint32_t width, uint32_t height, bool stride_align = true) {
     auto gray = defaultGray();
-    return fillColorPlanes(width, height, gray);
+    return fillColorPlanes(width, height, gray, stride_align);
+  }
+};
+
+// Specifies x-x-x-x(16) bit single plane Bayer RAW16
+template <VideoFormat T>
+struct VideoFormatSize<T, std::enable_if_t<T == VideoFormat::GXF_VIDEO_FORMAT_RAW16_RGGB ||
+                                           T == VideoFormat::GXF_VIDEO_FORMAT_RAW16_BGGR ||
+                                           T == VideoFormat::GXF_VIDEO_FORMAT_RAW16_GRBG ||
+                                           T == VideoFormat::GXF_VIDEO_FORMAT_RAW16_GBRG>> {
+  std::array<ColorPlane, 1> defaultBayerRaw16() {
+    if (T == VideoFormat::GXF_VIDEO_FORMAT_RAW16_RGGB) {
+      return {ColorPlane("Raw_RGGB", 4 * 2)};
+    } else if (T == VideoFormat::GXF_VIDEO_FORMAT_RAW16_BGGR) {
+      return {ColorPlane("Raw_BGGR", 4 * 2)};
+    } else if (T == VideoFormat::GXF_VIDEO_FORMAT_RAW16_GRBG) {
+      return {ColorPlane("Raw_GRBG", 4 * 2)};
+    } else if (T == VideoFormat::GXF_VIDEO_FORMAT_RAW16_GBRG) {
+      return {ColorPlane("Raw_GBRG", 4 * 2)};
+    }
+  }
+
+  uint64_t fillColorPlanes(uint32_t width, uint32_t height,
+                           std::array<ColorPlane, 1>& color_plane,
+                           bool stride_align = true) {
+    uint32_t widthEven = AlignToEvenDimension(width);
+    uint32_t heightEven = AlignToEvenDimension(height);
+    color_plane[0].width = widthEven;
+    color_plane[0].height = heightEven;
+    color_plane[0].stride = ComputeStrides(stride_align, color_plane[0].width,
+                              color_plane[0].bytes_per_pixel, color_plane[0].stride);
+    color_plane[0].size = color_plane[0].stride * color_plane[0].height;
+    color_plane[0].offset = 0;
+    return color_plane[0].size;
+  }
+
+  std::vector<ColorPlane> getDefaultColorPlanes(uint32_t width, uint32_t height,
+                                                bool stride_align = true) {
+    auto bayerRaw16 = defaultBayerRaw16();
+    fillColorPlanes(width, height, bayerRaw16, stride_align);
+    std::vector<ColorPlane> result(bayerRaw16.begin(), bayerRaw16.end());
+    return result;
+  }
+
+  uint64_t size(uint32_t width, uint32_t height, std::array<ColorPlane, 1>& color_plane,
+                bool stride_align = true) {
+    return fillColorPlanes(width, height, color_plane, stride_align);
+  }
+
+  uint64_t size(uint32_t width, uint32_t height, bool stride_align = true) {
+    auto bayerRaw16 = defaultBayerRaw16();
+    return fillColorPlanes(width, height, bayerRaw16, stride_align);
   }
 };
 
@@ -565,11 +823,12 @@ class VideoBuffer {
   // Any data previously stored in the frame would be freed
   template <VideoFormat C>
   Expected<void> resize(uint32_t width, uint32_t height, SurfaceLayout layout,
-                        MemoryStorageType storage_type, Handle<Allocator> allocator) {
+                        MemoryStorageType storage_type, Handle<Allocator> allocator,
+                        bool stride_align = true) {
     VideoTypeTraits<C> video_type;
     VideoFormatSize<C> color_format;
-    uint64_t size = color_format.size(width, height);
-    auto color_planes = color_format.getDefaultColorPlanes(width, height);
+    uint64_t size = color_format.size(width, height, stride_align);
+    auto color_planes = color_format.getDefaultColorPlanes(width, height, stride_align);
     VideoBufferInfo buffer_info{width, height, video_type.value, color_planes, layout};
     return resizeCustom(buffer_info, size, storage_type, allocator);
   }
@@ -629,32 +888,44 @@ class VideoBuffer {
         case   VideoFormat::GXF_VIDEO_FORMAT_BGR:           // BGR-8-8-8 single plane
         case   VideoFormat::GXF_VIDEO_FORMAT_R8_G8_B8:      // RGB - unsigned 8 bit multiplanar
         case   VideoFormat::GXF_VIDEO_FORMAT_B8_G8_R8:      // BGR - unsigned 8 bit multiplanar
+        case   VideoFormat::GXF_VIDEO_FORMAT_R8_G8_B8_D8:   // RGBD unsigned 8 bit multiplanar
+        case   VideoFormat::GXF_VIDEO_FORMAT_RGBD8:         // RGBD 8 bit unsigned single plane
         case   VideoFormat::GXF_VIDEO_FORMAT_GRAY: {        // 8 bit GRAY scale single plane
           primitive_type = PrimitiveType::kUnsigned8;
         } break;
 
-        case  VideoFormat::GXF_VIDEO_FORMAT_GRAY16:         // 16 bit GRAY scale single plane
-        case  VideoFormat::GXF_VIDEO_FORMAT_RGB16:          // RGB-16-16-16 single plane
-        case  VideoFormat::GXF_VIDEO_FORMAT_BGR16:          // BGR-16-16-16 single plane
-        case  VideoFormat::GXF_VIDEO_FORMAT_R16_G16_B16:    // RGB - signed 16 bit multiplanar
-        case  VideoFormat::GXF_VIDEO_FORMAT_B16_G16_R16: {  // BGR - signed 16 bit multiplanar
+        case  VideoFormat::GXF_VIDEO_FORMAT_GRAY16:             // 16 bit GRAY scale single plane
+        case  VideoFormat::GXF_VIDEO_FORMAT_RGB16:              // RGB-16-16-16 single plane
+        case  VideoFormat::GXF_VIDEO_FORMAT_BGR16:              // BGR-16-16-16 single plane
+        case  VideoFormat::GXF_VIDEO_FORMAT_R16_G16_B16:        // RGB unsigned 16 bit multiplanar
+        case  VideoFormat::GXF_VIDEO_FORMAT_B16_G16_R16:        // BGR unsigned 16 bit multiplanar
+        case  VideoFormat::GXF_VIDEO_FORMAT_R16_G16_B16_D16:    // RGBD unsigned 16 bit multiplanar
+        case  VideoFormat::GXF_VIDEO_FORMAT_RGBD16: {           // RGBD 16 bit unsigned single plane
           primitive_type = PrimitiveType::kUnsigned16;
         } break;
 
-        case VideoFormat::GXF_VIDEO_FORMAT_GRAY32:          // 32 bit GRAY scale single plane
-        case VideoFormat::GXF_VIDEO_FORMAT_RGB32:           // RGB-32-32-32 single plane
-        case VideoFormat::GXF_VIDEO_FORMAT_BGR32:           // BGR-32-32-32 single plane
-        case VideoFormat::GXF_VIDEO_FORMAT_R32_G32_B32:     // RGB - signed 32 bit multiplanar
-        case VideoFormat::GXF_VIDEO_FORMAT_B32_G32_R32: {   // BGR - signed 32 bit multiplanar
+        case VideoFormat::GXF_VIDEO_FORMAT_GRAY32:              // 32 bit GRAY scale single plane
+        case VideoFormat::GXF_VIDEO_FORMAT_RGB32:               // RGB-32-32-32 single plane
+        case VideoFormat::GXF_VIDEO_FORMAT_BGR32:               // BGR-32-32-32 single plane
+        case VideoFormat::GXF_VIDEO_FORMAT_R32_G32_B32:         // RGB unsigned 32 bit multiplanar
+        case VideoFormat::GXF_VIDEO_FORMAT_B32_G32_R32:         // BGR unsigned 32 bit multiplanar
+        case VideoFormat::GXF_VIDEO_FORMAT_R32_G32_B32_D32:     // RGBD unsigned 32 bit multiplanar
+        case VideoFormat::GXF_VIDEO_FORMAT_RGBD32: {            // RGBD 32 bit unsigned single plane
           primitive_type = PrimitiveType::kUnsigned32;
         } break;
 
-        case VideoFormat::GXF_VIDEO_FORMAT_GRAY32F: {       // 32 bit GRAY scale single plane
+        case VideoFormat::GXF_VIDEO_FORMAT_D32F:                 // Depth 32 bit float single plane
+        case VideoFormat::GXF_VIDEO_FORMAT_GRAY32F: {            // GRAY 32 bit float single plane
           primitive_type = PrimitiveType::kFloat32;
         } break;
-        default: {                                          // Non-planar type given
-          GXF_LOG_ERROR("VideoFormat is of non-planar color format (%d),"
-                        " which cannot be moved from tensor", color_format);
+
+        case VideoFormat::GXF_VIDEO_FORMAT_D64F: {               // Depth 64 bit float single plane
+          primitive_type = PrimitiveType::kFloat64;
+        } break;
+
+        default: {                                               // Non-planar type given
+          GXF_LOG_ERROR("VideoFormat is of non-planar color format (%ld),"
+                        " which cannot be moved from tensor", static_cast<int64_t>(color_format));
           return Unexpected{GXF_INVALID_DATA_FORMAT};
         } break;
     }
@@ -694,7 +965,8 @@ Expected<void> VideoBuffer::createFromTensor(Handle<Tensor>& tensor,
 
   if (primitive_type.value() != primite_type_tensor) {
       GXF_LOG_ERROR("Type of video buffer (%d) is different from"
-                    " type of tensor (%d)", primitive_type.value(), primite_type_tensor);
+                    " type of tensor (%d)", static_cast<int32_t>(primitive_type.value()),
+                    static_cast<int32_t>(primite_type_tensor));
       return Unexpected{GXF_INVALID_DATA_FORMAT};
   }
 
@@ -708,8 +980,8 @@ Expected<void> VideoBuffer::createFromTensor(Handle<Tensor>& tensor,
 
   // Sanity check that number of tensor channels corresponds to video format
   if (channels != color_planes.size()) {
-      GXF_LOG_ERROR("Number of channels in tensor (%d) is "
-                    " different from video buffer (%d)", channels, color_planes.size());
+      GXF_LOG_ERROR("Number of channels in tensor (%u) is "
+                    " different from video buffer (%lu)", channels, color_planes.size());
       return Unexpected{GXF_INVALID_DATA_FORMAT};
   }
 

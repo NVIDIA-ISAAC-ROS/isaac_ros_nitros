@@ -1,12 +1,19 @@
-/*
-Copyright (c) 2023, NVIDIA CORPORATION. All rights reserved.
-
-NVIDIA CORPORATION and its licensors retain all intellectual property
-and proprietary rights in and to this software, related documentation
-and any modifications thereto. Any use, reproduction, disclosure or
-distribution of this software and related documentation without an express
-license agreement from NVIDIA CORPORATION is strictly prohibited.
-*/
+// SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
+// Copyright (c) 2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
+// SPDX-License-Identifier: Apache-2.0
 #pragma once
 
 #include <string>
@@ -45,15 +52,19 @@ license agreement from NVIDIA CORPORATION is strictly prohibited.
         "expressions that return Expected<T>. For expressions returning Expected<void> or enum " \
         "use RETURN_IF_ERROR instead.");
 
-// Evaluates an expression that returns an Expected<void> or result enum. If the returned type
-// contains an error it returns the error. This macro can be used in functions returning both
+// Evaluates an expression that returns an Expected<void> or result
+// enum. If the returned type contains an error it returns the
+// error. This macro can be used in functions returning both
 // Expected<T> and result enum.
 //
-// Per default the macro already creates an error message that includes the evaluated expression. If
-// needed an optional string can be passed that will be appended to the default error message. It is
+// Per default the macro already creates an error message that
+// includes the evaluated expression. If needed an optional string can
+// be passed that will be appended to the default error message. It is
 // also possible to use format specifiers to customize the string.
 //
-// It is also possible to pass the Severity used for logging as an additional argument.
+// It is also possible to pass the Severity used for logging as an
+// additional argument. This is required if using a custom error
+// message.
 //
 // Example:
 // Expected<void> DoSomething();
@@ -61,7 +72,6 @@ license agreement from NVIDIA CORPORATION is strictly prohibited.
 //
 // Expected<void> foo(){
 //   GXF_RETURN_IF_ERROR(DoSomething());
-//   GXF_RETURN_IF_ERROR(DoAnotherThing(), "This should not fail.");
 //   GXF_RETURN_IF_ERROR(DoAnotherThing(), Severity::WARNING);
 //   GXF_RETURN_IF_ERROR(DoAnotherThing(), Severity::WARNING, "Custom error message.");
 // }
@@ -272,7 +282,14 @@ void LogHelper(
   using Error = std::remove_const_t<decltype(error)>;
   const std::string text = "Expression '" + expression_string + "' failed with error '" +
                            ExpectedMacroConfig<Error>::Name(error) + "'. " + custom_txt;
+  // GCC is not able to do format security validation when the string
+  // is coming from a variadic template, even if the string is
+  // originally a char* ignore this warning until a more recent GCC
+  // version fixes this behavior
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wformat-security"
   ::nvidia::Log(file, line, severity, text.c_str(), &args...);
+#pragma GCC diagnostic pop
 }
 
 // Overload of the LogHelper above. This version does not take the severity as an argument and used

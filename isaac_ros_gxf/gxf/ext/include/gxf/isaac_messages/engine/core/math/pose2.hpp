@@ -1,18 +1,26 @@
-/*
-Copyright (c) 2018, NVIDIA CORPORATION. All rights reserved.
-
-NVIDIA CORPORATION and its licensors retain all intellectual property
-and proprietary rights in and to this software, related documentation
-and any modifications thereto. Any use, reproduction, disclosure or
-distribution of this software and related documentation without an express
-license agreement from NVIDIA CORPORATION is strictly prohibited.
-*/
+// SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
+// Copyright (c) 2018-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
+// SPDX-License-Identifier: Apache-2.0
 #pragma once
 
 #include "engine/core/math/so2.hpp"
 #include "engine/core/math/types.hpp"
 #include "engine/core/math/utils.hpp"
 
+namespace nvidia {
 namespace isaac {
 
 // Class for 2D transformation.
@@ -43,11 +51,25 @@ struct Pose2 {
   static Pose2 FromXYA(K px, K py, K angle) {
     return Pose2{SO2<K>::FromAngle(angle), Vector2<K>{px, py}};
   }
+  // Creates a pose from matrix transformation
+  static Pose2 FromMatrix(const Matrix3<K>& matrix) {
+    return Pose2{SO2<K>::FromNormalized(matrix(0, 0), matrix(1, 0)),
+                 Vector2<K>(matrix(0, 2), matrix(1, 2))};
+  }
 
   // Returns the inverse transformation
   Pose2 inverse() const {
     const SO2<K> inv = rotation.inverse();
     return Pose2{inv, -(inv * translation)};
+  }
+
+  // Returns the transformation as a matrix
+  Matrix3<K> matrix() const {
+    Matrix3<K> ret;
+    ret << rotation.cos(), -rotation.sin(), translation.x(),
+           rotation.sin(),  rotation.cos(), translation.y(),
+                     K(0),            K(0),            K(1);
+    return ret;
   }
 
   // Casts to a different type
@@ -68,6 +90,16 @@ struct Pose2 {
   // Transforms a vector 2D with the given 2D transformation
   friend Vector2<K> operator*(const Pose2& pose, const Vector2<K>& vec) {
     return pose.rotation * vec + pose.translation;
+  }
+  // Exponentaiton of the transformation
+  Pose2 pow(K exponent) const {
+    const K angle = rotation.angle();
+    const K half_angle = angle / K(2);
+    const K csc_sin = IsAlmostZero(angle)
+        ? exponent * (K(1) + (K(1) - exponent * exponent) * half_angle * half_angle / K(6))
+        : std::sin(half_angle * exponent) / std::sin(half_angle);
+    const SO2<K> rot = SO2<K>::FromAngle(half_angle * (exponent - K(1)));
+    return Pose2{SO2<K>::FromAngle(angle * exponent), csc_sin * (rot * translation)};
   }
 };
 
@@ -105,3 +137,4 @@ Vector2<K> PoseMagnitude(const Pose2<K>& pose) {
 }
 
 }  // namespace isaac
+}  // namespace nvidia

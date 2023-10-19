@@ -1,12 +1,19 @@
-/*
-Copyright (c) 2018, NVIDIA CORPORATION. All rights reserved.
-
-NVIDIA CORPORATION and its licensors retain all intellectual property
-and proprietary rights in and to this software, related documentation
-and any modifications thereto. Any use, reproduction, disclosure or
-distribution of this software and related documentation without an express
-license agreement from NVIDIA CORPORATION is strictly prohibited.
-*/
+// SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
+// Copyright (c) 2018-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
+// SPDX-License-Identifier: Apache-2.0
 #pragma once
 
 #include <map>
@@ -16,6 +23,7 @@ license agreement from NVIDIA CORPORATION is strictly prohibited.
 #include "engine/core/optional.hpp"
 #include "third_party/nlohmann/json.hpp"
 
+namespace nvidia {
 namespace isaac {
 
 // We are using nlohmann::json as JSON
@@ -47,6 +55,10 @@ int ReplaceJsonKeys(const std::map<std::string, std::string>& key_map, Json& jso
 
 // Parses a JSON object from a text string
 std::optional<Json> ParseJson(const std::string& text);
+// Parses a JSON object from a string coming from an object such as a JSON or YAML.
+// The string should be enclosed inside "" or '' and the internal strings have their delimiter
+// escaped. For example: "{\"age\": 42}".
+std::optional<Json> ParseJsonFromString(const std::string& str);
 
 // Helper class for merging multiple JSON files and/or objects into one JSON object
 class JsonMerger {
@@ -90,3 +102,4 @@ class JsonMerger {
 
 }  // namespace serialization
 }  // namespace isaac
+}  // namespace nvidia

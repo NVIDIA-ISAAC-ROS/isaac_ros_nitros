@@ -1,12 +1,19 @@
-/**
- * Copyright (c) 2022, NVIDIA CORPORATION.  All rights reserved.
- *
- * NVIDIA CORPORATION and its licensors retain all intellectual property
- * and proprietary rights in and to this software, related documentation
- * and any modifications thereto.  Any use, reproduction, disclosure or
- * distribution of this software and related documentation without an express
- * license agreement from NVIDIA CORPORATION is strictly prohibited.
- */
+// SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
+// Copyright (c) 2022-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
+// SPDX-License-Identifier: Apache-2.0
 
 #include <cuda_runtime.h>
 
@@ -23,6 +30,7 @@
 #include "gxf/core/gxf.h"
 #include "gxf/multimedia/video.hpp"
 #include "gxf/std/timestamp.hpp"
+#include "extensions/messages/camera_message.hpp"
 #pragma GCC diagnostic pop
 
 #include "isaac_ros_nitros_disparity_image_type/nitros_disparity_image.hpp"
@@ -38,13 +46,12 @@ const char kComponentTypeName[] = "nvidia::gxf::UnboundedAllocator";
 using VideoFormat = nvidia::gxf::VideoFormat;
 // Map to store the ROS format encoding to Nitros format encoding
 const std::unordered_map<std::string, VideoFormat> g_ros_to_gxf_video_format({
-    {"bgr8", VideoFormat::GXF_VIDEO_FORMAT_BGR},
-    {"32FC1", VideoFormat::GXF_VIDEO_FORMAT_GRAY32}
+    {"32FC1", VideoFormat::GXF_VIDEO_FORMAT_D32F}
   });
 
 // Map to store the Nitros format encoding to ROS format encoding
 const std::unordered_map<VideoFormat, std::string> g_gxf_to_ros_video_format({
-    {VideoFormat::GXF_VIDEO_FORMAT_BGR, "bgr8"},
+    {VideoFormat::GXF_VIDEO_FORMAT_D32F, "32FC1"},
     {VideoFormat::GXF_VIDEO_FORMAT_GRAY32, "32FC1"}
   });
 
@@ -55,17 +62,17 @@ uint32_t GetStepSize(const nvidia::gxf::VideoBufferInfo & video_buff_info)
 }
 
 // Allocate buffer for Nitros Image
-void AllocateVideoBuffer(
-  const sensor_msgs::msg::Image & source,
-  const nvidia::gxf::Handle<nvidia::gxf::VideoBuffer> & video_buff,
-  const nvidia::gxf::Handle<nvidia::gxf::Allocator> & allocator_handle)
+nvidia::gxf::Expected<nvidia::isaac::CameraMessageParts> CreateCameraMessage(
+  const stereo_msgs::msg::DisparityImage & source,
+  const nvidia::gxf::Handle<nvidia::gxf::Allocator> & allocator_handle,
+  gxf_context_t context)
 {
-  auto color_fmt = g_ros_to_gxf_video_format.find(source.encoding);
+  auto color_fmt = g_ros_to_gxf_video_format.find(source.image.encoding);
   if (color_fmt == std::end(g_ros_to_gxf_video_format)) {
     std::stringstream error_msg;
     error_msg <<
       "[convert_to_custom] Unsupported encoding from ROS: " <<
-      source.encoding.c_str();
+      source.image.encoding.c_str();
     RCLCPP_ERROR(rclcpp::get_logger("NitrosDisparityImage"), error_msg.str().c_str());
     throw std::runtime_error(error_msg.str().c_str());
   }
@@ -73,15 +80,17 @@ void AllocateVideoBuffer(
   constexpr auto surface_layout = nvidia::gxf::SurfaceLayout::GXF_SURFACE_LAYOUT_PITCH_LINEAR;
   constexpr auto storage_type = nvidia::gxf::MemoryStorageType::kDevice;
   switch (color_fmt->second) {
-    case VideoFormat::GXF_VIDEO_FORMAT_GRAY32:
-      video_buff->resize<VideoFormat::GXF_VIDEO_FORMAT_GRAY32>(
-        source.width, source.height, surface_layout, storage_type, allocator_handle);
-      break;
-    case VideoFormat::GXF_VIDEO_FORMAT_BGR:
-      video_buff->resize<VideoFormat::GXF_VIDEO_FORMAT_BGR>(
-        source.width, source.height, surface_layout, storage_type, allocator_handle);
+    case VideoFormat::GXF_VIDEO_FORMAT_D32F:
+      return nvidia::isaac::CreateCameraMessage<VideoFormat::GXF_VIDEO_FORMAT_D32F>(
+        context, static_cast<uint32_t>(source.image.width),
+        static_cast<uint32_t>(source.image.height), surface_layout,
+        storage_type, allocator_handle, false);
       break;
     default:
+      RCLCPP_ERROR(
+        rclcpp::get_logger("NitrosDisparityImage"),
+        "[convert_to_custom] Unsupported encoding from ROS [%s].", source.image.encoding.c_str());
+      throw std::runtime_error("[convert_to_custom] Unsupported encoding from ROS.");
       break;
   }
 }
@@ -104,19 +113,21 @@ void rclcpp::TypeAdapter<nvidia::isaac_ros::nitros::NitrosDisparityImage,
   auto context = nvidia::isaac_ros::nitros::GetTypeAdapterNitrosContext().getContext();
   auto msg_entity = nvidia::gxf::Entity::Shared(context, source.handle);
 
-  auto gxf_video_buffer = msg_entity->get<nvidia::gxf::VideoBuffer>();
-  if (!gxf_video_buffer) {
+  auto maybe_disparity_image = nvidia::isaac::GetCameraMessage(
+    msg_entity.value());
+  if (!maybe_disparity_image) {
     std::stringstream error_msg;
     error_msg <<
-      "[convert_to_custom] [convert_to_ros_message] Failed to get the existing "
-      "VideoBuffer object: " <<
-      GxfResultStr(gxf_video_buffer.error());
-    RCLCPP_ERROR(rclcpp::get_logger("NitrosDisparityImage"), error_msg.str().c_str());
+      "[convert_to_ros_message] Failed to get disparity image from message entity: " <<
+      GxfResultStr(maybe_disparity_image.error());
+    RCLCPP_ERROR(
+      rclcpp::get_logger("NitrosDisparityImage"), error_msg.str().c_str());
     throw std::runtime_error(error_msg.str().c_str());
   }
+  auto disparity_image = maybe_disparity_image.value();
 
   // Setting Image data from gxf VideoBuffer
-  auto video_buffer_info = gxf_video_buffer.value()->video_frame_info();
+  auto video_buffer_info = disparity_image.frame->video_frame_info();
   destination.image.height = video_buffer_info.height;
   destination.image.width = video_buffer_info.width;
   const auto encoding = g_gxf_to_ros_video_format.find(video_buffer_info.color_format);
@@ -144,7 +155,7 @@ void rclcpp::TypeAdapter<nvidia::isaac_ros::nitros::NitrosDisparityImage,
   const cudaError_t cuda_error = cudaMemcpy2D(
     destination.image.data.data(),
     destination.image.step,
-    gxf_video_buffer.value()->pointer(),
+    disparity_image.frame->pointer(),
     video_buffer_info.color_planes[0].stride,
     destination.image.step,
     destination.image.height,
@@ -162,11 +173,12 @@ void rclcpp::TypeAdapter<nvidia::isaac_ros::nitros::NitrosDisparityImage,
     throw std::runtime_error(error_msg.str().c_str());
   }
 
-  auto gxf_disparity_parameters = msg_entity->findAll<float>();
+  // extract float parameters if available
+  auto gxf_disparity_parameters = disparity_image.entity.findAll<float>();
   if (!gxf_disparity_parameters) {
     std::stringstream error_msg;
     error_msg <<
-      "[convert_to_ros_message] failed to get all GXF tensors: " <<
+      "[convert_to_ros_message] failed to get all floats: " <<
       GxfResultStr(gxf_disparity_parameters.error());
     RCLCPP_ERROR(
       rclcpp::get_logger("NitrosDisparityImage"), error_msg.str().c_str());
@@ -187,21 +199,14 @@ void rclcpp::TypeAdapter<nvidia::isaac_ros::nitros::NitrosDisparityImage,
     }
   }
 
-  // Populate timestamp information back into ROS header
-  auto input_timestamp = msg_entity->get<nvidia::gxf::Timestamp>("timestamp");
-  if (!input_timestamp) {    // Fallback to any 'timestamp'
-    input_timestamp = msg_entity->get<nvidia::gxf::Timestamp>();
-  }
-  if (input_timestamp) {
-    RCLCPP_DEBUG(
-      rclcpp::get_logger("NitrosDisparityImage"),
-      "[convert_to_ros_message] Enter the timestamp section");
-    destination.header.stamp.sec = static_cast<int32_t>(
-      input_timestamp.value()->acqtime / static_cast<uint64_t>(1e9));
-    destination.header.stamp.nanosec = static_cast<uint32_t>(
-      input_timestamp.value()->acqtime % static_cast<uint64_t>(1e9));
-    destination.image.header = destination.header;
-  }
+  RCLCPP_DEBUG(
+    rclcpp::get_logger("NitrosDisparityImage"),
+    "[convert_to_ros_message] Enter the timestamp section");
+  destination.header.stamp.sec = static_cast<int32_t>(
+    disparity_image.timestamp->acqtime / static_cast<uint64_t>(1e9));
+  destination.header.stamp.nanosec = static_cast<uint32_t>(
+    disparity_image.timestamp->acqtime % static_cast<uint64_t>(1e9));
+  destination.image.header = destination.header;
 
   // Set frame ID
   destination.header.frame_id = source.frame_id;
@@ -246,34 +251,21 @@ void rclcpp::TypeAdapter<nvidia::isaac_ros::nitros::NitrosDisparityImage,
   }
   auto allocator_handle = maybe_allocator_handle.value();
 
-  auto message = nvidia::gxf::Entity::New(context);
-  if (!message) {
-    std::stringstream error_msg;
-    error_msg << "[convert_to_custom] Error initializing new message entity: " <<
-      GxfResultStr(message.error());
+  auto maybe_disparity_image = CreateCameraMessage(source, allocator_handle, context);
+  if (!maybe_disparity_image) {
+    std::string error_msg =
+      "[convert_to_ros_message] Failed to create CameraMessage object";
     RCLCPP_ERROR(
-      rclcpp::get_logger("NitrosDIsparityImage"), error_msg.str().c_str());
-    throw std::runtime_error(error_msg.str().c_str());
+      rclcpp::get_logger("NitrosDisparityImage"), error_msg.c_str());
+    throw std::runtime_error(error_msg.c_str());
   }
+  auto disparity_image = maybe_disparity_image.value();
 
-  auto gxf_video_buffer = message->add<nvidia::gxf::VideoBuffer>(source.header.frame_id.c_str());
-  if (!gxf_video_buffer) {
-    std::stringstream error_msg;
-    error_msg << "[convert_to_custom] Failed to create a VideoBuffer object: " <<
-      GxfResultStr(gxf_video_buffer.error());
-    RCLCPP_ERROR(
-      rclcpp::get_logger("NitrosDisparityImage"), error_msg.str().c_str());
-    throw std::runtime_error(error_msg.str().c_str());
-  }
-
-  // Allocate video buffer
-  AllocateVideoBuffer(source.image, gxf_video_buffer.value(), allocator_handle);
-
-  auto video_buffer_info = gxf_video_buffer.value()->video_frame_info();
+  auto video_buffer_info = disparity_image.frame->video_frame_info();
 
   // Copy data from Host to Device
   const cudaError_t cuda_error = cudaMemcpy2D(
-    gxf_video_buffer.value()->pointer(),
+    disparity_image.frame->pointer(),
     video_buffer_info.color_planes[0].stride,
     source.image.data.data(),
     source.image.step,
@@ -293,37 +285,34 @@ void rclcpp::TypeAdapter<nvidia::isaac_ros::nitros::NitrosDisparityImage,
     throw std::runtime_error(error_msg.str().c_str());
   }
 
-  // Add timestamp to the message
+  // Passthrough baseline, focal length,
+  // min_disparity and max_disparity as an additional component to the entity
+  // passthrough both as extrinsics and standalone float entities
+  disparity_image.intrinsics->focal_length.x = source.f;
+  disparity_image.extrinsics->translation[0] = source.t;
+  *(disparity_image.entity.add<float>("t")->get()) = source.t;
+  *(disparity_image.entity.add<float>("f")->get()) = source.f;
+  *(disparity_image.entity.add<float>("min_disparity")->get()) = source.min_disparity;
+  *(disparity_image.entity.add<float>("max_disparity")->get()) = source.max_disparity;
+
+  // Add timestamp to the disparity_image
   uint64_t input_timestamp =
     source.header.stamp.sec * static_cast<uint64_t>(1e9) +
     source.header.stamp.nanosec;
-  auto output_timestamp = message->add<nvidia::gxf::Timestamp>("timestamp");
-  if (!output_timestamp) {
-    std::stringstream error_msg;
-    error_msg << "[convert_to_custom] Failed to add a timestamp component to message: " <<
-      GxfResultStr(output_timestamp.error());
-    RCLCPP_ERROR(
-      rclcpp::get_logger("NitrosDisparityImage"), error_msg.str().c_str());
-    throw std::runtime_error(error_msg.str().c_str());
-  }
-  output_timestamp.value()->acqtime = input_timestamp;
-
-  // Set focal and baseline
-  *(message->add<float>("t")->get()) = source.t;
-  *(message->add<float>("f")->get()) = source.f;
-  *(message->add<float>("min_disparity")->get()) = source.min_disparity;
-  *(message->add<float>("max_disparity")->get()) = source.max_disparity;
+  disparity_image.timestamp->acqtime = input_timestamp;
 
   // Set frame ID
   destination.frame_id = source.header.frame_id;
 
   // Set Entity Id
-  destination.handle = message->eid();
-  GxfEntityRefCountInc(context, message->eid());
+  destination.handle = disparity_image.entity.eid();
+  GxfEntityRefCountInc(context, disparity_image.entity.eid());
 
   RCLCPP_DEBUG(
     rclcpp::get_logger("NitrosDisparityImage"),
-    "[convert_to_custom] Conversion completed (resulting handle=%ld)", message->eid());
+    "[convert_to_custom] Conversion completed (resulting handle=%ld)",
+    disparity_image.entity.eid());
+
 
   nvidia::isaac_ros::nitros::nvtxRangePopWrapper();
 }

@@ -1,23 +1,24 @@
-/*
- * SPDX-FileCopyrightText: Copyright (c) 2021 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
- * SPDX-License-Identifier: Apache-2.0
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
+// Copyright (c) 2021-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
+// SPDX-License-Identifier: Apache-2.0
 #ifndef NVIDIA_GXF_STD_VAULT_HPP_
 #define NVIDIA_GXF_STD_VAULT_HPP_
 
 #include <condition_variable>
+#include <memory>
 #include <mutex>
 #include <vector>
 
@@ -31,12 +32,15 @@ namespace gxf {
 // Receives messages, stores them and provides thread-safe access to them.
 class Vault : public Codelet {
  public:
+  using CallbackType = std::function<void(void)>;
   gxf_result_t registerInterface(Registrar* registrar) override;
   gxf_result_t initialize() override;
   gxf_result_t start() override;
   gxf_result_t tick() override;
   gxf_result_t stop() override;
   gxf_result_t deinitialize() override;
+
+  gxf_result_t setCallback(CallbackType callback);
 
   // Waits until at least the given number of entities have arrived, stores them in the vault,
   // and returns their UIDs.
@@ -59,6 +63,8 @@ class Vault : public Codelet {
   Parameter<Handle<Receiver>> source_;
   Parameter<uint64_t> max_waiting_count_;
   Parameter<bool> drop_waiting_;
+  Parameter<int64_t> callback_address_;
+  Parameter<bool> enable_callback_;
 
   std::vector<Entity> entities_waiting_;
   std::vector<Entity> entities_in_vault_;
@@ -66,6 +72,7 @@ class Vault : public Codelet {
   std::mutex mutex_;
   std::condition_variable condition_variable_;
   bool alive_;
+  std::unique_ptr<CallbackType> callback_{ nullptr };
 };
 
 }  // namespace gxf

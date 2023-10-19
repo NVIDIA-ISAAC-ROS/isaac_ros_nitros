@@ -1,0 +1,12 @@
+{
+  "header": {
+    "frame_id": "encoder_ticks_header",
+    "stamp": {
+      "sec": 22125,
+      "nanosec": 45172
+    }
+  },
+  "left_ticks": 10,
+  "right_ticks": 20,
+  "encoder_timestamp": 100
+}

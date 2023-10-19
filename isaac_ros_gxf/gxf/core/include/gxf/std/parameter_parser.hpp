@@ -1,19 +1,19 @@
-/*
- * SPDX-FileCopyrightText: Copyright (c) 2021 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
- * SPDX-License-Identifier: Apache-2.0
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
+// Copyright (c) 2021-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
+// SPDX-License-Identifier: Apache-2.0
 #ifndef NVIDIA_GXF_STD_PARAMETER_PARSER_HPP_
 #define NVIDIA_GXF_STD_PARAMETER_PARSER_HPP_
 
@@ -73,6 +73,8 @@ struct ParameterParser<std::string> {
   }
 };
 
+// Specialization of ParameterParser for a fle parameter type to identify parameters that are file
+// system paths
 struct FilePath : public std::string {
   FilePath() : std::string() {}
 
@@ -138,7 +140,7 @@ struct ParameterParser<FixedString<N>> {
 // Specialization of ParameterParser for FixedVector with stack allocation.
 // Substitutes std::array for safety-critical components.
 // TODO(ayusmans): parsing support for FixedVector with heap allocation
-template <typename T, size_t N>
+template <typename T, ssize_t N>
 struct ParameterParser<FixedVector<T, N>> {
   static Expected<FixedVector<T, N>> Parse(gxf_context_t context, gxf_uid_t component_uid,
                                            const char* key, const YAML::Node& node,

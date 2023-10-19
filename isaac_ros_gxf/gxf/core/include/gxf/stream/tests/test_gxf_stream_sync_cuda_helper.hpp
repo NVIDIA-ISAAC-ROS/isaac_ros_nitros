@@ -1,19 +1,19 @@
-/*
- * SPDX-FileCopyrightText: Copyright (c) 2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
- * SPDX-License-Identifier: Apache-2.0
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
+// Copyright (c) 2022-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
+// SPDX-License-Identifier: Apache-2.0
 #ifndef NVIDIA_GXF_STREAM_TESTS_TEST_STREAM_CUDA_HELPER_HPP
 #define NVIDIA_GXF_STREAM_TESTS_TEST_STREAM_CUDA_HELPER_HPP
 
@@ -34,6 +34,7 @@
 #include "gxf/std/transmitter.hpp"
 #include "gxf/stream/stream_nvsci.hpp"
 #include "gxf/stream/stream_nvscisync.hpp"
+#include "gxf/stream/stream_sync_id.hpp"
 
 #define CHECK_CUBLUS_ERROR(cu_result, fmt, ...)                         \
   do {                                                                  \
@@ -74,21 +75,26 @@ class StreamBasedOpsNew : public Codelet {
     GXF_ASSERT(stream_id.value()->stream_cid != kNullUid, "stream_cid is null");
     return Success;
   }
-  static Expected<void> addStreamSync(StreamSync* stream_sync, SyncType signaler,
-                                      SyncType waiter, cudaStream_t stream) {
-    GXF_ASSERT_SUCCESS(stream_sync->initialize());
 
-    void *syncObj{nullptr};
-    GXF_ASSERT_SUCCESS(stream_sync->allocate_sync_object(signaler, waiter,
-                                                         reinterpret_cast<void**>(&syncObj)));
-    GXF_ASSERT(syncObj, "syncObj is null");
+  static Expected<Handle<StreamSync>> getStreamSync(Entity& message) {
+    auto streamSync = message.get<StreamSyncId>();
+    GXF_ASSERT(streamSync, "Failed to find StreamSync");
+    auto stream_sync = Handle<StreamSync>::Create(streamSync.value().context(),
+                                                  streamSync.value()->stream_sync_cid);
+    GXF_ASSERT(stream_sync, "Create StreamSync from cid failed");
+    GXF_ASSERT(stream_sync.value(), "StreamSync handle is null");
+    return stream_sync;
+  }
 
-    GXF_ASSERT_SUCCESS(stream_sync->setCudaStream(signaler, stream));
-
-    GXF_ASSERT_SUCCESS(stream_sync->setCudaStream(waiter, stream));
-
+  static Expected<void> addStreamSync(Entity& message, Handle<StreamSync>& streamSync,
+                                      const char* name = nullptr) {
+    auto stream_sync_id = message.add<StreamSyncId>(name);
+    GXF_ASSERT(stream_sync_id, "Failed to add StreamSyncId");
+    stream_sync_id.value()->stream_sync_cid = streamSync.cid();
+    GXF_ASSERT(stream_sync_id.value()->stream_sync_cid != kNullUid, "stream_sync_cid is null");
     return Success;
   }
+
   static Expected<Handle<Tensor>> addTensor(Entity& message, Handle<Allocator> pool,
                                             const TensorDescription& description) {
     GXF_ASSERT(pool, "pool is not set");
@@ -116,8 +122,26 @@ class StreamTensorGeneratorNew : public StreamBasedOpsNew {
     GXF_ASSERT(stream, "allocating stream failed");
     stream_ = std::move(stream.value());
     GXF_ASSERT(stream_->stream(), "allocated stream is not initialized.");
+
+    stream_sync = stream_sync_.get();
+
+    GXF_ASSERT_SUCCESS(stream_sync->initialize());
+
+    void *syncObj{nullptr};
+    GXF_ASSERT_SUCCESS(stream_sync->allocate_sync_object(static_cast<SyncType>(signaler_.get()),
+                                                         static_cast<SyncType>(waiter_.get()),
+                                                         reinterpret_cast<void**>(&syncObj)));
+    GXF_ASSERT(syncObj, "syncObj is null");
+
+    GXF_ASSERT_SUCCESS(stream_sync->setCudaStream(static_cast<SyncType>(signaler_.get()),
+                                                  stream_->stream().value()));
+
+    GXF_ASSERT_SUCCESS(stream_sync->setCudaStream(static_cast<SyncType>(waiter_.get()),
+                                                  stream_->stream().value()));
+
     return GXF_SUCCESS;
   }
+
   gxf_result_t start() override { return GXF_SUCCESS; }
 
   gxf_result_t tick() override {
@@ -132,21 +156,16 @@ class StreamTensorGeneratorNew : public StreamBasedOpsNew {
     auto ret = addStream(dev_msg, stream_, kStreamName0);
     GXF_ASSERT(ret, "stream tensor generator adding stream failed");
 
-    auto sync_ret = dev_msg.add(stream_sync_.get().tid(), "nvidia::gxf::StreamSync");
+    auto sync_ret = addStreamSync(dev_msg, stream_sync, "nvidia::gxf::StreamSync");
     GXF_ASSERT_TRUE(sync_ret.has_value());
-    auto maybe_stream_sync = dev_msg.findAll<StreamSync>();
+    auto maybe_stream_sync = getStreamSync(dev_msg);
     GXF_ASSERT_TRUE(maybe_stream_sync.has_value());
-
-    auto stream_sync = maybe_stream_sync->at(0).value();
-    ret = addStreamSync(stream_sync, static_cast<SyncType>(signaler_.get()),
-                        static_cast<SyncType>(waiter_.get()), stream_->stream().value());
-    GXF_ASSERT(ret, "Failed to add stream sync");
 
     ret = createTensors(dev_msg, host_msg, stream_->stream().value());
     GXF_ASSERT(ret, "creating tensors failed");
     GXF_ASSERT(stream_, "stream is not allocated");
 
-    stream_sync->signalSemaphore();
+    maybe_stream_sync.value()->signalSemaphore();
 
     ret = cuda_tx_->publish(dev_msg);
     if (!ret) {
@@ -228,6 +247,7 @@ class StreamTensorGeneratorNew : public StreamBasedOpsNew {
   Parameter<int32_t> waiter_;
 
   Handle<CudaStream> stream_;
+  Handle<StreamSync> stream_sync;
 };
 
 // Dot product execution base class
@@ -348,9 +368,10 @@ class CublasDotProductNew : public StreamBasedOpsNew {
   gxf_result_t tick() override {
     Expected<Entity> in_msg = rx_->receive();
 
-    auto in_stream_sync = in_msg.value().findAll<StreamSync>();
-    GXF_ASSERT_TRUE(in_stream_sync.has_value());
-    in_stream_sync->at(0).value()->waitSemaphore();
+    auto maybe_stream_sync = getStreamSync(in_msg.value());
+    GXF_ASSERT_TRUE(maybe_stream_sync.has_value());
+
+    maybe_stream_sync.value()->waitSemaphore();
 
     auto ret = exec_.executeNew(in_msg.value(), "cublasdotproduct_tensor");
     return ToResultCode(ret);

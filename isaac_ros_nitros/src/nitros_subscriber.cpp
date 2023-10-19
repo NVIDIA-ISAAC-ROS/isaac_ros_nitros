@@ -1,12 +1,19 @@
-/**
- * Copyright (c) 2022-2023, NVIDIA CORPORATION.  All rights reserved.
- *
- * NVIDIA CORPORATION and its licensors retain all intellectual property
- * and proprietary rights in and to this software, related documentation
- * and any modifications thereto.  Any use, reproduction, disclosure or
- * distribution of this software and related documentation without an express
- * license agreement from NVIDIA CORPORATION is strictly prohibited.
- */
+// SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
+// Copyright (c) 2022-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
+// SPDX-License-Identifier: Apache-2.0
 
 #include "gxf/core/gxf.h"
 
@@ -35,6 +42,10 @@ NitrosSubscriber::NitrosSubscriber(
   if (config_.type == NitrosPublisherSubscriberType::NOOP) {
     return;
   }
+
+  // Check and throw error if the specified compatible data format is not supported
+  // from the underlying graph
+  throwOnUnsupportedCompatibleDataFormat();
 
   // Create the compatible data format subscriber
   createCompatibleSubscriber();
@@ -89,6 +100,19 @@ NitrosSubscriber::NitrosSubscriber(
     statistics_msg_.is_subscriber = true;
     initStatistics();
   }
+}
+
+NitrosSubscriber::NitrosSubscriber(
+  rclcpp::Node & node,
+  const gxf_context_t context,
+  std::shared_ptr<NitrosTypeManager> nitros_type_manager,
+  const std::vector<std::string> & supported_data_formats,
+  const NitrosPublisherSubscriberConfig & config,
+  const NitrosStatisticsConfig & statistics_config)
+: NitrosSubscriber(
+    node, context, nitros_type_manager, {}, supported_data_formats, config, statistics_config)
+{
+  use_gxf_receiver_ = false;
 }
 
 std::shared_ptr<negotiated::NegotiatedSubscription> NitrosSubscriber::getNegotiatedSubscriber()
@@ -211,6 +235,12 @@ void NitrosSubscriber::postNegotiationCallback()
     negotiated_data_format_ = "";
   } else {
     negotiated_data_format_ = topics_info.negotiated_topics[0].supported_type_name;
+
+    RCLCPP_INFO(
+      node_.get_logger(),
+      "[NitrosSubscriber] Use the negotiated data format: \"%s\"",
+      negotiated_data_format_.c_str());
+
     if (negotiated_data_format_ != config_.compatible_data_format) {
       // Delete the compatible subscriber as we don't use it anymore
       nitros_type_manager_->getFormatCallbacks(config_.compatible_data_format).
@@ -227,11 +257,6 @@ void NitrosSubscriber::postNegotiationCallback()
 
       compatible_sub_ = nullptr;
     }
-
-    RCLCPP_INFO(
-      node_.get_logger(),
-      "[NitrosSubscriber] Use the negotiated data format: \"%s\"",
-      negotiated_data_format_.c_str());
   }
 }
 
@@ -280,20 +305,13 @@ void NitrosSubscriber::subscriberCallback(
     node_.get_logger(), "[NitrosSubscriber] \tReceiver's pointer: %p",
     (void *)gxf_receiver_ptr_);
 
-  if (gxf_receiver_ptr_ == nullptr) {
+  if (gxf_receiver_ptr_ == nullptr && use_gxf_receiver_) {
     RCLCPP_INFO(
       node_.get_logger(),
       "[NitrosSubscriber] Received a message but the application receiver's pointer is "
       "not yet set.");
+    nvtxRangePopWrapper();
     return;
-  }
-
-  if (config_.callback != nullptr) {
-    RCLCPP_DEBUG(
-      node_.get_logger(),
-      "[NitrosSubscriber] Calling user-defined callback for an Nitros-typed "
-      "message (eid=%ld)", msg_base.handle);
-    config_.callback(context_, msg_base);
   }
 
   if (frame_id_map_ptr_ != nullptr) {
@@ -307,7 +325,18 @@ void NitrosSubscriber::subscriberCallback(
       (*frame_id_map_ptr_.get())[frame_id_source_key].c_str());
   }
 
-  pushEntity(msg_base.handle);
+  if (config_.callback != nullptr) {
+    RCLCPP_DEBUG(
+      node_.get_logger(),
+      "[NitrosSubscriber] Calling user-defined callback for an Nitros-typed "
+      "message (eid=%ld)", msg_base.handle);
+    config_.callback(context_, msg_base);
+  }
+
+  if (use_gxf_receiver_) {
+    // Push the message to the associated gxf receiver if existed
+    pushEntity(msg_base.handle);
+  }
 
   nvtxRangePopWrapper();
 }

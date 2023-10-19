@@ -1,19 +1,19 @@
-/*
- * SPDX-FileCopyrightText: Copyright (c) 2020 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
- * SPDX-License-Identifier: Apache-2.0
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
+// Copyright (c) 2020-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
+// SPDX-License-Identifier: Apache-2.0
 #ifndef NVIDIA_GXF_STD_SCHEDULING_TERMS_HPP_
 #define NVIDIA_GXF_STD_SCHEDULING_TERMS_HPP_
 
@@ -25,6 +25,7 @@
 #include "gxf/core/handle.hpp"
 #include "gxf/std/allocator.hpp"
 #include "gxf/std/clock.hpp"
+#include "gxf/std/parameter_parser.hpp"
 #include "gxf/std/parameter_parser_std.hpp"
 #include "gxf/std/receiver.hpp"
 #include "gxf/std/scheduling_term.hpp"
@@ -32,6 +33,72 @@
 
 namespace nvidia {
 namespace gxf {
+
+enum class PeriodicSchedulingPolicy {
+  // scheduler will try to "catch up" on missed ticks
+  // eg. assume recess period of 100ms:
+  // tick 0 at 0ms   -> next_target_ = 100ms
+  // tick 1 at 250ms -> next_target_ = 200ms (next_target_ < timestamp)
+  // tick 2 at 255ms -> next_target_ = 300ms (double tick before 300ms)
+  kCatchUpMissedTicks,
+  // scheduler guarantees recess period will have passed before next tick
+  // eg. assume recess period of 100ms:
+  // tick 0 at 0ms   -> next_target_ = 100ms
+  // tick 1 at 101ms -> next_target_ = 201ms
+  // tick 2 at 350ms -> next_target_ = 450ms
+  kMinTimeBetweenTicks,
+  // scheduler will not try to "catch up" on missed ticks
+  // eg. assume recess period of 100ms:
+  // tick 0 at 0ms   -> next_target_ = 100ms
+  // tick 1 at 250ms -> next_target_ = 300ms (single tick before 300ms)
+  // tick 2 at 305ms -> next_target_ = 400ms
+  kNoCatchUpMissedTicks
+};
+
+  // Custom parameter parser for PeriodicSchedulingPolicy
+template <>
+struct ParameterParser<PeriodicSchedulingPolicy> {
+  static Expected<PeriodicSchedulingPolicy> Parse(gxf_context_t context, gxf_uid_t component_uid,
+                                      const char* key, const YAML::Node& node,
+                                      const std::string& prefix) {
+    const std::string value = node.as<std::string>();
+    if (strcmp(value.c_str(), "CatchUpMissedTicks") == 0) {
+      return PeriodicSchedulingPolicy::kCatchUpMissedTicks;
+    }
+    if (strcmp(value.c_str(), "MinTimeBetweenTicks") == 0) {
+      return PeriodicSchedulingPolicy::kMinTimeBetweenTicks;
+    }
+    if (strcmp(value.c_str(), "NoCatchUpMissedTicks") == 0) {
+      return PeriodicSchedulingPolicy::kNoCatchUpMissedTicks;
+    }
+    return Unexpected{GXF_ARGUMENT_OUT_OF_RANGE};
+  }
+};
+
+// Custom parameter wrapper for PeriodicSchedulingPolicy
+template<>
+struct ParameterWrapper<PeriodicSchedulingPolicy> {
+  static Expected<YAML::Node> Wrap(gxf_context_t context, const PeriodicSchedulingPolicy& value) {
+    YAML::Node node(YAML::NodeType::Scalar);
+    switch (value) {
+      case PeriodicSchedulingPolicy::kCatchUpMissedTicks: {
+        node = std::string("CatchUpMissedTicks");
+        break;
+      }
+      case PeriodicSchedulingPolicy::kMinTimeBetweenTicks: {
+        node = std::string("MinTimeBetweenTicks");
+        break;
+      }
+      case PeriodicSchedulingPolicy::kNoCatchUpMissedTicks: {
+        node = std::string("NoCatchUpMissedTicks");
+        break;
+      }
+      default:
+        return Unexpected{GXF_PARAMETER_OUT_OF_RANGE};
+    }
+    return node;
+  }
+};
 
 // A scheduling term which permits execution only after a minium time period has passed since the
 // last execution.
@@ -47,16 +114,14 @@ class PeriodicSchedulingTerm : public SchedulingTerm {
   int64_t recess_period_ns() const { return recess_period_ns_; }
 
   // Get the last run time stamp
-  Expected<int64_t> last_run_timestamp() const { return last_run_timestamp_; }
+  Expected<int64_t> last_run_timestamp() const { return next_target_ - recess_period_ns_; }
 
  private:
-  // Parses given text to return the desired period in nanoseconds.
-  Expected<int64_t> parseRecessPeriodString(std::string text);
-
   Parameter<std::string> recess_period_;
+  Parameter<PeriodicSchedulingPolicy> policy_;
 
   int64_t recess_period_ns_;
-  Expected<int64_t> last_run_timestamp_ = Unexpected{GXF_UNINITIALIZED_VALUE};
+  Expected<int64_t> next_target_ = Unexpected{GXF_UNINITIALIZED_VALUE};
 };
 
 // A scheduling term which permits execution only a limited number of times.
@@ -123,8 +188,6 @@ class TargetTimeSchedulingTerm : public SchedulingTerm {
 
   // The timestamp at which the most recent execution cycle began
   int64_t last_timestamp_;
-  // Indicates atleast one target timestamp has been set
-  bool is_target_timestamp_{false};
   // The timestamp at which the next execution cycle is requested to begin
   mutable Expected<int64_t> target_timestamp_ = Unexpected{GXF_UNINITIALIZED_VALUE};
   // The timestamp at which the next execution cycle is locked to begin
@@ -156,6 +219,51 @@ class MessageAvailableSchedulingTerm : public SchedulingTerm {
   int64_t last_state_change_;  // timestamp when the state changed the last time
 };
 
+// Type of sampling to be used for incoming messages
+enum struct SamplingMode {
+  kSumOfAll = 0,     // Min size specified is for the sum of all messages at all receivers;
+  kPerReceiver = 1,  // Min size specified is per receiver connected;
+};
+
+// Custom parameter parser for SamplingMode
+template <>
+struct ParameterParser<SamplingMode> {
+  static Expected<SamplingMode> Parse(gxf_context_t context, gxf_uid_t component_uid,
+                                       const char* key, const YAML::Node& node,
+                                       const std::string& prefix) {
+    const std::string value = node.as<std::string>();
+    if (strcmp(value.c_str(), "SumOfAll") == 0) {
+      return SamplingMode::kSumOfAll;
+    }
+    if (strcmp(value.c_str(), "PerReceiver") == 0) {
+      return SamplingMode::kPerReceiver;
+    }
+    return Unexpected{GXF_ARGUMENT_OUT_OF_RANGE};
+  }
+};
+
+// Custom parameter wrapper for SamplingMode
+template<>
+struct ParameterWrapper<SamplingMode> {
+  static Expected<YAML::Node> Wrap(gxf_context_t context, const SamplingMode& value) {
+  YAML::Node node(YAML::NodeType::Scalar);
+  switch (value) {
+    case SamplingMode::kSumOfAll: {
+      node = std::string("SumOfAll");
+      break;
+    }
+    case SamplingMode::kPerReceiver: {
+      node = std::string("PerReceiver");
+      break;
+    }
+    default:
+      return Unexpected{GXF_PARAMETER_OUT_OF_RANGE};
+  }
+    return node;
+  }
+};
+
+
 // A scheduling term which specifies that an entity can be executed when a list of provided input
 // channels combined have at least a given number of messages.
 class MultiMessageAvailableSchedulingTerm : public SchedulingTerm {
@@ -168,10 +276,13 @@ class MultiMessageAvailableSchedulingTerm : public SchedulingTerm {
   gxf_result_t update_state_abi(int64_t timestamp) override;
 
  private:
-  Parameter<std::vector<Handle<Receiver>>> receivers_;
+  Parameter<FixedVector<Handle<Receiver>, kMaxComponents>> receivers_;
   Parameter<size_t> min_size_;
+  Parameter<size_t> min_sum_;
   SchedulingConditionType current_state_;   // The current state of the scheduling term
   int64_t last_state_change_;  // timestamp when the state changed the last time
+  Parameter<FixedVector<size_t, kMaxComponents>> min_sizes_;
+  Parameter<SamplingMode> sampling_mode_;
 };
 
 // A scheduling term which tries to wait for specified number of messages in receiver.
@@ -254,6 +365,33 @@ class AsynchronousSchedulingTerm : public SchedulingTerm {
  private:
   AsynchronousEventState event_state_{AsynchronousEventState::READY};
   mutable std::mutex event_state_mutex_;
+};
+
+// A scheduling term which lets an entity maintain a specific execution (min) frequency
+// The scheduling term will also monitor messages incoming via multiple receivers and
+// switch to READY state if any messages are available
+class MessageAvailableFrequencyThrottler : public SchedulingTerm {
+ public:
+  gxf_result_t initialize() override;
+  gxf_result_t check_abi(int64_t timestamp, SchedulingConditionType* type,
+                         int64_t* target_timestamp) const override;
+  gxf_result_t onExecute_abi(int64_t timestamp) override;
+  gxf_result_t registerInterface(Registrar* registrar) override;
+  gxf_result_t update_state_abi(int64_t timestamp) override;
+
+ private:
+  Expected<int64_t> last_run_timestamp_ = Unexpected{GXF_UNINITIALIZED_VALUE};
+  Parameter<std::string> message_recess_period_text_;
+  Parameter<std::string> execution_frequency_text_;
+  Parameter<FixedVector<Handle<Receiver>, kMaxComponents>> receivers_;
+  Parameter<size_t> min_sum_;
+  Parameter<FixedVector<size_t, kMaxComponents>> min_sizes_;
+  Parameter<SamplingMode> sampling_mode_;
+  int64_t message_recess_period_;
+  int64_t execution_frequency_;
+
+  SchedulingConditionType current_state_;   // The current state of the scheduling term
+  int64_t last_state_change_;  // timestamp when the state changed the last time
 };
 
 // A scheduling term which waits until a given number of blocks are

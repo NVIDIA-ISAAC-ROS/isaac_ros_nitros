@@ -1,19 +1,19 @@
-/*
- * SPDX-FileCopyrightText: Copyright (c) 2021 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
- * SPDX-License-Identifier: Apache-2.0
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
+// Copyright (c) 2021-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
+// SPDX-License-Identifier: Apache-2.0
 #ifndef NVIDIA_GXF_CORE_GXF_EXT_H_
 #define NVIDIA_GXF_CORE_GXF_EXT_H_
 
@@ -141,6 +141,81 @@ gxf_result_t GxfCreateEntity(gxf_context_t context, const GxfEntityCreateInfo* i
                              gxf_uid_t* eid);
 
 // -------------------------------------------------------------------------------------------------
+/// @brief Name of default EntityGroup
+#define kDefaultEntityGroupName "default_entity_group"
+
+/// @brief Create a new GXF EntityGroup
+///
+/// EntityGroup is a group of EntityItems, such that these entities are bonded to some
+/// common properties. For now the common property is all kinds of resources.
+///
+/// @param context A valid GXF context
+/// @param name name to create the EntityGroup
+/// @param gid returned uid for the created EntityGroup, abbreviation for group id.
+/// @return GXF error code
+gxf_result_t GxfCreateEntityGroup(gxf_context_t context, const char* name, gxf_uid_t* gid);
+
+/// @brief Add an entity eid into an EntityGroup by EntityGroup uid
+///
+/// Each EntityItem is created with default EntityGroup uid, this API
+/// 1. updates EntityGroup uid in current EntityItem, to new group id gid;
+/// 2. Remove eid from its previous EntityGroup;
+/// 3. add eid to its new EntityGroup
+///
+/// @param context A valid GXF context
+/// @param gid UID of an existing (new) EntityGroup
+/// @param eid eid of an Entity
+/// @return GXF error code
+gxf_result_t GxfUpdateEntityGroup(gxf_context_t context, gxf_uid_t gid, gxf_uid_t eid);
+
+/// @brief Check if an entity id is valid currently in GXF runtime
+/// @param context A valid GXF context
+/// @param eid eid of an Entity to check
+/// @param valid returned boolean indicating if the entity is valid in Gxf runtime(warden)
+/// @return GXF error code
+gxf_result_t GxfEntityIsValid(gxf_context_t context, gxf_uid_t eid, bool* valid);
+
+/// @brief Finds and returns all resource component cids for EntityGroup pointed by eid
+///
+/// Finds and returns all resource component cids for EntityGroup pointed by eid.
+/// If more than `max_entities` exist only `max_entities` will be returned.
+///
+/// @param context A valid GXF context
+/// @param eid eid of an Entity
+/// @param num_resource_cids In/Out: the max number of components that can fit in
+/// the buffer/the number of resources in eid's EntityGroup
+/// @param resource_cids A buffer allocated by the caller for returned UIDs of all resouces, with
+/// capacity for `num_resource_cids`.
+/// @return GXF_SUCCESS if the operation was successful, GXF_QUERY_NOT_ENOUGH_CAPACITY if more
+/// resources exist in eid's EntityGroup, or otherwise one of the GXF error codes.
+gxf_result_t GxfEntityGroupFindResources(gxf_context_t context, gxf_uid_t eid,
+                                         uint64_t* num_resource_cids, gxf_uid_t* resource_cids);
+
+/// @brief Find name of EntityGroup held by entity
+///
+/// EntityGroup is a group of EntityItems, such that these entities are bonded to some
+/// common properties. For now the common property is all kinds of resources. Through
+/// life time of each entity, it always corresponds to an EntityGroup. Eg, newly created
+/// EntityItem points to Default EntityGroup, and user can update its EntityGroup to valid
+/// one only.
+///
+/// @param context A valid GXF context
+/// @param eid eid of an EntityItem, whose EntityGroup id field is used find EntityGroup name
+/// @param name The returned name of the EntityGroup
+/// @return GXF_SUCCESS if the operation was successful, or otherwise one of the GXF error codes.
+gxf_result_t GxfEntityGroupName(gxf_context_t context, gxf_uid_t eid, const char** name);
+
+/// @brief Gets cid of a resource component that is grouped with the given entity
+///
+/// @param context A valid GXF context
+/// @param eid eid of an Entity
+/// @param type The fully qualified C++ type name of the component
+/// @param resource_key the key or name of the resource
+/// @param resource_cid The returned cid of the resource component
+/// @return GXF_SUCCESS if the operation was successful, or otherwise one of the GXF error codes.
+gxf_result_t GxfEntityResourceGetHandle(gxf_context_t context, gxf_uid_t eid,
+               const char* type, const char* resource_key, gxf_uid_t* resource_cid);
+// -------------------------------------------------------------------------------------------------
 
 /// @brief Severity levels for GXF_LOG_* logging macros
 typedef enum {
@@ -171,6 +246,13 @@ gxf_result_t GxfSetSeverity(gxf_context_t context, gxf_severity_t severity);
 gxf_result_t GxfGetSeverity(gxf_context_t context, gxf_severity_t* severity);
 
 // -------------------------------------------------------------------------------------------------
+
+/// @brief Simple macro to convert enum values to their string representations which can be
+/// useful for logging enum types
+#define GXF_ENUM_TO_STR(X, Y) \
+  case X:               \
+    return #Y;
+
 
 #ifdef __cplusplus
 }  // extern "C"

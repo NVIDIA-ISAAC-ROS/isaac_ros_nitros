@@ -1,12 +1,19 @@
-/*
-Copyright (c) 2023, NVIDIA CORPORATION. All rights reserved.
-
-NVIDIA CORPORATION and its licensors retain all intellectual property
-and proprietary rights in and to this software, related documentation
-and any modifications thereto. Any use, reproduction, disclosure or
-distribution of this software and related documentation without an express
-license agreement from NVIDIA CORPORATION is strictly prohibited.
-*/
+// SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
+// Copyright (c) 2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
+// SPDX-License-Identifier: Apache-2.0
 #pragma once
 
 #include <array>
@@ -186,6 +193,20 @@ struct NoPaddingColorPlanes<gxf::VideoFormat::GXF_VIDEO_FORMAT_B32_G32_R32> {
   std::array<gxf::ColorPlane, 3> planes;
 };
 
+template <>
+struct NoPaddingColorPlanes<gxf::VideoFormat::GXF_VIDEO_FORMAT_D32F> {
+  explicit NoPaddingColorPlanes(uint32_t width)
+      : planes({nvidia::gxf::ColorPlane("D", 4, width * 4)}) {}
+  std::array<nvidia::gxf::ColorPlane, 1> planes;
+};
+
+template <>
+struct NoPaddingColorPlanes<gxf::VideoFormat::GXF_VIDEO_FORMAT_D64F> {
+  explicit NoPaddingColorPlanes(uint32_t width)
+      : planes({nvidia::gxf::ColorPlane("D", 8, width * 8)}) {}
+  std::array<nvidia::gxf::ColorPlane, 1> planes;
+};
+
 // This includes the list of video buffer formats that supported for the allocator
 constexpr bool IsSupportedVideoFormat(const gxf::VideoFormat format) {
   return format == gxf::VideoFormat::GXF_VIDEO_FORMAT_RGB ||
@@ -209,7 +230,9 @@ constexpr bool IsSupportedVideoFormat(const gxf::VideoFormat format) {
          format == gxf::VideoFormat::GXF_VIDEO_FORMAT_NV12 ||
          format == gxf::VideoFormat::GXF_VIDEO_FORMAT_NV12_ER ||
          format == gxf::VideoFormat::GXF_VIDEO_FORMAT_NV24 ||
-         format == gxf::VideoFormat::GXF_VIDEO_FORMAT_NV24_ER;
+         format == gxf::VideoFormat::GXF_VIDEO_FORMAT_NV24_ER ||
+         format == gxf::VideoFormat::GXF_VIDEO_FORMAT_D32F ||
+         format == gxf::VideoFormat::GXF_VIDEO_FORMAT_D64F;
 }
 
 template<gxf::VideoFormat T, typename std::enable_if<!IsSupportedVideoFormat(T)>::type* = nullptr>

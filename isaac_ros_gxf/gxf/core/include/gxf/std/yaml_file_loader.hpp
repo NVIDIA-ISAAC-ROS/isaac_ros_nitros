@@ -1,19 +1,19 @@
-/*
- * SPDX-FileCopyrightText: Copyright (c) 2020 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
- * SPDX-License-Identifier: Apache-2.0
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
+// Copyright (c) 2020-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
+// SPDX-License-Identifier: Apache-2.0
 #ifndef NVIDIA_GXF_STD_YAML_FILE_LOADER_HPP_
 #define NVIDIA_GXF_STD_YAML_FILE_LOADER_HPP_
 
@@ -51,7 +51,8 @@ class YamlFileLoader {
   Expected<void> loadFromFile(gxf_context_t context, const std::string& filename,
                               const std::string& entity_prefix,
                               const char* parameters_override_string[],
-                              const uint32_t num_overrides);
+                              const uint32_t num_overrides, gxf_uid_t parent_eid = kNullUid,
+                              const YAML::Node& prerequisites = YAML::Node(YAML::NodeType::Null));
 
   // Load GXF Graph from string.
   Expected<void> loadFromString(gxf_context_t context, const std::string& text,
@@ -89,6 +90,11 @@ class YamlFileLoader {
                                          const std::string& entity_prefix,
                                          const std::string& interface_name,
                                          const std::string& tag);
+
+  Expected<void> populateEntityGroups(gxf_context_t context,
+                                      const FixedVectorBase<YAML::Node>& nodes,
+                                      const std::string& entity_prefix);
+
   ParameterStorage* parameter_storage_ = nullptr;
 
   std::string root_;

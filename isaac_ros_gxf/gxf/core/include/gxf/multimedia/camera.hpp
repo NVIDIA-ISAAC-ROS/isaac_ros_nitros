@@ -1,33 +1,35 @@
-/*
- * SPDX-FileCopyrightText: Copyright (c) 2021-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
- * SPDX-License-Identifier: Apache-2.0
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
+// Copyright (c) 2021-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
+// SPDX-License-Identifier: Apache-2.0
 
 #ifndef NVIDIA_GXF_MULTIMEDIA_CAMERA_HPP_
 #define NVIDIA_GXF_MULTIMEDIA_CAMERA_HPP_
 
 #include <array>
 #include <cstdint>
+#include "gxf/multimedia/video.hpp"
+#include "gxf/std/timestamp.hpp"
 
 namespace nvidia {
 namespace gxf {
 
-template<class T>
+template <class T>
 struct Vector2 {
-    T x; /**< point x coordinate. */
-    T y; /**< point y coordinate. */
+  T x; /**< point x coordinate. */
+  T y; /**< point y coordinate. */
 };
 
 using Vector2u = Vector2<uint32_t>;
@@ -120,6 +122,10 @@ struct CameraModelBase {
   DistortionType distortion_type;
   // Distortion coefficients of the camera.
   T distortion_coefficients[kMaxDistortionCoefficients];
+  // Rectification matrix R of stereo camera/camera pair
+  std::array<T, 9> rectification;
+  // Project/camera matrix P of stereo camera/camera pair
+  std::array<T, 12> projection_camera_rect;
 };
 
 using CameraModel = CameraModelBase<float>;
@@ -141,6 +147,22 @@ struct Pose3DBase {
 };
 
 using Pose3D = Pose3DBase<float>;
+
+// Message structure for camera messages
+struct CameraMessageParts {
+  // Message entity
+  Entity entity;
+  // Camera frame
+  Handle<VideoBuffer> frame;
+  // Camera intrinsics
+  Handle<CameraModel> intrinsics;
+  // Camera extrinsics
+  gxf::Handle<gxf::Pose3D> extrinsics;
+  // Frame sequence number
+  gxf::Handle<int64_t> sequence_number;
+  // Frame acquisition timestamp
+  Handle<Timestamp> timestamp;
+};
 
 }  // namespace gxf
 }  // namespace nvidia

@@ -1,10 +1,19 @@
-# Copyright (c) 2022, NVIDIA CORPORATION.  All rights reserved.
+# SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
+# Copyright (c) 2022-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 #
-# NVIDIA CORPORATION and its licensors retain all intellectual property
-# and proprietary rights in and to this software, related documentation
-# and any modifications thereto.  Any use, reproduction, disclosure or
-# distribution of this software and related documentation without an express
-# license agreement from NVIDIA CORPORATION is strictly prohibited.
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+# SPDX-License-Identifier: Apache-2.0
 
 """Proof-of-Life test for the NitrosImage type adapter."""
 
@@ -81,6 +90,8 @@ class IsaacROSNitrosImageTest(IsaacROSBaseTest):
         try:
             image = JSONConversion.load_image_from_json(
                 test_folder / 'image.json')
+            timestamp = self.node.get_clock().now().to_msg()
+            image.header.stamp = timestamp
 
             # Wait at most TIMEOUT seconds for subscriber to respond
             TIMEOUT = 2
@@ -88,9 +99,6 @@ class IsaacROSNitrosImageTest(IsaacROSBaseTest):
 
             done = False
             while time.time() < end_time:
-                timestamp = self.node.get_clock().now().to_msg()
-                image.header.stamp = timestamp
-
                 image_pub.publish(image)
                 rclpy.spin_once(self.node, timeout_sec=0.1)
 
@@ -106,13 +114,16 @@ class IsaacROSNitrosImageTest(IsaacROSBaseTest):
             print(f'Source image data size: {len(image.data)}')
             print(f'Received image data size: {len(received_image.data)}')
 
+            self.assertEqual(str(timestamp), str(received_image.header.stamp),
+                             'Timestamps do not match.')
+
             self.assertEqual(len(image.data), len(received_image.data),
                              'Source and received image sizes do not match: ' +
                              f'{len(image.data)} != {len(received_image.data)}')
 
             for i in range(100):
                 self.assertEqual(image.data[i], received_image.data[i],
-                                 'Souce and received image pixels do not match')
+                                 'Source and received image pixels do not match')
 
             # Make sure that the source and received images are the same
             self.assertEqual(received_image.height, image.height,

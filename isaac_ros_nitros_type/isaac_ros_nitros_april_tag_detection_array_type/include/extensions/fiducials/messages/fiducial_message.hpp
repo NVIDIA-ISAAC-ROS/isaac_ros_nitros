@@ -1,12 +1,19 @@
-/*
-Copyright (c) 2021-2023, NVIDIA CORPORATION. All rights reserved.
-
-NVIDIA CORPORATION and its licensors retain all intellectual property
-and proprietary rights in and to this software, related documentation
-and any modifications thereto. Any use, reproduction, disclosure or
-distribution of this software and related documentation without an express
-license agreement from NVIDIA CORPORATION is strictly prohibited.
-*/
+// SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
+// Copyright (c) 2021-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
+// SPDX-License-Identifier: Apache-2.0
 #pragma once
 
 #include "engine/core/math/pose3.hpp"
@@ -35,7 +42,7 @@ struct FiducialMessageParts
   // Tag coordinates are centered at tag's upper-left corner
   // ie. Pose has identity quaternion and zero translation, when tag is facing the camera and it's
   // upper-left corner is centered at the camera center
-  gxf::Handle<::isaac::Pose3d> pose;
+  gxf::Handle<::nvidia::isaac::Pose3d> pose;
   // List of keypoints of the detected fiducial, in image space
   gxf::Handle<gxf::Tensor> keypoints;
 };
@@ -45,16 +52,14 @@ struct FiducialListMessageParts
 {
   gxf::Entity entity;
   FixedVector<gxf::Handle<FiducialInfo>, kMaxComponents> info;
-  FixedVector<gxf::Handle<::isaac::Pose3d>, kMaxComponents> pose;
+  FixedVector<gxf::Handle<::nvidia::isaac::Pose3d>, kMaxComponents> pose;
   FixedVector<gxf::Handle<gxf::Tensor>, kMaxComponents> keypoints;
   size_t count;
 };
 
 // Creates a fiducial message entity and returns a view to it
 // Message entity is activated by default
-gxf::Expected<FiducialMessageParts> CreateFiducialMessage(
-  gxf_context_t context,
-  bool activate = true);
+gxf::Expected<FiducialMessageParts> CreateFiducialMessage(gxf_context_t context);
 
 // Parses a fiducial message entity and returns a view to it
 gxf::Expected<FiducialMessageParts> GetFiducialMessage(gxf::Entity message);
@@ -63,8 +68,7 @@ gxf::Expected<FiducialMessageParts> GetFiducialMessage(gxf::Entity message);
 // Message entity is activated by default
 gxf::Expected<FiducialListMessageParts> CreateFiducialListMessage(
   gxf_context_t context,
-  size_t count,
-  bool activate = true);
+  size_t count);
 
 // Parses a fiducial list message entity and returns a view to it
 gxf::Expected<FiducialListMessageParts> GetFiducialListMessage(gxf::Entity message);

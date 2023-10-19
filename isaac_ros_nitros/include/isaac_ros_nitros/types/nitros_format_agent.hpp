@@ -1,12 +1,19 @@
-/**
- * Copyright (c) 2022-2023, NVIDIA CORPORATION.  All rights reserved.
- *
- * NVIDIA CORPORATION and its licensors retain all intellectual property
- * and proprietary rights in and to this software, related documentation
- * and any modifications thereto.  Any use, reproduction, disclosure or
- * distribution of this software and related documentation without an express
- * license agreement from NVIDIA CORPORATION is strictly prohibited.
- */
+// SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
+// Copyright (c) 2022-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
+// SPDX-License-Identifier: Apache-2.0
 
 #ifndef ISAAC_ROS_NITROS__TYPES__NITROS_FORMAT_AGENT_HPP_
 #define ISAAC_ROS_NITROS__TYPES__NITROS_FORMAT_AGENT_HPP_
@@ -367,8 +374,9 @@ public:
 
     RCLCPP_DEBUG(
       node.get_logger().get_child(LOGGER_SUFFIX).get_child(T::supported_type_name),
-      "Created a compatible subscriber (topic_name=%s)",
-      compatible_sub->get_topic_name());
+      "Created a compatible subscriber (topic_name=%s, format_name=%s)",
+      compatible_sub->get_topic_name(),
+      T::supported_type_name.c_str());
   }
 
   // Remove a compatible subscriber of type T from a negotiated subscriber

@@ -1,0 +1,14 @@
+{
+  "header": {
+    "frame_id": "",
+    "stamp": {
+      "sec": 22125,
+      "nanosec": 45172
+    }
+  },
+  "phc_val": 541,
+  "tsc_val": 12351,
+  "phc2_val": 6235,
+  "sys_val": 256,
+  "phc_latency": 2345
+}
