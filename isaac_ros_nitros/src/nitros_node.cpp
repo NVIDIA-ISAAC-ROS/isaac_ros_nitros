@@ -15,6 +15,8 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
+#include <filesystem>
+
 #include <ament_index_cpp/get_package_share_directory.hpp>
 
 #include "extensions/gxf_optimizer/core/optimizer.hpp"
@@ -34,6 +36,8 @@ namespace isaac_ros
 {
 namespace nitros
 {
+
+constexpr char kGraphExportDirectory[] = "/tmp/isaac_ros_nitros/graphs";
 
 constexpr char kGxfVaultComponentTypeName[] = "nvidia::gxf::Vault";
 constexpr char kGxfMessageRelayComponentTypeName[] =
@@ -543,12 +547,15 @@ void NitrosNode::postNegotiationCallback()
 
   std::string temp_yaml_filename;
   if (!use_raw_graph_no_optimizer_) {
+    std::string node_graph_export_directory =
+      std::string(kGraphExportDirectory) + "/" + graph_namespace_;
+    std::filesystem::create_directories(node_graph_export_directory);
     // Get the graph with the data formats assigned
     RCLCPP_INFO(
       get_logger(),
       "[NitrosNode] Exporting the final graph based on the negotiation results");
     auto export_result = optimizer_.exportGraphToFiles(
-      configs, package_share_directory_, graph_namespace_, graph_namespace_);
+      configs, node_graph_export_directory, graph_namespace_, graph_namespace_);
     if (!export_result) {
       std::stringstream error_msg;
       error_msg << "[NitrosNode] exportGraphToFiles Error: " <<
@@ -556,7 +563,7 @@ void NitrosNode::postNegotiationCallback()
       RCLCPP_ERROR(get_logger(), error_msg.str().c_str());
       throw std::runtime_error(error_msg.str().c_str());
     }
-    temp_yaml_filename = package_share_directory_ + "/" + graph_namespace_ + ".yaml";
+    temp_yaml_filename = node_graph_export_directory + "/" + graph_namespace_ + ".yaml";
   } else {
     // Use the original graph intact
     temp_yaml_filename = package_share_directory_ + "/" + app_yaml_filename_;

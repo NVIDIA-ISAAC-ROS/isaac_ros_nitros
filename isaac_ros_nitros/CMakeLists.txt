@@ -33,15 +33,47 @@ if(USE_NVTX)
     link_libraries("nvToolsExt")
 endif()
 
-# cuVSLAM (register path and install)
-ament_index_register_resource(cuvslam CONTENT share/${PROJECT_NAME}/cuvslam)
-install(DIRECTORY lib/cuvslam
-  DESTINATION "${CMAKE_INSTALL_PREFIX}/share/${PROJECT_NAME}")
+# cuVSLAM and cuApriltags (register paths and install)
 
-# cuApriltags (register path and install)
-ament_index_register_resource(cuapriltags CONTENT share/${PROJECT_NAME}/cuapriltags)
-install(DIRECTORY lib/cuapriltags
-  DESTINATION "${CMAKE_INSTALL_PREFIX}/share/${PROJECT_NAME}")
+# Determine the architecture
+if(CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64")
+    set(CUVSLAM_LIB_PATH "lib/cuvslam/lib_aarch64_jetpack51")
+    set(CUAPRILTAGS_LIB_PATH "lib/cuapriltags/lib_aarch64_jetpack51")
+elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64")
+    set(CUVSLAM_LIB_PATH "lib/cuvslam/lib_x86_64_cuda_11_8")
+    set(CUAPRILTAGS_LIB_PATH "lib/cuapriltags/lib_x86_64_cuda_11_8")
+else()
+    message(FATAL_ERROR "Unsupported architecture: ${CMAKE_SYSTEM_PROCESSOR}")
+endif()
+
+# Install the correct libcuapriltags.a/libcuvslam.so based on the architecture
+if(CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64")
+    install(FILES ${CUAPRILTAGS_LIB_PATH}/libcuapriltags.a
+        DESTINATION "${CMAKE_INSTALL_PREFIX}/share/${PROJECT_NAME}/cuapriltags/lib_aarch64_jetpack51")
+    install(FILES ${CUVSLAM_LIB_PATH}/libcuvslam.so
+        DESTINATION "${CMAKE_INSTALL_PREFIX}/share/${PROJECT_NAME}/cuvslam/lib_aarch64_jetpack51")
+elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64")
+    install(FILES ${CUAPRILTAGS_LIB_PATH}/libcuapriltags.a
+        DESTINATION "${CMAKE_INSTALL_PREFIX}/share/${PROJECT_NAME}/cuapriltags/lib_x86_64_cuda_11_8")
+    install(FILES ${CUVSLAM_LIB_PATH}/libcuvslam.so
+        DESTINATION "${CMAKE_INSTALL_PREFIX}/share/${PROJECT_NAME}/cuvslam/lib_x86_64_cuda_11_8")
+else()
+    message(FATAL_ERROR "Unsupported architecture: ${CMAKE_SYSTEM_PROCESSOR}")
+endif()
+
+# Install the header file for cuvslam
+install(FILES lib/cuvslam/include/cuvslam.h
+        DESTINATION "${CMAKE_INSTALL_PREFIX}/share/${PROJECT_NAME}/cuvslam/include")
+
+# cuVSLAM (register path)
+ament_index_register_resource(cuvslam CONTENT share/${PROJECT_NAME}/cuvslam)
+
+# Install the header file for cuapriltags
+install(FILES lib/cuapriltags/cuapriltags/cuAprilTags.h
+        DESTINATION "${CMAKE_INSTALL_PREFIX}/share/${PROJECT_NAME}/cuapriltags/cuapriltags")
+
+# cuApriltags (register path)
+ament_index_register_resource(cuapriltags CONTENT share/${PROJECT_NAME}/cuapriltags/)
 
 # Dependencies
 find_package(Eigen3 3.3 REQUIRED NO_MODULE)
