@@ -113,8 +113,11 @@ void rclcpp::TypeAdapter<
   // in case tensor is GPU based
   // using char to represnt 1 byte pointer
   auto deleter = [](double * ptr) {cudaFreeHost(ptr);};
-  unique_p<decltype(deleter)> beams_cpu_pointer(new double[num_points], deleter);
-  cudaMallocHost(reinterpret_cast<void **>(&beams_cpu_pointer), beams_tensor->size());
+  auto pointerCudaMalloc = [](size_t mySize) {
+      void * ptr; cudaMallocHost(reinterpret_cast<void **>(&ptr), mySize); return ptr;
+    };
+  unique_p<decltype(deleter)> beams_cpu_pointer(
+    reinterpret_cast<double *>(pointerCudaMalloc(beams_tensor->size())), deleter);
 
   ::nvidia::isaac::CpuTensorView2d beams_tensor_view;
   switch (beams_tensor->storage_type()) {
