@@ -15,6 +15,7 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
+#include <unistd.h>
 #include <filesystem>
 
 #include <ament_index_cpp/get_package_share_directory.hpp>
