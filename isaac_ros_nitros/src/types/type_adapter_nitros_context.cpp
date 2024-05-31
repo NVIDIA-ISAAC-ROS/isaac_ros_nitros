@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
-// Copyright (c) 2022-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+// Copyright (c) 2022-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -34,9 +34,9 @@ constexpr char TYPE_ADAPTER_CONTEXT_YAML[] =
 
 const std::vector<std::pair<std::string, std::string>> TYPE_ADAPTER_EXTENSIONS = {
   {"isaac_ros_gxf", "gxf/lib/std/libgxf_std.so"},
-  {"isaac_ros_gxf", "gxf/lib/libgxf_gxf_helpers.so"},
-  {"isaac_ros_gxf", "gxf/lib/libgxf_sight.so"},
-  {"isaac_ros_gxf", "gxf/lib/libgxf_atlas.so"}
+  {"gxf_isaac_gxf_helpers", "gxf/lib/libgxf_isaac_gxf_helpers.so"},
+  {"gxf_isaac_sight", "gxf/lib/libgxf_isaac_sight.so"},
+  {"gxf_isaac_atlas", "gxf/lib/libgxf_isaac_atlas.so"}
 };
 
 std::unique_ptr<NitrosContext> g_type_adapter_nitros_context;

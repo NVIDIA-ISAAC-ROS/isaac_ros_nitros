@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
-// Copyright (c) 2021-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+// Copyright (c) 2021-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -173,7 +173,7 @@ class Handle : public UntypedHandle {
   template <typename Derived>
   Handle(const Handle<Derived>& derived) : UntypedHandle(derived) {
     static_assert(std::is_base_of<T, Derived>::value,
-                  "Handle convertion is only allowed from derived class to base class");
+                  "Handle conversion is only allowed from derived class to base class");
   }
 
   // Allow conversion from handle to pointer

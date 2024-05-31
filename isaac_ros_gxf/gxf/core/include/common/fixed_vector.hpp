@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
-// Copyright (c) 2021-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+// Copyright (c) 2021-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -41,7 +41,7 @@ namespace nvidia {
 template <typename T>
 class FixedVectorBase {
  public:
-  // Use STL naming convension for compatibility with STL algorithms
+  // Use STL naming convention for compatibility with STL algorithms
   using value_type             = T;
   using size_type              = size_t;
   using iterator               = RandomAccessIterator<FixedVectorBase>;

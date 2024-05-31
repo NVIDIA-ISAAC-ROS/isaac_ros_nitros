@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
-// Copyright (c) 2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+// Copyright (c) 2023-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -74,6 +74,7 @@ const std::string GetFrameId() const {return msg_.frame_id;}
 class TYPE_NAME##View  \
 { \
 MARK_PUBLIC_SECTION() \
+const TYPE_NAME & GetMessage() const {return msg_;} \
 void InitView(); \
 explicit TYPE_NAME##View(const TYPE_NAME & in_msg) \
 : msg_{in_msg}, \
@@ -86,7 +87,7 @@ ADD_COMMON_METHODS()
 
 #define NITROS_TYPE_VIEW_FACTORY_END(TYPE_NAME) \
 MARK_PRIVATE_SECTION() \
-const TYPE_NAME & msg_; \
+const TYPE_NAME msg_; \
 const gxf::Expected<gxf::Entity> msg_entity_; \
 };
 /* *INDENT-ON* */

@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
-// Copyright (c) 2021-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+// Copyright (c) 2021-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -86,7 +86,7 @@ using ResultType = decltype(Declval<F>()(Declval<Es>().value()...));
 template <class F, class... Es>
 using ErrorResultType = UnexpectedType<decltype(Declval<F>()(Declval<Es>().error()...))>;
 
-// Empty stuct for representing an object with only one possible value (itself). This can be used
+// Empty struct for representing an object with only one possible value (itself). This can be used
 // for speciallizing on void types where void would not compile because it is not a valid type.
 // NOTE: GCC9 has a bug where it cannot evaluate the destructor of an empty struct, so put a dummy
 //   byte in to pass the compiler warnings. All empty structs are always considered non-zero in size
@@ -336,7 +336,8 @@ class ExpectedBase {
   }
   template <class... Args>
   constexpr Derived&& log_error(Args&&... args) && {
-  // GCC is not able to do format security validation when the string is coming from a variadic template, even if the string is originally a char*
+  // GCC is not able to do format security validation when the string is coming from a
+  // variadic template, even if the string is originally a char*
   // ignore this warning until a more recent GCC version fixes this behavior
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wformat-security"
@@ -553,7 +554,7 @@ class ExpectedBase {
     static_assert(IsSame_v<U, RemoveCVRef_t<ValueType<Derived>>>,
         "received pointer-to-member that is not of type T.");
     // NOTE: there is a subtle distinction here. If we want to get access to a member variable
-    // from an rvalue context, we MUST make a copy, since we cannot guarrantee the reference will
+    // from an rvalue context, we MUST make a copy, since we cannot guarantee the reference will
     // still be valid after destruction of the temporary.
     auto func = [&](ValueType<Derived>&& a) { return a.*ptr; };
     return has_value() ? FunctorMap(func, std::move(*derived())) : unexpected();
@@ -700,20 +701,20 @@ class ExpectedBase {
     return std::move(*ValuePointer<Unexpected<E>>(buffer_));
   }
 
-  // Returns a pointer to the dervied type for accessing value result in supported specializations.
+  // Returns a pointer to the derived type for accessing value result in supported specializations.
   constexpr const Derived* derived() const { return static_cast<const Derived*>(this); }
   constexpr       Derived* derived()       { return static_cast<Derived*>(this); }
 
   ///-----------------------------------------------------------------------------------------------
   /// Construction Helpers
   ///-----------------------------------------------------------------------------------------------
-  // Constuct a new object in allocated buffer.
+  // Construct a new object in allocated buffer.
   template <class U, class G, class D>
   constexpr void constructFrom(const ExpectedBase<U, G, D>& other) {
     other.has_value() ? constructValueFrom(other) : constructErrorFrom(other);
   }
 
-  // Move constuct a new object in allocated buffer.
+  // Move construct a new object in allocated buffer.
   template <class U, class G, class D>
   constexpr void constructFrom(ExpectedBase<U, G, D>&& other) {
     other.has_value() ? constructValueFrom(std::move(other)) : constructErrorFrom(std::move(other));

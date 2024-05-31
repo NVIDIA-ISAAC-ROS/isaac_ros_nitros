@@ -1,5 +1,5 @@
 # SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
-# Copyright (c) 2022-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# Copyright (c) 2022-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -31,13 +31,8 @@
 
 # Library names
 list(APPEND _GXF_EXTENSIONS
-    atlas
     cuda
-    isaac_messages
-    isaac_ros_messages
-    message_compositor
     multimedia
-    gxf_optimizer
     serialization
     std
 )

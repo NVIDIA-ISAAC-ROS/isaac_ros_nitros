@@ -1,5 +1,5 @@
 # SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
-# Copyright (c) 2022-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# Copyright (c) 2022-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -30,7 +30,7 @@ from std_msgs.msg import Empty
 
 @pytest.mark.rostest
 def generate_test_description():
-    """Generate launch description with NitrosNode test node."""
+    """Generate launch description with NitrosEmptyForwardNode test node."""
     test_ns = IsaacROSNitrosNodeTest.generate_namespace()
     container = ComposableNodeContainer(
         name='image_container',
@@ -40,24 +40,26 @@ def generate_test_description():
         composable_node_descriptions=[
             ComposableNode(
                 package='isaac_ros_nitros',
-                plugin='nvidia::isaac_ros::nitros::NitrosNode',
+                plugin='nvidia::isaac_ros::nitros::NitrosEmptyForwardNode',
                 name='isaac_ros_nitros',
                 namespace=test_ns,
                 parameters=[{
                         'compatible_format': 'nitros_empty',
-                        'enable_statistics': True,
+                        'enable_node_time_statistics': True,
                         'statistics_publish_rate': 2.0,
-                        'filter_window_size': 7
+                        'filter_window_size': 7,
+                        'topics_list': ['topic_forward_output'],
+                        'expected_fps_list': [5.0]
                 }]
             ),
             ComposableNode(
                 package='isaac_ros_nitros',
-                plugin='nvidia::isaac_ros::nitros::NitrosNode',
+                plugin='nvidia::isaac_ros::nitros::NitrosEmptyForwardNode',
                 name='isaac_ros_nitros',
                 namespace=test_ns+'/mid1',
                 parameters=[{
                         'compatible_format': 'nitros_empty',
-                        'enable_statistics': True,
+                        'enable_node_time_statistics': True,
                         'statistics_publish_rate': 3.0,
                         'filter_window_size': 12
                 }],

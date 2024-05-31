@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
-// Copyright (c) 2020-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+// Copyright (c) 2020-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -99,11 +99,13 @@ class MemoryBuffer {
   Expected<void> wrapMemory(void* pointer, uint64_t size,
                             MemoryStorageType storage_type,
                             release_function_t release_func) {
-    const auto result = freeBuffer();
-    if (!result) { return ForwardError(result); }
+    if (pointer != this->pointer()) {
+      const auto result = freeBuffer();
+      if (!result) { return ForwardError(result); }
 
+      pointer_ = reinterpret_cast<byte*>(pointer);
+    }
     storage_type_ = storage_type;
-    pointer_ = reinterpret_cast<byte*>(pointer);
     size_ = size;
     release_func_ = release_func;
 

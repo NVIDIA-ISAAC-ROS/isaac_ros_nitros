@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
-// Copyright (c) 2020-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+// Copyright (c) 2020-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -17,16 +17,17 @@
 #ifndef NVIDIA_GXF_STD_SCHEDULING_TERMS_HPP_
 #define NVIDIA_GXF_STD_SCHEDULING_TERMS_HPP_
 
+#include <set>
 #include <string>
 #include <utility>
 #include <vector>
 
 #include "gxf/core/component.hpp"
 #include "gxf/core/handle.hpp"
+#include "gxf/core/parameter_parser.hpp"
+#include "gxf/core/parameter_parser_std.hpp"
 #include "gxf/std/allocator.hpp"
 #include "gxf/std/clock.hpp"
-#include "gxf/std/parameter_parser.hpp"
-#include "gxf/std/parameter_parser_std.hpp"
 #include "gxf/std/receiver.hpp"
 #include "gxf/std/scheduling_term.hpp"
 #include "gxf/std/transmitter.hpp"
@@ -100,7 +101,7 @@ struct ParameterWrapper<PeriodicSchedulingPolicy> {
   }
 };
 
-// A scheduling term which permits execution only after a minium time period has passed since the
+// A scheduling term which permits execution only after a minimum time period has passed since the
 // last execution.
 class PeriodicSchedulingTerm : public SchedulingTerm {
  public:
@@ -158,13 +159,22 @@ class DownstreamReceptiveSchedulingTerm : public SchedulingTerm {
   // The transmitter which needs to be able to publish a message.
   Handle<Transmitter> transmitter() const { return transmitter_.get(); }
   // The receiver which is connected to the transmitter and which needs to have room for messages.
-  void setReceiver(Handle<Receiver> receiver) { receiver_ = std::move(receiver); }
+  void setReceivers(std::set<Handle<Receiver>> receivers) { receivers_ = std::move(receivers); }
+
+  // Set the transmitter parameter
+  Expected<void> setTransmitter(Handle<Transmitter> value) {
+    return transmitter_.set(value);
+  }
+  // Set the min_size parameter
+  Expected<void> setMinSize(uint64_t value) {
+    return min_size_.set(value);
+  }
 
  private:
   Parameter<Handle<Transmitter>> transmitter_;
   Parameter<uint64_t> min_size_;
 
-  Handle<Receiver> receiver_;  // The receiver connected to the transmitter (if any).
+  std::set<Handle<Receiver>> receivers_;  // The receiver connected to the transmitter (if any).
   SchedulingConditionType current_state_;   // The current state of the scheduling term
   int64_t last_state_change_;  // timestamp when the state changed the last time
 };
@@ -205,6 +215,19 @@ class MessageAvailableSchedulingTerm : public SchedulingTerm {
   gxf_result_t onExecute_abi(int64_t timestamp) override;
   gxf_result_t update_state_abi(int64_t timestamp) override;
 
+  // Set the receiver parameter
+  Expected<void> setReceiver(Handle<Receiver> value) {
+    return receiver_.set(value);
+  }
+  // Set the min_size parameter
+  Expected<void> setMinSize(size_t value) {
+    return min_size_.set(value);
+  }
+  // Set the front_stage_max_size parameter
+  Expected<void> setFrontStageMaxSize(size_t value) {
+    return front_stage_max_size_.set(value);
+  }
+
  private:
   // Returns true if the condition imposed by min_size is true.
   bool checkMinSize() const;
@@ -213,7 +236,7 @@ class MessageAvailableSchedulingTerm : public SchedulingTerm {
   bool checkFrontStageMaxSize() const;
 
   Parameter<Handle<Receiver>> receiver_;
-  Parameter<size_t> min_size_;
+  Parameter<uint64_t> min_size_;
   Parameter<size_t> front_stage_max_size_;
   SchedulingConditionType current_state_;   // The current state of the scheduling term
   int64_t last_state_change_;  // timestamp when the state changed the last time
@@ -274,6 +297,33 @@ class MultiMessageAvailableSchedulingTerm : public SchedulingTerm {
                          int64_t* target_timestamp) const override;
   gxf_result_t onExecute_abi(int64_t timestamp) override;
   gxf_result_t update_state_abi(int64_t timestamp) override;
+
+  // Set the min_size parameter
+  Expected<void> setMinSize(size_t value) {
+    return min_size_.set(value);
+  }
+  // Set the min_sum parameter
+  Expected<void> setMinSum(size_t value) {
+    return min_sum_.set(value);
+  }
+  // Set the sampling_mode parameter
+  Expected<void> setSamplingMode(SamplingMode value) {
+    return sampling_mode_.set(value);
+  }
+  // Add a value to receivers parameter
+  Expected<void> addReceiver(Handle<Receiver> value) {
+    auto rxs = receivers_.get();
+    auto result = rxs.push_back(value);
+    if (!result) { return Unexpected(GXF_OUT_OF_MEMORY); }
+    return receivers_.set(rxs);
+  }
+  // Add a value to min_sizes parameter
+  Expected<void> addMinSize(size_t value) {
+    auto min_sizes = min_sizes_.get();
+    auto result = min_sizes.push_back(value);
+    if (!result) { return Unexpected(GXF_OUT_OF_MEMORY); }
+    return min_sizes_.set(min_sizes);
+  }
 
  private:
   Parameter<FixedVector<Handle<Receiver>, kMaxComponents>> receivers_;

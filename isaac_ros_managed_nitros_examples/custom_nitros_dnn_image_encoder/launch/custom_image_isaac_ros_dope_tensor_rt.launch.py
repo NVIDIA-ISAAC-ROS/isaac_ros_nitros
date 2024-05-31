@@ -1,5 +1,5 @@
 # SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
-# Copyright (c) 2021-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# Copyright (c) 2021-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -128,7 +128,8 @@ def generate_launch_description():
             'input_image_height': input_image_height,
             'input_image_width': input_image_width
         }],
-        remappings=[('/encoded_tensor', '/tensor_pub')]
+        remappings=[('/encoded_tensor', '/tensor_pub'),
+                    ('/image', '/image_rect')]
     )
 
     dope_inference_node = ComposableNode(

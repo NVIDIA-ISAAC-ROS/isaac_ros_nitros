@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
-// Copyright (c) 2022-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+// Copyright (c) 2022-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -50,9 +50,6 @@ using NitrosPubSubGroupPointerList = std::vector<std::shared_ptr<NitrosPublisher
 class NitrosNode : public rclcpp::Node
 {
 public:
-  // A constructor that brings up a functional ROS node acting as a forward node (for testing)
-  explicit NitrosNode(const rclcpp::NodeOptions & options);
-
   ~NitrosNode();
 
   NitrosNode(const NitrosNode & node) = delete;
@@ -203,9 +200,6 @@ private:
   // The function for checking the status of the underlying graph
   void gxfHeartbeatCallback();
 
-  // Nitros context that has a shared underlying context across all NitrosNodes in the same process
-  NitrosContext nitros_context_;
-
   // A randomly generated namespace that's unique for the current node
   std::string graph_namespace_;
 
@@ -252,6 +246,9 @@ private:
   // When enabled namespacing and the graph optimizer are ignored
   // In such a case, graph(s) will be loaded intact
   bool use_raw_graph_no_optimizer_ = false;
+
+  // Nitros context that has a shared underlying context across all NitrosNodes in the same process
+  std::shared_ptr<NitrosContext> nitros_context_ptr_;
 
   // Wait time in seconds before concluding negotiation results
   int64_t type_negotiation_duration_s_ = 1;

@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
-// Copyright (c) 2022-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+// Copyright (c) 2022-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -23,7 +23,7 @@
 
 // Helper functions to create named color events for NVTX profiling
 
-nvtxEventAttributes_t CreateGreenEvent(const std::string& message, uint32_t category) {
+inline nvtxEventAttributes_t CreateGreenEvent(const std::string& message, uint32_t category) {
   nvtxEventAttributes_t eventAttrib = {0};
   eventAttrib.version = NVTX_VERSION;
   eventAttrib.size = NVTX_EVENT_ATTRIB_STRUCT_SIZE;
@@ -36,7 +36,7 @@ nvtxEventAttributes_t CreateGreenEvent(const std::string& message, uint32_t cate
   return eventAttrib;
 }
 
-nvtxEventAttributes_t CreateRedEvent(const std::string& message, uint32_t category) {
+inline nvtxEventAttributes_t CreateRedEvent(const std::string& message, uint32_t category) {
   nvtxEventAttributes_t eventAttrib = {0};
   eventAttrib.version = NVTX_VERSION;
   eventAttrib.size = NVTX_EVENT_ATTRIB_STRUCT_SIZE;
@@ -50,7 +50,7 @@ nvtxEventAttributes_t CreateRedEvent(const std::string& message, uint32_t catego
 }
 
 
-nvtxEventAttributes_t CreateBlackEvent(const std::string& message, uint32_t category) {
+inline nvtxEventAttributes_t CreateBlackEvent(const std::string& message, uint32_t category) {
   nvtxEventAttributes_t eventAttrib = {0};
   eventAttrib.version = NVTX_VERSION;
   eventAttrib.size = NVTX_EVENT_ATTRIB_STRUCT_SIZE;
@@ -63,7 +63,7 @@ nvtxEventAttributes_t CreateBlackEvent(const std::string& message, uint32_t cate
   return eventAttrib;
 }
 
-nvtxEventAttributes_t CreateBlueEvent(const std::string& message, uint32_t category) {
+inline nvtxEventAttributes_t CreateBlueEvent(const std::string& message, uint32_t category) {
   nvtxEventAttributes_t eventAttrib = {0};
   eventAttrib.version = NVTX_VERSION;
   eventAttrib.size = NVTX_EVENT_ATTRIB_STRUCT_SIZE;

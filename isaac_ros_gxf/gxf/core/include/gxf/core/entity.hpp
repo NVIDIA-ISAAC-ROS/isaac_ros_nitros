@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
-// Copyright (c) 2021-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+// Copyright (c) 2021-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -35,15 +35,18 @@ namespace gxf {
 class Entity {
  public:
   // Creates a new entity
-  static Expected<Entity> New(gxf_context_t context) {
+  static Expected<Entity> New(gxf_context_t context, const char* name = nullptr) {
     gxf_uid_t eid;
     const GxfEntityCreateInfo info = {0};
-    const gxf_result_t code = GxfCreateEntity(context, &info, &eid);
-    if (code != GXF_SUCCESS) {
-      return Unexpected{code};
-    } else {
-      return Shared(context, eid);
+    gxf_result_t code = GxfCreateEntity(context, &info, &eid);
+    if (code != GXF_SUCCESS) { return Unexpected{code}; }
+
+    if (name) {
+      code = GxfParameterSetStr(context, eid, kInternalNameParameterKey, name);
+      if (code != GXF_SUCCESS) { return Unexpected{code}; }
     }
+
+    return Shared(context, eid);
   }
 
   // Creates an entity handle based on an existing ID and takes ownership.

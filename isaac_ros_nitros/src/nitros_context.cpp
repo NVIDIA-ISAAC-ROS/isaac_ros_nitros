@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
-// Copyright (c) 2022-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+// Copyright (c) 2022-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -15,6 +15,7 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
+#include <cuda_runtime.h>
 #include <dlfcn.h>
 
 #pragma GCC diagnostic push
@@ -35,9 +36,13 @@ namespace isaac_ros
 namespace nitros
 {
 
+constexpr uint64_t kDefaultCUDAMemoryPoolSize = 2048ULL * 1024 * 1024;
+
+gxf_context_t NitrosContext::main_context_ = nullptr;
 gxf_context_t NitrosContext::shared_context_ = nullptr;
 std::mutex NitrosContext::shared_context_mutex_;
 std::set<std::string> NitrosContext::loaded_extension_file_paths_;
+gxf_severity_t NitrosContext::extension_log_severity_ = gxf_severity_t::GXF_SEVERITY_WARNING;
 
 std::vector<std::string> SplitStrings(const std::string & list_of_files)
 {
@@ -77,43 +82,39 @@ NitrosContext::NitrosContext()
   const std::lock_guard<std::mutex> lock(NitrosContext::shared_context_mutex_);
   gxf_result_t code;
   if (NitrosContext::shared_context_ == nullptr) {
-    code = GxfContextCreate(&context_);
+    code = GxfContextCreate(&NitrosContext::main_context_);
     if (code != GXF_SUCCESS) {
       RCLCPP_ERROR(
         get_logger(),
         "[NitrosContext] GxfContextCreate Error: %s", GxfResultStr(code));
       return;
     }
-    code = GxfGetSharedContext(context_, &NitrosContext::shared_context_);
+    code = GxfGetSharedContext(NitrosContext::main_context_, &NitrosContext::shared_context_);
     if (code != GXF_SUCCESS) {
       RCLCPP_ERROR(
         get_logger(),
         "[NitrosContext] GxfGetSharedContext Error: %s", GxfResultStr(code));
       return;
     }
-    RCLCPP_INFO(
-      get_logger(),
-      "[NitrosContext] Creating a new shared context");
-  } else {
-    code = GxfContextCreate1(NitrosContext::shared_context_, &context_);
-    if (code != GXF_SUCCESS) {
-      RCLCPP_ERROR(
-        get_logger(),
-        "[NitrosContext] GxfContextCreate1 Error: %s", GxfResultStr(code));
-      return;
-    }
-    RCLCPP_DEBUG(
-      get_logger(),
-      "[NitrosContext] Creating a local context based on an existing shared context");
   }
 
-  // Set log severity level for core GXF
-  code = GxfSetSeverity(context_, extension_log_severity_);
+  code = GxfContextCreateShared(NitrosContext::shared_context_, &context_);
   if (code != GXF_SUCCESS) {
     RCLCPP_ERROR(
       get_logger(),
-      "[NitrosContext] GxfSetSeverity Error: %s", GxfResultStr(code));
+      "[NitrosContext] GxfContextCreateShared Error: %s", GxfResultStr(code));
     return;
+  }
+
+  // Set log severity level for this GXF context if GXF_LOG_LEVEL is not set
+  if (GetSeverityFromEnv() == Severity::COUNT) {
+    code = GxfSetSeverity(context_, NitrosContext::extension_log_severity_);
+    if (code != GXF_SUCCESS) {
+      RCLCPP_ERROR(
+        get_logger(),
+        "[NitrosContext] GxfSetSeverity Error: %s", GxfResultStr(code));
+      return;
+    }
   }
   // End Mutex: shared_context_mutex_
 }
@@ -167,6 +168,14 @@ gxf_result_t NitrosContext::getComponentPointer(
     RCLCPP_ERROR(
       get_logger(),
       "[NitrosContext] GxfComponentPointer Error: %s", GxfResultStr(code));
+    return code;
+  }
+
+  code = setCUDAMemoryPoolSize(kDefaultCUDAMemoryPoolSize);
+  if (code != GXF_SUCCESS) {
+    RCLCPP_ERROR(
+      get_logger(),
+      "[NitrosContext] setCUDAMemoryPoolSize Error: %s", GxfResultStr(code));
     return code;
   }
 
@@ -265,30 +274,6 @@ gxf_result_t NitrosContext::loadExtension(
     get_logger(),
     "[NitrosContext] Loading extension: %s", extension.c_str());
 
-  // Set the log severity level for the extension
-  void * handle = dlopen(extension_file_path.c_str(), RTLD_LAZY);
-  if (!handle) {
-    RCLCPP_ERROR(
-      get_logger(),
-      "[NitrosContext] dlopen failed when opening \"%s\": %s",
-      extension_file_path.c_str(), dlerror());
-    return GXF_FAILURE;
-  }
-
-  using func_gxf_set_severity_t = void (*)(nvidia::Severity);
-  func_gxf_set_severity_t func_gxf_set_severity =
-    reinterpret_cast<func_gxf_set_severity_t>(dlsym(
-      handle,
-      "_ZN6nvidia11SetSeverityENS_8SeverityE"));
-  if (!func_gxf_set_severity) {
-    RCLCPP_WARN(
-      get_logger(),
-      "[NitrosContext] dlopen error when opening \"%s\" to set the log severity level: %s",
-      extension_file_path.c_str(), dlerror());
-  } else {
-    func_gxf_set_severity(static_cast<nvidia::Severity>(extension_log_severity_));
-  }
-
   // Actually load the extension
   NitrosContext::loaded_extension_file_paths_.insert(extension_file_path);
   const char * extension_array[] = {extension.c_str()};
@@ -340,7 +325,7 @@ gxf_result_t NitrosContext::loadApplication(const std::string & list_of_files)
 
   std::vector<char *> param_override_cstring = ToCStringArray(graph_param_override_string_list_);
   for (const auto & filename : filenames) {
-    RCLCPP_INFO(get_logger(), "[NitrosContext] Loading application: '%s'", filename.c_str());
+    RCLCPP_DEBUG(get_logger(), "[NitrosContext] Loading application: '%s'", filename.c_str());
     const gxf_result_t code = GxfGraphLoadFile(
       context_,
       filename.c_str(),
@@ -360,7 +345,7 @@ gxf_result_t NitrosContext::runGraphAsync()
 
   gxf_result_t code;
 
-  RCLCPP_INFO(get_logger(), "[NitrosContext] Initializing application...");
+  RCLCPP_DEBUG(get_logger(), "[NitrosContext] Initializing application...");
   code = GxfGraphActivate(context_);
   if (code != GXF_SUCCESS) {
     RCLCPP_ERROR(
@@ -369,7 +354,7 @@ gxf_result_t NitrosContext::runGraphAsync()
     return code;
   }
 
-  RCLCPP_INFO(get_logger(), "[NitrosContext] Running application...");
+  RCLCPP_DEBUG(get_logger(), "[NitrosContext] Running application...");
   code = GxfGraphRunAsync(context_);
   if (code != GXF_SUCCESS) {
     RCLCPP_ERROR(
@@ -388,12 +373,22 @@ gxf_result_t NitrosContext::setParameterInt64(
   const std::string & parameter_name,
   const int64_t parameter_value)
 {
+  return setParameterInt64(entity_name, "", codelet_type, parameter_name, parameter_value);
+}
+
+gxf_result_t NitrosContext::setParameterInt64(
+  const std::string & entity_name,
+  const std::string & codelet_name,
+  const std::string & codelet_type,
+  const std::string & parameter_name,
+  const int64_t parameter_value)
+{
   // Mutex: shared_context_mutex_
   const std::lock_guard<std::mutex> lock(NitrosContext::shared_context_mutex_);
 
   gxf_result_t code;
   gxf_uid_t cid;
-  code = getCid(entity_name, codelet_type, cid);
+  code = getCid(entity_name, codelet_name, codelet_type, cid);
   if (code != GXF_SUCCESS) {
     RCLCPP_ERROR(
       get_logger(),
@@ -417,12 +412,22 @@ gxf_result_t NitrosContext::setParameterUInt64(
   const std::string & parameter_name,
   const uint64_t parameter_value)
 {
+  return setParameterUInt64(entity_name, "", codelet_type, parameter_name, parameter_value);
+}
+
+gxf_result_t NitrosContext::setParameterUInt64(
+  const std::string & entity_name,
+  const std::string & codelet_name,
+  const std::string & codelet_type,
+  const std::string & parameter_name,
+  const uint64_t parameter_value)
+{
   // Mutex: shared_context_mutex_
   const std::lock_guard<std::mutex> lock(NitrosContext::shared_context_mutex_);
 
   gxf_result_t code;
   gxf_uid_t cid;
-  code = getCid(entity_name, codelet_type, cid);
+  code = getCid(entity_name, codelet_name, codelet_type, cid);
   if (code != GXF_SUCCESS) {
     RCLCPP_ERROR(
       get_logger(),
@@ -446,12 +451,22 @@ gxf_result_t NitrosContext::setParameterInt32(
   const std::string & parameter_name,
   const int32_t parameter_value)
 {
+  return setParameterInt32(entity_name, "", codelet_type, parameter_name, parameter_value);
+}
+
+gxf_result_t NitrosContext::setParameterInt32(
+  const std::string & entity_name,
+  const std::string & codelet_name,
+  const std::string & codelet_type,
+  const std::string & parameter_name,
+  const int32_t parameter_value)
+{
   // Mutex: shared_context_mutex_
   const std::lock_guard<std::mutex> lock(NitrosContext::shared_context_mutex_);
 
   gxf_result_t code;
   gxf_uid_t cid;
-  code = getCid(entity_name, codelet_type, cid);
+  code = getCid(entity_name, codelet_name, codelet_type, cid);
   if (code != GXF_SUCCESS) {
     RCLCPP_ERROR(
       get_logger(),
@@ -475,12 +490,22 @@ gxf_result_t NitrosContext::setParameterUInt32(
   const std::string & parameter_name,
   const uint32_t parameter_value)
 {
+  return setParameterUInt32(entity_name, "", codelet_type, parameter_name, parameter_value);
+}
+
+gxf_result_t NitrosContext::setParameterUInt32(
+  const std::string & entity_name,
+  const std::string & codelet_name,
+  const std::string & codelet_type,
+  const std::string & parameter_name,
+  const uint32_t parameter_value)
+{
   // Mutex: shared_context_mutex_
   const std::lock_guard<std::mutex> lock(NitrosContext::shared_context_mutex_);
 
   gxf_result_t code;
   gxf_uid_t cid;
-  code = getCid(entity_name, codelet_type, cid);
+  code = getCid(entity_name, codelet_name, codelet_type, cid);
   if (code != GXF_SUCCESS) {
     RCLCPP_ERROR(
       get_logger(),
@@ -504,12 +529,22 @@ gxf_result_t NitrosContext::setParameterUInt16(
   const std::string & parameter_name,
   const uint16_t parameter_value)
 {
+  return setParameterUInt16(entity_name, "", codelet_type, parameter_name, parameter_value);
+}
+
+gxf_result_t NitrosContext::setParameterUInt16(
+  const std::string & entity_name,
+  const std::string & codelet_name,
+  const std::string & codelet_type,
+  const std::string & parameter_name,
+  const uint16_t parameter_value)
+{
   // Mutex: shared_context_mutex_
   const std::lock_guard<std::mutex> lock(NitrosContext::shared_context_mutex_);
 
   gxf_result_t code;
   gxf_uid_t cid;
-  code = getCid(entity_name, codelet_type, cid);
+  code = getCid(entity_name, codelet_name, codelet_type, cid);
   if (code != GXF_SUCCESS) {
     RCLCPP_ERROR(
       get_logger(),
@@ -533,12 +568,22 @@ gxf_result_t NitrosContext::setParameterFloat32(
   const std::string & parameter_name,
   const float parameter_value)
 {
+  return setParameterFloat32(entity_name, "", codelet_type, parameter_name, parameter_value);
+}
+
+gxf_result_t NitrosContext::setParameterFloat32(
+  const std::string & entity_name,
+  const std::string & codelet_name,
+  const std::string & codelet_type,
+  const std::string & parameter_name,
+  const float parameter_value)
+{
   // Mutex: shared_context_mutex_
   const std::lock_guard<std::mutex> lock(NitrosContext::shared_context_mutex_);
 
   gxf_result_t code;
   gxf_uid_t cid;
-  code = getCid(entity_name, codelet_type, cid);
+  code = getCid(entity_name, codelet_name, codelet_type, cid);
   if (code != GXF_SUCCESS) {
     RCLCPP_ERROR(
       get_logger(),
@@ -562,12 +607,22 @@ gxf_result_t NitrosContext::setParameterFloat64(
   const std::string & parameter_name,
   const double parameter_value)
 {
+  return setParameterFloat64(entity_name, "", codelet_type, parameter_name, parameter_value);
+}
+
+gxf_result_t NitrosContext::setParameterFloat64(
+  const std::string & entity_name,
+  const std::string & codelet_name,
+  const std::string & codelet_type,
+  const std::string & parameter_name,
+  const double parameter_value)
+{
   // Mutex: shared_context_mutex_
   const std::lock_guard<std::mutex> lock(NitrosContext::shared_context_mutex_);
 
   gxf_result_t code;
   gxf_uid_t cid;
-  code = getCid(entity_name, codelet_type, cid);
+  code = getCid(entity_name, codelet_name, codelet_type, cid);
   if (code != GXF_SUCCESS) {
     RCLCPP_ERROR(
       get_logger(),
@@ -591,12 +646,22 @@ gxf_result_t NitrosContext::setParameterStr(
   const std::string & parameter_name,
   const std::string & parameter_value)
 {
+  return setParameterStr(entity_name, "", codelet_type, parameter_name, parameter_value);
+}
+
+gxf_result_t NitrosContext::setParameterStr(
+  const std::string & entity_name,
+  const std::string & codelet_name,
+  const std::string & codelet_type,
+  const std::string & parameter_name,
+  const std::string & parameter_value)
+{
   // Mutex: shared_context_mutex_
   const std::lock_guard<std::mutex> lock(NitrosContext::shared_context_mutex_);
 
   gxf_result_t code;
   gxf_uid_t cid;
-  code = getCid(entity_name, codelet_type, cid);
+  code = getCid(entity_name, codelet_name, codelet_type, cid);
   if (code != GXF_SUCCESS) {
     RCLCPP_ERROR(
       get_logger(),
@@ -620,12 +685,22 @@ gxf_result_t NitrosContext::setParameterHandle(
   const std::string & parameter_name,
   const gxf_uid_t & uid)
 {
+  return setParameterHandle(entity_name, "", codelet_type, parameter_name, uid);
+}
+
+gxf_result_t NitrosContext::setParameterHandle(
+  const std::string & entity_name,
+  const std::string & codelet_name,
+  const std::string & codelet_type,
+  const std::string & parameter_name,
+  const gxf_uid_t & uid)
+{
   // Mutex: shared_context_mutex_
   const std::lock_guard<std::mutex> lock(NitrosContext::shared_context_mutex_);
 
   gxf_result_t code;
   gxf_uid_t cid;
-  code = getCid(entity_name, codelet_type, cid);
+  code = getCid(entity_name, codelet_name, codelet_type, cid);
   if (code != GXF_SUCCESS) {
     RCLCPP_ERROR(
       get_logger(),
@@ -649,12 +724,22 @@ gxf_result_t NitrosContext::setParameterBool(
   const std::string & parameter_name,
   const bool parameter_value)
 {
+  return setParameterBool(entity_name, "", codelet_type, parameter_name, parameter_value);
+}
+
+gxf_result_t NitrosContext::setParameterBool(
+  const std::string & entity_name,
+  const std::string & codelet_name,
+  const std::string & codelet_type,
+  const std::string & parameter_name,
+  const bool parameter_value)
+{
   // Mutex: shared_context_mutex_
   const std::lock_guard<std::mutex> lock(NitrosContext::shared_context_mutex_);
 
   gxf_result_t code;
   gxf_uid_t cid;
-  code = getCid(entity_name, codelet_type, cid);
+  code = getCid(entity_name, codelet_name, codelet_type, cid);
   if (code != GXF_SUCCESS) {
     RCLCPP_ERROR(
       get_logger(),
@@ -678,12 +763,22 @@ gxf_result_t NitrosContext::setParameter1DStrVector(
   const std::string & parameter_name,
   const std::vector<std::string> & parameter_value)
 {
+  return setParameter1DStrVector(entity_name, "", codelet_type, parameter_name, parameter_value);
+}
+
+gxf_result_t NitrosContext::setParameter1DStrVector(
+  const std::string & entity_name,
+  const std::string & codelet_name,
+  const std::string & codelet_type,
+  const std::string & parameter_name,
+  const std::vector<std::string> & parameter_value)
+{
   // Mutex: shared_context_mutex_
   const std::lock_guard<std::mutex> lock(NitrosContext::shared_context_mutex_);
 
   gxf_result_t code;
   gxf_uid_t cid;
-  code = getCid(entity_name, codelet_type, cid);
+  code = getCid(entity_name, codelet_name, codelet_type, cid);
   if (code != GXF_SUCCESS) {
     RCLCPP_ERROR(
       get_logger(),
@@ -712,12 +807,22 @@ gxf_result_t NitrosContext::setParameter1DInt32Vector(
   const std::string & parameter_name,
   std::vector<int32_t> & parameter_value)
 {
+  return setParameter1DInt32Vector(entity_name, "", codelet_type, parameter_name, parameter_value);
+}
+
+gxf_result_t NitrosContext::setParameter1DInt32Vector(
+  const std::string & entity_name,
+  const std::string & codelet_name,
+  const std::string & codelet_type,
+  const std::string & parameter_name,
+  std::vector<int32_t> & parameter_value)
+{
   // Mutex: shared_context_mutex_
   const std::lock_guard<std::mutex> lock(NitrosContext::shared_context_mutex_);
 
   gxf_result_t code;
   gxf_uid_t cid;
-  code = getCid(entity_name, codelet_type, cid);
+  code = getCid(entity_name, codelet_name, codelet_type, cid);
   if (code != GXF_SUCCESS) {
     RCLCPP_ERROR(
       get_logger(),
@@ -744,12 +849,22 @@ gxf_result_t NitrosContext::setParameter1DInt64Vector(
   const std::string & parameter_name,
   std::vector<int64_t> & parameter_value)
 {
+  return setParameter1DInt64Vector(entity_name, "", codelet_type, parameter_name, parameter_value);
+}
+
+gxf_result_t NitrosContext::setParameter1DInt64Vector(
+  const std::string & entity_name,
+  const std::string & codelet_name,
+  const std::string & codelet_type,
+  const std::string & parameter_name,
+  std::vector<int64_t> & parameter_value)
+{
   // Mutex: shared_context_mutex_
   const std::lock_guard<std::mutex> lock(NitrosContext::shared_context_mutex_);
 
   gxf_result_t code;
   gxf_uid_t cid;
-  code = getCid(entity_name, codelet_type, cid);
+  code = getCid(entity_name, codelet_name, codelet_type, cid);
   if (code != GXF_SUCCESS) {
     RCLCPP_ERROR(
       get_logger(),
@@ -776,12 +891,24 @@ gxf_result_t NitrosContext::setParameter1DFloat64Vector(
   const std::string & parameter_name,
   std::vector<double> & parameter_value)
 {
+  return setParameter1DFloat64Vector(
+    entity_name, "", codelet_type, parameter_name,
+    parameter_value);
+}
+
+gxf_result_t NitrosContext::setParameter1DFloat64Vector(
+  const std::string & entity_name,
+  const std::string & codelet_name,
+  const std::string & codelet_type,
+  const std::string & parameter_name,
+  std::vector<double> & parameter_value)
+{
   // Mutex: shared_context_mutex_
   const std::lock_guard<std::mutex> lock(NitrosContext::shared_context_mutex_);
 
   gxf_result_t code;
   gxf_uid_t cid;
-  code = getCid(entity_name, codelet_type, cid);
+  code = getCid(entity_name, codelet_name, codelet_type, cid);
   if (code != GXF_SUCCESS) {
     RCLCPP_ERROR(
       get_logger(),
@@ -848,7 +975,81 @@ gxf_result_t NitrosContext::getEntityTimestamp(
 
 void NitrosContext::setExtensionLogSeverity(gxf_severity_t severity_level)
 {
-  extension_log_severity_ = severity_level;
+  if (GetSeverityFromEnv() != Severity::COUNT) {
+    // GXF_LOG_LEVEL environment variable is set, so ignore the current setting
+    return;
+  }
+  if (severity_level > NitrosContext::extension_log_severity_) {
+    NitrosContext::extension_log_severity_ = severity_level;
+  }
+  gxf_result_t code;
+  code = GxfSetSeverity(context_, NitrosContext::extension_log_severity_);
+  if (code != GXF_SUCCESS) {
+    RCLCPP_ERROR(
+      get_logger(),
+      "[NitrosContext] GxfSetSeverity Error: %s", GxfResultStr(code));
+  }
+}
+
+gxf_result_t NitrosContext::setCUDAMemoryPoolSize(uint64_t cuda_mem_pool_size)
+{
+  // Set the minimal default CUDA memory pool release threshold to 2 GB
+  int n_devices;
+  cudaMemPool_t default_cuda_mem_pool;
+  cudaError_t cuda_error{cudaSuccess};
+
+  cuda_error = cudaGetDeviceCount(&n_devices);
+  if (cuda_error != cudaSuccess) {
+    std::stringstream error_msg;
+    error_msg <<
+      cudaGetErrorName(cuda_error) << " (" << cudaGetErrorString(cuda_error) << ")";
+    RCLCPP_ERROR(
+      rclcpp::get_logger("NitrosContext"), error_msg.str().c_str());
+    return GXF_FAILURE;
+  }
+
+  if (n_devices == 0) {
+    RCLCPP_ERROR(
+      rclcpp::get_logger("NitrosContext"), "No device is available");
+    return GXF_FAILURE;
+  }
+
+  cuda_error = cudaDeviceGetDefaultMemPool(&default_cuda_mem_pool, 0);
+  if (cuda_error != cudaSuccess) {
+    std::stringstream error_msg;
+    error_msg <<
+      cudaGetErrorName(cuda_error) << " (" << cudaGetErrorString(cuda_error) << ")";
+    RCLCPP_ERROR(
+      rclcpp::get_logger("NitrosContext"), error_msg.str().c_str());
+    return GXF_FAILURE;
+  }
+
+  uint64_t cur_release_threshold = 0;
+  cuda_error = cudaMemPoolGetAttribute(
+    default_cuda_mem_pool, cudaMemPoolAttrReleaseThreshold, &cur_release_threshold);
+  if (cuda_error != cudaSuccess) {
+    std::stringstream error_msg;
+    error_msg <<
+      cudaGetErrorName(cuda_error) << " (" << cudaGetErrorString(cuda_error) << ")";
+    RCLCPP_ERROR(
+      rclcpp::get_logger("NitrosContext"), error_msg.str().c_str());
+    return GXF_FAILURE;
+  }
+
+  if (cur_release_threshold < cuda_mem_pool_size) {
+    auto cuda_error = cudaMemPoolSetAttribute(
+      default_cuda_mem_pool, cudaMemPoolAttrReleaseThreshold, &cuda_mem_pool_size);
+    if (cuda_error != cudaSuccess) {
+      std::stringstream error_msg;
+      error_msg <<
+        cudaGetErrorName(cuda_error) << " (" << cudaGetErrorString(cuda_error) << ")";
+      RCLCPP_ERROR(
+        rclcpp::get_logger("NitrosContext"), error_msg.str().c_str());
+      return GXF_FAILURE;
+    }
+  }
+
+  return GXF_SUCCESS;
 }
 
 gxf_result_t NitrosContext::destroy()

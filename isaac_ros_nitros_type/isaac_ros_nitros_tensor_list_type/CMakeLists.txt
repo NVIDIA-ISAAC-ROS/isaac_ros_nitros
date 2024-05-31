@@ -1,5 +1,5 @@
 # SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
-# Copyright (c) 2022-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# Copyright (c) 2022-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -30,32 +30,29 @@ set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 # NVTX
 option(USE_NVTX "Enable NVTX markers for improved profiling (if available)" ON)
 if(USE_NVTX)
-    add_definitions(-DUSE_NVTX)
-    link_directories("${CUDA_TOOLKIT_ROOT_DIR}/lib64")
-    link_libraries("nvToolsExt")
+  add_definitions(-DUSE_NVTX)
+  link_directories("${CUDA_TOOLKIT_ROOT_DIR}/lib64")
+  link_libraries("nvToolsExt")
 endif()
 
 # Dependencies
-find_package(GXF ${ISAAC_ROS_GXF_VERSION} MODULE REQUIRED
-    COMPONENTS
-    core
-)
 find_package(yaml-cpp)
 
 # NitrosTensorList
 ament_auto_add_library(${PROJECT_NAME} SHARED
-    src/nitros_data_type.cpp
-    src/nitros_tensor_builder.cpp
-    src/nitros_tensor_list_builder.cpp
-    src/nitros_tensor_list_view.cpp
-    src/nitros_tensor_list.cpp
+  src/nitros_data_type.cpp
+  src/nitros_tensor_builder.cpp
+  src/nitros_tensor_list_builder.cpp
+  src/nitros_tensor_list_view.cpp
+  src/nitros_tensor_list.cpp
 )
 target_link_libraries(${PROJECT_NAME}
-  GXF::core
   yaml-cpp
 )
-set_target_properties(${PROJECT_NAME} PROPERTIES BUILD_RPATH_USE_ORIGIN TRUE)
-set_target_properties(${PROJECT_NAME} PROPERTIES INSTALL_RPATH_USE_LINK_PATH TRUE)
+set_target_properties(${PROJECT_NAME} PROPERTIES
+  BUILD_WITH_INSTALL_RPATH TRUE
+  BUILD_RPATH_USE_ORIGIN TRUE
+  INSTALL_RPATH_USE_LINK_PATH TRUE)
 
 if(BUILD_TESTING)
   # Install test/config directory
@@ -64,8 +61,10 @@ if(BUILD_TESTING)
   # NitrosTensorListForwardNode
   ament_auto_add_library(nitros_tensor_list_forward_node SHARED test/src/nitros_tensor_list_forward_node.cpp)
   target_link_libraries(nitros_tensor_list_forward_node ${PROJECT_NAME})
-  set_target_properties(nitros_tensor_list_forward_node PROPERTIES BUILD_RPATH_USE_ORIGIN TRUE)
-  set_target_properties(nitros_tensor_list_forward_node PROPERTIES INSTALL_RPATH_USE_LINK_PATH TRUE)
+  set_target_properties(nitros_tensor_list_forward_node PROPERTIES
+    BUILD_WITH_INSTALL_RPATH TRUE
+    BUILD_RPATH_USE_ORIGIN TRUE
+    INSTALL_RPATH_USE_LINK_PATH TRUE)
   rclcpp_components_register_nodes(nitros_tensor_list_forward_node "nvidia::isaac_ros::nitros::NitrosTensorListForwardNode")
   set(node_plugins "${node_plugins}nvidia::isaac_ros::nitros::NitrosTensorListForwardNode;$<TARGET_FILE:nitros_tensor_list_forward_node>\n")
 

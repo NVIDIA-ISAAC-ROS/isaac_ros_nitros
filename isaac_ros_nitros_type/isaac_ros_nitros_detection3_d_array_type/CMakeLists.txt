@@ -1,5 +1,5 @@
 # SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
-# Copyright (c) 2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# Copyright (c) 2023-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -34,12 +34,6 @@ if(USE_NVTX)
 endif()
 
 # Dependencies
-find_package(GXF ${ISAAC_ROS_GXF_VERSION} MODULE REQUIRED
-    COMPONENTS
-    core
-    std
-    isaac_messages
-)
 find_package(yaml-cpp)
 find_package(Eigen3 3.3 REQUIRED NO_MODULE)
 
@@ -51,12 +45,12 @@ ament_auto_add_library(${PROJECT_NAME} SHARED
 target_include_directories(${PROJECT_NAME} PUBLIC include/detection3_d_array_message)
 target_link_libraries(${PROJECT_NAME}
   Eigen3::Eigen
-  GXF::core
-  GXF::isaac_messages
   yaml-cpp
 )
-set_target_properties(${PROJECT_NAME} PROPERTIES BUILD_RPATH_USE_ORIGIN TRUE)
-set_target_properties(${PROJECT_NAME} PROPERTIES INSTALL_RPATH_USE_LINK_PATH TRUE)
+set_target_properties(${PROJECT_NAME} PROPERTIES
+  BUILD_WITH_INSTALL_RPATH TRUE
+  BUILD_RPATH_USE_ORIGIN TRUE
+  INSTALL_RPATH_USE_LINK_PATH TRUE)
 
 # Make library available for sharing in Nitros
 install(TARGETS ${PROJECT_NAME} LIBRARY DESTINATION share/${PROJECT_NAME}/gxf/lib/detection3_d)
@@ -70,9 +64,11 @@ if(BUILD_TESTING)
   ament_auto_add_library(isaac_ros_nitros_detection3_d_array_forward_node SHARED
     test/src/nitros_detection3_d_array_forward_node.cpp
   )
-  target_link_libraries(isaac_ros_nitros_detection3_d_array_forward_node ${PROJECT_NAME} GXF::std)
-  set_target_properties(isaac_ros_nitros_detection3_d_array_forward_node PROPERTIES BUILD_RPATH_USE_ORIGIN TRUE)
-  set_target_properties(isaac_ros_nitros_detection3_d_array_forward_node PROPERTIES INSTALL_RPATH_USE_LINK_PATH TRUE)
+  target_link_libraries(isaac_ros_nitros_detection3_d_array_forward_node ${PROJECT_NAME})
+  set_target_properties(isaac_ros_nitros_detection3_d_array_forward_node PROPERTIES
+    BUILD_WITH_INSTALL_RPATH TRUE
+    BUILD_RPATH_USE_ORIGIN TRUE
+    INSTALL_RPATH_USE_LINK_PATH TRUE)
   rclcpp_components_register_nodes(isaac_ros_nitros_detection3_d_array_forward_node
       "nvidia::isaac_ros::nitros::NitrosDetection3DArrayForwardNode")
   set(node_plugins "${node_plugins}nvidia::isaac_ros::nitros::NitrosDetection3DArrayForwardNode;\
@@ -82,7 +78,6 @@ if(BUILD_TESTING)
   ament_auto_add_library(isaac_ros_nitros_detection3_d_array_test_ext SHARED
       test/src/detection3_d_test_ext.cpp
   )
-  target_link_libraries(isaac_ros_nitros_detection3_d_array_test_ext GXF::std)
   install(TARGETS isaac_ros_nitros_detection3_d_array_test_ext LIBRARY DESTINATION share/${PROJECT_NAME}/gxf/lib/detection3_d/test)
 
   find_package(ament_lint_auto REQUIRED)

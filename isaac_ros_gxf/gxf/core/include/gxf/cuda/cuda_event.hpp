@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
-// Copyright (c) 2021-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+// Copyright (c) 2021-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -59,7 +59,7 @@ class CudaEvent {
 
   // Initialize an external event that shall be used
   Expected<void> initWithEvent(cudaEvent_t event, int dev_id = -1, EventDestroy free_fnc = nullptr);
-  // Intialize a new event internally
+  // Initialize a new event internally
   Expected<void> init(uint32_t flags = 0, int dev_id = -1);
   // Deinitialize cudaevent. In case that user does not called it explicitly,
   // cuda event could be freed in destructor.

@@ -1,5 +1,5 @@
 # SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
-# Copyright (c) 2022-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# Copyright (c) 2022-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -28,19 +28,13 @@ ament_auto_find_build_dependencies()
 # NVTX
 option(USE_NVTX "Enable NVTX markers for improved profiling (if available)" ON)
 if(USE_NVTX)
-    add_definitions(-DUSE_NVTX)
-    link_directories("${CUDA_TOOLKIT_ROOT_DIR}/lib64")
-    link_libraries("nvToolsExt")
+  add_definitions(-DUSE_NVTX)
+  link_directories("${CUDA_TOOLKIT_ROOT_DIR}/lib64")
+  link_libraries("nvToolsExt")
 endif()
 
 # Dependencies
 find_package(Eigen3 3.3 REQUIRED NO_MODULE)
-find_package(GXF ${ISAAC_ROS_GXF_VERSION} MODULE REQUIRED
-    COMPONENTS
-    core
-    isaac_messages
-    multimedia
-)
 find_package(yaml-cpp)
 
 # NitrosAprilTagDetectionArray
@@ -50,13 +44,12 @@ ament_auto_add_library(${PROJECT_NAME} SHARED
 )
 target_link_libraries(${PROJECT_NAME}
   Eigen3::Eigen
-  GXF::core
-  GXF::isaac_messages
-  GXF::multimedia
   yaml-cpp
 )
-set_target_properties(${PROJECT_NAME} PROPERTIES BUILD_RPATH_USE_ORIGIN TRUE)
-set_target_properties(${PROJECT_NAME} PROPERTIES INSTALL_RPATH_USE_LINK_PATH TRUE)
+set_target_properties(${PROJECT_NAME} PROPERTIES
+  BUILD_WITH_INSTALL_RPATH TRUE
+  BUILD_RPATH_USE_ORIGIN TRUE
+  INSTALL_RPATH_USE_LINK_PATH TRUE)
 
 # Make library available for sharing in Nitros
 install(TARGETS ${PROJECT_NAME} LIBRARY DESTINATION share/${PROJECT_NAME}/gxf/lib/fiducial_message)
@@ -69,30 +62,28 @@ if(BUILD_TESTING)
   ament_auto_add_library(isaac_ros_nitros_april_tag_detection_array_forward_node SHARED
     test/src/nitros_april_tag_detection_array_forward_node.cpp
   )
-  target_link_libraries(isaac_ros_nitros_april_tag_detection_array_forward_node ${PROJECT_NAME} GXF::std)
+  target_link_libraries(isaac_ros_nitros_april_tag_detection_array_forward_node ${PROJECT_NAME})
   set_target_properties(isaac_ros_nitros_april_tag_detection_array_forward_node PROPERTIES
-      BUILD_RPATH_USE_ORIGIN TRUE)
-  set_target_properties(isaac_ros_nitros_april_tag_detection_array_forward_node PROPERTIES
-      INSTALL_RPATH_USE_LINK_PATH TRUE)
+    BUILD_WITH_INSTALL_RPATH TRUE
+    BUILD_RPATH_USE_ORIGIN TRUE
+    INSTALL_RPATH_USE_LINK_PATH TRUE)
   rclcpp_components_register_nodes(isaac_ros_nitros_april_tag_detection_array_forward_node
-      "nvidia::isaac_ros::nitros::NitrosAprilTagDetectionArrayForwardNode")
+    "nvidia::isaac_ros::nitros::NitrosAprilTagDetectionArrayForwardNode")
   set(node_plugins "${node_plugins}nvidia::isaac_ros::nitros::NitrosAprilTagDetectionArrayForwardNode;\
-      $<TARGET_FILE:isaac_ros_nitros_april_tag_detection_array_forward_node>\n")
+    $<TARGET_FILE:isaac_ros_nitros_april_tag_detection_array_forward_node>\n")
 
   # Test registration extension
   ament_auto_add_library(isaac_ros_nitros_april_tag_detection_array_test_ext SHARED
-      test/src/fiducial_message_test_ext.cpp
+    test/src/fiducial_message_test_ext.cpp
   )
-  target_link_libraries(isaac_ros_nitros_april_tag_detection_array_test_ext GXF::std)
   install(TARGETS isaac_ros_nitros_april_tag_detection_array_test_ext
-      LIBRARY DESTINATION share/${PROJECT_NAME}/gxf/lib/fiducial_message/test)
+          LIBRARY DESTINATION share/${PROJECT_NAME}/gxf/lib/fiducial_message/test)
 
   find_package(ament_lint_auto REQUIRED)
 
   # Ignore copyright notices since we use custom NVIDIA Isaac ROS Software License
   set(ament_cmake_copyright_FOUND TRUE)
   ament_lint_auto_find_test_dependencies()
-
 
   # The FindPythonInterp and FindPythonLibs modules are removed
   if(POLICY CMP0148)

@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
-// Copyright (c) 2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+// Copyright (c) 2023-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -63,7 +63,7 @@ void rclcpp::TypeAdapter<
   if (battery_state_parts.battery_state->is_charging) {
     destination.power_supply_status = 1;  // POWER_SUPPLY_STATUS_CHARGING = 1
   } else {
-    destination.power_supply_status = 3;  // POWER_SUPPLY_STATUS_NOT_CHARGING = 3
+    destination.power_supply_status = 2;  // POWER_SUPPLY_STATUS_DISCHARGING = 2
   }
 
   // The following fields are unable to convert:

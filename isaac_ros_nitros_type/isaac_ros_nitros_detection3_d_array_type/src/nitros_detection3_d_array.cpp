@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
-// Copyright (c) 2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+// Copyright (c) 2023-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -116,6 +116,15 @@ void rclcpp::TypeAdapter<
       object_hypothesis.hypothesis.class_id =
         detection3_d_parts.hypothesis.at(i).value()->class_ids[j];
       object_hypothesis.hypothesis.score = detection3_d_parts.hypothesis.at(i).value()->scores[j];
+      object_hypothesis.pose.pose = bbox.center;
+      detection.results.push_back(object_hypothesis);
+    }
+    // If no hypothesis is found, populate results array with the pose of the bounding box
+    // This is requirement for vision_msgs_rviz_plugins
+    // If results is empty, vision_msgs_rviz_plugins will give a Segmentation fault
+    if (detection3_d_parts.hypothesis.at(i).value()->scores.size() == 0) {
+      vision_msgs::msg::ObjectHypothesisWithPose object_hypothesis;
+      object_hypothesis.pose.pose = bbox.center;
       detection.results.push_back(object_hypothesis);
     }
 

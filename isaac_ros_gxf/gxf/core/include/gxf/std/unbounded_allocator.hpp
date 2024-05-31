@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
-// Copyright (c) 2020-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+// Copyright (c) 2020-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -26,7 +26,7 @@
 namespace nvidia {
 namespace gxf {
 
-// An allocater which uses cudaMalloc/cudaMallocHost dynamically without a pool. Does not provide
+// An allocator which uses cudaMalloc/cudaMallocHost dynamically without a pool. Does not provide
 // bounded execution times.
 class UnboundedAllocator : public Allocator {
  public:

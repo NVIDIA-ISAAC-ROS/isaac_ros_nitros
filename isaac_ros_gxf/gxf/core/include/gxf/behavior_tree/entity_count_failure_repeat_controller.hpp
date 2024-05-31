@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
-// Copyright (c) 2021-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+// Copyright (c) 2021-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -17,8 +17,8 @@
 #ifndef NVIDIA_GXF_BT_ENTITY_COUNT_FAILURE_REPEAT_CONTROLLER_HPP_
 #define NVIDIA_GXF_BT_ENTITY_COUNT_FAILURE_REPEAT_CONTROLLER_HPP_
 
+#include "gxf/core/parameter_parser_std.hpp"
 #include "gxf/std/controller.hpp"
-#include "gxf/std/parameter_parser_std.hpp"
 
 namespace nvidia {
 namespace gxf {

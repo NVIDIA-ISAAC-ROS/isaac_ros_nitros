@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
-// Copyright (c) 2022-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+// Copyright (c) 2022-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -66,7 +66,7 @@ void create_image(
   gxf_image.value()->wrapMemory(
     buffer_info, size, storage_type, data,
     [](void * ptr) {
-      RCLCPP_INFO(
+      RCLCPP_DEBUG(
         rclcpp::get_logger("NitrosImageBuilder"),
         "[create_image] Freed the cuda memory [%p]", ptr);
       cudaFree(ptr);
@@ -296,6 +296,16 @@ NitrosImage NitrosImageBuilder::Build()
 
     case VideoFormat::GXF_VIDEO_FORMAT_NV12:
       create_image<VideoFormat::GXF_VIDEO_FORMAT_NV12>(
+        width_, height_, message, data_, nitros_image_.frame_id);
+      break;
+
+    case VideoFormat::GXF_VIDEO_FORMAT_RGB32:
+      create_image<VideoFormat::GXF_VIDEO_FORMAT_RGB32>(
+        width_, height_, message, data_, nitros_image_.frame_id);
+      break;
+
+    case VideoFormat::GXF_VIDEO_FORMAT_RGBD32:
+      create_image<VideoFormat::GXF_VIDEO_FORMAT_RGBD32>(
         width_, height_, message, data_, nitros_image_.frame_id);
       break;
 

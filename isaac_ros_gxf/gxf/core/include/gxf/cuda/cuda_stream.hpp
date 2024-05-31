@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
-// Copyright (c) 2021-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+// Copyright (c) 2021-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -58,8 +58,8 @@ class CudaStream {
   Expected<void> record(Handle<CudaEvent> event, Entity input_entity,
                         SyncedCallback synced_cb = nullptr);
   // Record event on the stream for an async callback.
-  // The callback would be delayed untill CudaStreamSync ticks.
-  // The Callback usually is used to recyle dependent resources.
+  // The callback would be delayed until CudaStreamSync ticks.
+  // The Callback usually is used to recycle dependent resources.
   // If record failed, callback would not be called. User need to check return results.
   Expected<void> record(cudaEvent_t event, EventDestroy cb);
 
@@ -86,7 +86,7 @@ class CudaStream {
   int dev_id_ = 0;
   cudaStream_t stream_ = 0;
 
-  // store all recorded event with destory functions.
+  // store all recorded event with destroy functions.
   std::queue<CudaEvent::EventPtr> recorded_event_queue_;
   // event is defined for for synchronization of stream
   CudaEvent::EventPtr sync_event_;

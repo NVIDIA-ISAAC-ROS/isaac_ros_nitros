@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
-// Copyright (c) 2021-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+// Copyright (c) 2021-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -17,7 +17,10 @@
 #ifndef NVIDIA_GXF_SERIALIZATION_STD_COMPONENT_SERIALIZER_HPP_
 #define NVIDIA_GXF_SERIALIZATION_STD_COMPONENT_SERIALIZER_HPP_
 
+#include<string>
+
 #include "common/endian.hpp"
+#include "gxf/cuda/cuda_common.hpp"
 #include "gxf/serialization/component_serializer.hpp"
 #include "gxf/std/allocator.hpp"
 #include "gxf/std/tensor.hpp"

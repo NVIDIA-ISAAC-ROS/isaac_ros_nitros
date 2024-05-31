@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
-// Copyright (c) 2021-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+// Copyright (c) 2021-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -25,11 +25,11 @@
 #include <utility>
 
 #include "gxf/core/parameter.hpp"
+#include "gxf/core/parameter_registrar.hpp"
+#include "gxf/core/parameter_storage.hpp"
 #include "gxf/core/resource.hpp"
-#include "gxf/std/parameter_registrar.hpp"
-#include "gxf/std/parameter_storage.hpp"
-#include "gxf/std/resource_manager.hpp"
-#include "gxf/std/resource_registrar.hpp"
+#include "gxf/core/resource_manager.hpp"
+#include "gxf/core/resource_registrar.hpp"
 
 namespace nvidia {
 namespace gxf {
@@ -141,7 +141,7 @@ class Registrar {
     return Success;
   }
 
-  // register component's Resource class memebers. Two usages:
+  // register component's Resource class members. Two usages:
   // 1. Register, maintain a map { comp_tid : resources_info{tid} }
   //    when Runtime call Component::registerInterface() in GxfRegisterComponent()
   //    set resource_registrar != nullptr && resource_manager = nullptr
@@ -169,15 +169,23 @@ class Registrar {
   }
 
   // Sets the mandatory parameter storage where parameters loaded from YAML are stored.
-  void setParameterStorage(ParameterStorage* param_storage) { parameter_storage = param_storage; }
+  void setParameterStorage(std::shared_ptr<ParameterStorage> param_storage) {
+    parameter_storage = param_storage;
+  }
+
+  // Gets the mandatory parameter storage where parameters loaded from YAML are stored.
+  ParameterStorage* getParameterStorage() { return parameter_storage.get(); }
 
   // Sets parameter registrar
   void setParameterRegistrar(ParameterRegistrar* param_registrar) {
     parameter_registrar = param_registrar;
   }
 
+  // Gets the parameter registrar used to register the component interface
+  ParameterRegistrar* getParameterRegistrar() { return parameter_registrar; }
+
   // Sets resource registrar
-  void setResourceRegistrar(ResourceRegistrar* resource_registrar) {
+  void setResourceRegistrar(std::shared_ptr<ResourceRegistrar> resource_registrar) {
     this->resource_registrar = resource_registrar;
   }
 
@@ -186,12 +194,12 @@ class Registrar {
     this->resource_manager = resource_manager;
   }
 
-  ParameterStorage* parameter_storage = nullptr;
+  std::shared_ptr<ParameterStorage> parameter_storage = nullptr;
 
   // Stores information about parameter for query
   ParameterRegistrar* parameter_registrar = nullptr;
 
-  ResourceRegistrar* resource_registrar = nullptr;
+  std::shared_ptr<ResourceRegistrar> resource_registrar = nullptr;
 
   // have to stick to shared_ptr to avoid nullptr dereferencing risk,
   // as Codelet's Resource try_get() are lazy call

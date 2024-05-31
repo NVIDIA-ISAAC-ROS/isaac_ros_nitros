@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
-// Copyright (c) 2020-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+// Copyright (c) 2020-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -28,9 +28,9 @@ namespace nvidia {
 namespace gxf {
 
 // Memory management helper class, it keeps track of what part of a big chunk of memory has been
-// allocated and can efficently find the first available chunk of memory that fits a given size.
+// allocated and can efficiently find the first available chunk of memory that fits a given size.
 // This class works only with indexes and rely on an external class to hold the memory.
-// Internally it uses binary segement tree to keep track the biggest available block in a given area
+// Internally it uses binary segment tree to keep track the biggest available block in a given area
 // of the the memory. All the operation should take a logarithmic time.
 class FirstFitAllocatorBase {
  public:
@@ -72,7 +72,7 @@ class FirstFitAllocatorBase {
 
  private:
   // Helper data structure to efficiently find a block of memory of a given size.
-  // It represents a node in a binary segement tree.
+  // It represents a node in a binary segment tree.
   struct Memory {
     // Updates the node using both children.
     // size = l.size + r.size
@@ -80,7 +80,7 @@ class FirstFitAllocatorBase {
     // right = r.right or r.right + l.right iff r.max == r.size
     // max = max(l.max, r.max, l.right + r.left)
     void update(const Memory& left_child, const Memory& right_child);
-    // Marks a node as beeing free (if == 1) or acquired (if == 0).
+    // Marks a node as being free (if == 1) or acquired (if == 0).
     void set(int32_t free);
 
     // Left and right store the size of available memory which start respectively from the left or

@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
-// Copyright (c) 2021-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+// Copyright (c) 2021-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -51,7 +51,7 @@ const char* TypenameAsString() {
   constexpr int32_t kMaxNameLength = sizeof(__PRETTY_FUNCTION__);  // Use upper bound to be safe.
   static char s_name[kMaxNameLength] = {0};  // Initialize with 0 to get a null-terminated string.
   static char* result = s_name;
-  if (s_name[0] == 0 && result != nullptr) {  // Check for first invokation of this function.
+  if (s_name[0] == 0 && result != nullptr) {  // Check for first invocation of this function.
     result = TypenameAsStringImpl(__PRETTY_FUNCTION__, s_name, kMaxNameLength);
   }
   return result;

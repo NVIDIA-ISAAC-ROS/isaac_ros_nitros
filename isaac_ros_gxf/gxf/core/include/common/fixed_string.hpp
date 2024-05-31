@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
-// Copyright (c) 2021-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+// Copyright (c) 2021-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -31,7 +31,7 @@ namespace nvidia {
 template <size_t N>
 class FixedString {
  public:
-  // Use STL naming convension for compatibility with STL algorithms
+  // Use STL naming convention for compatibility with STL algorithms
   using value_type             = char;
   using size_type              = size_t;
   using const_iterator         = ConstRandomAccessIterator<FixedString>;
@@ -189,7 +189,7 @@ class FixedString {
     copy(str.data(), str.size());
   }
 
-  // Comapres string to a character array
+  // Compares string to a character array
   template <size_t M>
   constexpr int compare(const char (&str)[M]) const {
     const size_t length = strnlen(str, M);

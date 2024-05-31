@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
-// Copyright (c) 2021-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+// Copyright (c) 2021-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -36,10 +36,7 @@ class SerializationTester : public Codelet {
   gxf_result_t registerInterface(Registrar* registrar) override;
   gxf_result_t initialize() override { return GXF_SUCCESS; }
   gxf_result_t deinitialize() override { return GXF_SUCCESS; }
-
-  gxf_result_t start() override { return GXF_SUCCESS; }
   gxf_result_t tick() override;
-  gxf_result_t stop() override { return GXF_SUCCESS; }
 
  private:
   Parameter<Handle<Receiver>> input_;

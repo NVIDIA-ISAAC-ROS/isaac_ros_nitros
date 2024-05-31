@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
-// Copyright (c) 2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+// Copyright (c) 2023-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -26,31 +26,23 @@ std::unordered_map<std::string, NVCVImageFormat> g_str_to_nvcv_image_format({
     {"rgb8", NVCVImageFormat{nvcv::FMT_RGB8, nvcv::FMT_RGBf32p, nvcv::FMT_RGBf32}},
     {"bgr8", NVCVImageFormat{nvcv::FMT_BGR8, nvcv::FMT_BGRf32p, nvcv::FMT_BGRf32}},
     {"rgba8", NVCVImageFormat{nvcv::FMT_RGBA8, nvcv::FMT_RGBAf32p, nvcv::FMT_RGBAf32}},
-    {"bgra8", NVCVImageFormat{nvcv::FMT_BGRA8, nvcv::FMT_BGRAf32p, nvcv::FMT_BGRAf32}},
-    {"mono8", NVCVImageFormat{nvcv::FMT_Y8, nvcv::FMT_F32, nvcv::FMT_F32}}});
+    {"bgra8", NVCVImageFormat{nvcv::FMT_BGRA8, nvcv::FMT_BGRAf32p, nvcv::FMT_BGRAf32}}
+  });
 
 std::map<std::pair<nvcv::ImageFormat, nvcv::ImageFormat>, NVCVColorConversionCode>
 get_color_conversion_code({
     {std::make_pair(nvcv::FMT_RGB8, nvcv::FMT_BGR8), NVCV_COLOR_RGB2BGR},
     {std::make_pair(nvcv::FMT_RGB8, nvcv::FMT_RGBA8), NVCV_COLOR_RGB2RGBA},
     {std::make_pair(nvcv::FMT_RGB8, nvcv::FMT_BGRA8), NVCV_COLOR_RGB2BGRA},
-    {std::make_pair(nvcv::FMT_RGB8, nvcv::FMT_Y8), NVCV_COLOR_RGB2GRAY},
     {std::make_pair(nvcv::FMT_BGR8, nvcv::FMT_RGB8), NVCV_COLOR_BGR2RGB},
     {std::make_pair(nvcv::FMT_BGR8, nvcv::FMT_RGBA8), NVCV_COLOR_BGR2RGBA},
     {std::make_pair(nvcv::FMT_BGR8, nvcv::FMT_BGRA8), NVCV_COLOR_BGR2BGRA},
-    {std::make_pair(nvcv::FMT_BGR8, nvcv::FMT_Y8), NVCV_COLOR_BGR2GRAY},
     {std::make_pair(nvcv::FMT_RGBA8, nvcv::FMT_BGR8), NVCV_COLOR_RGBA2BGR},
     {std::make_pair(nvcv::FMT_RGBA8, nvcv::FMT_RGB8), NVCV_COLOR_RGBA2RGB},
     {std::make_pair(nvcv::FMT_RGBA8, nvcv::FMT_BGRA8), NVCV_COLOR_RGBA2BGRA},
-    {std::make_pair(nvcv::FMT_RGBA8, nvcv::FMT_Y8), NVCV_COLOR_RGBA2GRAY},
     {std::make_pair(nvcv::FMT_BGRA8, nvcv::FMT_RGB8), NVCV_COLOR_BGRA2RGB},
     {std::make_pair(nvcv::FMT_BGRA8, nvcv::FMT_RGBA8), NVCV_COLOR_BGRA2RGBA},
-    {std::make_pair(nvcv::FMT_BGRA8, nvcv::FMT_BGR8), NVCV_COLOR_BGRA2BGR},
-    {std::make_pair(nvcv::FMT_BGRA8, nvcv::FMT_Y8), NVCV_COLOR_BGRA2GRAY},
-    {std::make_pair(nvcv::FMT_Y8, nvcv::FMT_RGB8), NVCV_COLOR_GRAY2RGB},
-    {std::make_pair(nvcv::FMT_Y8, nvcv::FMT_RGBA8), NVCV_COLOR_GRAY2RGBA},
-    {std::make_pair(nvcv::FMT_Y8, nvcv::FMT_BGR8), NVCV_COLOR_GRAY2BGR},
-    {std::make_pair(nvcv::FMT_Y8, nvcv::FMT_BGRA8), NVCV_COLOR_GRAY2BGRA},
+    {std::make_pair(nvcv::FMT_BGRA8, nvcv::FMT_BGR8), NVCV_COLOR_BGRA2BGR}
   });
 
 ImageEncoderNode::ImageEncoderNode(const rclcpp::NodeOptions options)
@@ -138,14 +130,19 @@ ImageEncoderNode::ImageEncoderNode(const rclcpp::NodeOptions options)
 
   std::vector<float> image_mean_float(image_mean_.begin(), image_mean_.end());
   std::vector<float> image_stddev_float(image_stddev_.begin(), image_stddev_.end());
-
+  if (
+    output_image_channels_ != image_mean_float.size() ||
+    output_image_channels_ != image_stddev_float.size())
+  {
+    throw std::runtime_error("Error: Incorrect length of image mean or image std dev vectors.");
+  }
   cudaMemcpy(
     mean_data->basePtr(), image_mean_float.data(),
-    3 * sizeof(float), cudaMemcpyHostToDevice
+    output_image_channels_ * sizeof(float), cudaMemcpyHostToDevice
   );
   cudaMemcpy(
     std_dev_data->basePtr(), image_stddev_float.data(),
-    3 * sizeof(float), cudaMemcpyHostToDevice
+    output_image_channels_ * sizeof(float), cudaMemcpyHostToDevice
   );
 
   resized_tensor_ = nvcv::Tensor(

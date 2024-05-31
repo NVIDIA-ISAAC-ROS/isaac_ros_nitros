@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
-// Copyright (c) 2022-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+// Copyright (c) 2022-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -14,19 +14,6 @@
 // limitations under the License.
 //
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2022 Open Source Robotics Foundation, Inc.
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
 
 #include "isaac_ros_nitros/nitros_publisher_subscriber_group.hpp"
 
@@ -148,7 +135,7 @@ void NitrosPublisherSubscriberGroup::expandAnyDataFormats()
       "registered data formats");
     gxf_io_supported_data_formats_info_.supported_data_types.clear();
     std::map<ComponentKey, std::string> supported_data_format_map;
-    for (const std::string registered_data_format :
+    for (const std::string & registered_data_format :
       nitros_type_manager_->getAllRegisteredDataFormats())
     {
       std::vector<gxf::optimizer::ComponentInfo> ingress_egress_infos =
@@ -381,7 +368,8 @@ void NitrosPublisherSubscriberGroup::createNitrosSubscribers()
       ingress_comp_info,
       supported_data_formats,
       component_config,
-      statistics_config_);
+      statistics_config_,
+      true);
 
     nitros_sub->setFrameIdMap(frame_id_map_ptr_);
 
@@ -768,7 +756,7 @@ NitrosPublisherSubscriberGroup::publisherNegotiationCallback(
   }
 
   std::set<negotiated::detail::PublisherGid> gid_set;
-  for (const std::pair<negotiated::detail::PublisherGid,
+  for (const std::pair<const negotiated::detail::PublisherGid,
     std::vector<std::string>> & gid : negotiated_sub_gid_to_keys)
   {
     gid_set.insert(gid.first);

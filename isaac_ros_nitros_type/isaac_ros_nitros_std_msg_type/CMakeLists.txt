@@ -1,5 +1,5 @@
 # SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
-# Copyright (c) 2022-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# Copyright (c) 2022-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -34,20 +34,17 @@ if(USE_NVTX)
 endif()
 
 # Dependencies
-find_package(GXF ${ISAAC_ROS_GXF_VERSION} MODULE REQUIRED
-    COMPONENTS
-    core
-)
 find_package(yaml-cpp)
 
 # NitrosInt64
 ament_auto_add_library(${PROJECT_NAME} SHARED src/nitros_int64.cpp)
 target_link_libraries(${PROJECT_NAME}
-  GXF::core
   yaml-cpp
 )
-set_target_properties(${PROJECT_NAME} PROPERTIES BUILD_RPATH_USE_ORIGIN TRUE)
-set_target_properties(${PROJECT_NAME} PROPERTIES INSTALL_RPATH_USE_LINK_PATH TRUE)
+set_target_properties(${PROJECT_NAME} PROPERTIES
+  BUILD_WITH_INSTALL_RPATH TRUE
+  BUILD_RPATH_USE_ORIGIN TRUE
+  INSTALL_RPATH_USE_LINK_PATH TRUE)
 
 if(BUILD_TESTING)
   # Install test/config directory
@@ -56,8 +53,10 @@ if(BUILD_TESTING)
   # NitrosInt64ForwardNode
   ament_auto_add_library(nitros_int64_forward_node SHARED test/src/nitros_int64_forward_node.cpp)
   target_link_libraries(nitros_int64_forward_node ${PROJECT_NAME})
-  set_target_properties(nitros_int64_forward_node PROPERTIES BUILD_RPATH_USE_ORIGIN TRUE)
-  set_target_properties(nitros_int64_forward_node PROPERTIES INSTALL_RPATH_USE_LINK_PATH TRUE)
+  set_target_properties(nitros_int64_forward_node PROPERTIES
+    BUILD_WITH_INSTALL_RPATH TRUE
+    BUILD_RPATH_USE_ORIGIN TRUE
+    INSTALL_RPATH_USE_LINK_PATH TRUE)
   rclcpp_components_register_nodes(nitros_int64_forward_node "nvidia::isaac_ros::nitros::NitrosInt64ForwardNode")
   set(node_plugins "${node_plugins}nvidia::isaac_ros::nitros::NitrosInt64ForwardNode;$<TARGET_FILE:nitros_int64_forward_node>\n")
 

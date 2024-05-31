@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
-// Copyright (c) 2021-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+// Copyright (c) 2021-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -34,7 +34,7 @@ class Codelet : public Component {
   // execute custom code during the start phase. This is a good place to obtain resources which
   // are necessary for ticking the codelet. This function is guaranteed to be called before the
   // first call to tick.
-  virtual gxf_result_t start() = 0;
+  virtual gxf_result_t start() { return GXF_SUCCESS; }
 
   // This function is called whenever the codelet is expected to do work, e.g. when an event was
   // received or periodically. The tick method can be specified with various other member functions.
@@ -47,7 +47,7 @@ class Codelet : public Component {
   // it was before 'start' was called. Be careful to not leave any unintended left overs as 'start'
   // might be called again afterwards. It is guaranteed that stop is called after the last
   // call to tick. When start was called stop will be called, too.
-  virtual gxf_result_t stop() = 0;
+  virtual gxf_result_t stop() { return GXF_SUCCESS; }
 
   // Timestamp (in nanoseconds) of the beginning of the start, tick or stop function. The execution
   // timestamp does not change during the start, tick or stop function.

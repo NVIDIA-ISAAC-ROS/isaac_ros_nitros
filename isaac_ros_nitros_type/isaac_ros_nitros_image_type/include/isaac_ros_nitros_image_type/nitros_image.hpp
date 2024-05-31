@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
-// Copyright (c) 2022-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+// Copyright (c) 2022-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -110,6 +110,18 @@ struct nitros_image_32FC1_t
   static const inline std::string supported_type_name = "nitros_image_32FC1";
 };
 
+struct nitros_image_32FC3_t
+{
+  using MsgT = NitrosImage;
+  static const inline std::string supported_type_name = "nitros_image_32FC3";
+};
+
+struct nitros_image_32FC4_t
+{
+  using MsgT = NitrosImage;
+  static const inline std::string supported_type_name = "nitros_image_32FC4";
+};
+
 // NITROS data type registration factory
 NITROS_TYPE_FACTORY_BEGIN(NitrosImage)
 // Supported data formats
@@ -125,7 +137,11 @@ NITROS_FORMAT_ADD(nitros_image_mono16_t)
 NITROS_FORMAT_ADD(nitros_image_nv12_t)
 NITROS_FORMAT_ADD(nitros_image_nv24_t)
 NITROS_FORMAT_ADD(nitros_image_32FC1_t)
+NITROS_FORMAT_ADD(nitros_image_32FC3_t)
+NITROS_FORMAT_ADD(nitros_image_32FC4_t)
 NITROS_FORMAT_FACTORY_END()
+// Default compatible data format
+NITROS_DEFAULT_COMPATIBLE_FORMAT(nitros_image_rgb8_t)
 // Required extensions
 NITROS_TYPE_EXTENSION_FACTORY_BEGIN()
 NITROS_TYPE_EXTENSION_ADD("isaac_ros_gxf", "gxf/lib/multimedia/libgxf_multimedia.so")

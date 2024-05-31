@@ -1,5 +1,5 @@
 # SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
-# Copyright (c) 2022-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# Copyright (c) 2022-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -39,7 +39,7 @@ def generate_test_description():
         composable_node_descriptions=[
             ComposableNode(
                 package='isaac_ros_nitros',
-                plugin='nvidia::isaac_ros::nitros::NitrosNode',
+                plugin='nvidia::isaac_ros::nitros::NitrosEmptyForwardNode',
                 name='isaac_ros_nitros',
                 namespace=test_ns,
                 parameters=[{
@@ -48,7 +48,7 @@ def generate_test_description():
             ),
             ComposableNode(
                 package='isaac_ros_nitros',
-                plugin='nvidia::isaac_ros::nitros::NitrosNode',
+                plugin='nvidia::isaac_ros::nitros::NitrosEmptyForwardNode',
                 name='isaac_ros_nitros',
                 namespace=test_ns+'/mid1',
                 parameters=[{
