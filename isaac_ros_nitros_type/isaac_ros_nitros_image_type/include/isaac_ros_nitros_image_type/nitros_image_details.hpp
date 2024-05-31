@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
-// Copyright (c) 2022-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+// Copyright (c) 2022-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -48,7 +48,9 @@ const std::unordered_map<std::string, VideoFormat> g_ros_to_gxf_video_format({
     {img_encodings::TYPE_32FC1, VideoFormat::GXF_VIDEO_FORMAT_GRAY32},
     {img_encodings::NV24, VideoFormat::GXF_VIDEO_FORMAT_NV24_ER},
     {"nv12", VideoFormat::GXF_VIDEO_FORMAT_NV12_ER},
-  });
+    {"16UC1", VideoFormat::GXF_VIDEO_FORMAT_GRAY16},
+    {img_encodings::TYPE_32FC3, VideoFormat::GXF_VIDEO_FORMAT_RGB32},
+    {img_encodings::TYPE_32FC4, VideoFormat::GXF_VIDEO_FORMAT_RGBD32}});
 
 // Map to store the Nitros format encoding to ROS format encoding
 const std::unordered_map<VideoFormat, std::string> g_gxf_to_ros_video_format({
@@ -64,7 +66,8 @@ const std::unordered_map<VideoFormat, std::string> g_gxf_to_ros_video_format({
     {VideoFormat::GXF_VIDEO_FORMAT_D32F, img_encodings::TYPE_32FC1},
     {VideoFormat::GXF_VIDEO_FORMAT_NV24_ER, img_encodings::NV24},
     {VideoFormat::GXF_VIDEO_FORMAT_NV12_ER, "nv12"},
-  });
+    {VideoFormat::GXF_VIDEO_FORMAT_RGB32, img_encodings::TYPE_32FC3},
+    {VideoFormat::GXF_VIDEO_FORMAT_RGBD32, img_encodings::TYPE_32FC4}});
 
 template<VideoFormat T>
 struct NoPaddingColorPlanes {};
@@ -157,6 +160,22 @@ struct NoPaddingColorPlanes<VideoFormat::GXF_VIDEO_FORMAT_NV24>
   : planes({nvidia::gxf::ColorPlane("Y", 1, width),
         nvidia::gxf::ColorPlane("UV", 2, width * 2)}) {}
   std::array<nvidia::gxf::ColorPlane, 2> planes;
+};
+
+template<>
+struct NoPaddingColorPlanes<VideoFormat::GXF_VIDEO_FORMAT_RGB32>
+{
+  NoPaddingColorPlanes(size_t width)
+  : planes({nvidia::gxf::ColorPlane("RGB32", 12, width * 12)}) {}
+  std::array<nvidia::gxf::ColorPlane, 1> planes;
+};
+
+template<>
+struct NoPaddingColorPlanes<VideoFormat::GXF_VIDEO_FORMAT_RGBD32>
+{
+  NoPaddingColorPlanes(size_t width)
+  : planes({nvidia::gxf::ColorPlane("RGBD32", 16, width * 16)}) {}
+  std::array<nvidia::gxf::ColorPlane, 1> planes;
 };
 
 }  // namespace

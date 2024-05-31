@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
-// Copyright (c) 2022-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+// Copyright (c) 2022-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -37,6 +37,9 @@ class NitrosTensorShape
 public:
   NitrosTensorShape(std::initializer_list<int32_t> dimensions)
   : shape_{dimensions} {}
+
+  explicit NitrosTensorShape(nvidia::gxf::Shape shape)
+  : shape_{shape} {}
 
   const nvidia::gxf::Shape & shape() const {return shape_;}
 

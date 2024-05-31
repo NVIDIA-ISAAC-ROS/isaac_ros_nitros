@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
-// Copyright (c) 2021-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+// Copyright (c) 2021-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -72,7 +72,7 @@ class Metric : public Component {
   // Fixes the aggregated value to the last recorded sample.
   Expected<void> setFixedAggregationFunction();
 
-  // Resets the agggregated value to an uninitialized value
+  // Resets the aggregated value to an uninitialized value
   Expected<void> reset();
 
  private:

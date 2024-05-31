@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
-// Copyright (c) 2022-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+// Copyright (c) 2022-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -19,6 +19,7 @@
 #define ISAAC_ROS_NITROS__TYPES__NITROS_TYPE_BASE_HPP_
 
 #include <map>
+#include <memory>
 #include <string>
 #include <utility>
 #include <vector>
@@ -63,7 +64,16 @@ struct NitrosTypeBase
 #define NITROS_TYPE_FACTORY_BEGIN(TYPE_TYPENAME) \
 struct TYPE_TYPENAME : NitrosTypeBase \
 { \
-  using NitrosTypeBase::NitrosTypeBase;
+  using NitrosTypeBase::NitrosTypeBase; \
+  \
+  using RawPtr = TYPE_TYPENAME *; \
+  using ConstRawPtr = const TYPE_TYPENAME *; \
+  using SharedPtr = std::shared_ptr<TYPE_TYPENAME>; \
+  using ConstSharedPtr = std::shared_ptr<TYPE_TYPENAME const>; \
+  using UniquePtr = std::unique_ptr<TYPE_TYPENAME>; \
+  using ConstUniquePtr = std::unique_ptr<TYPE_TYPENAME const>; \
+  using WeakPtr = std::weak_ptr<TYPE_TYPENAME>; \
+  using ConstWeakPtr = std::weak_ptr<TYPE_TYPENAME const>;
 
 // Mark the end of the type factory
 #define NITROS_TYPE_FACTORY_END() \
@@ -84,6 +94,12 @@ static std::map<std::string, NitrosFormatCallbacks> GetFormatCallbacks() \
 // Mark the end of the format factory
 #define NITROS_FORMAT_FACTORY_END() \
   return format_callback_map; \
+}
+
+#define NITROS_DEFAULT_COMPATIBLE_FORMAT(FORMAT_TYPENAME) \
+static std::string GetDefaultCompatibleFormat() \
+{ \
+ return FORMAT_TYPENAME::supported_type_name; \
 }
 
 // Mark the beginning of an extension factory for the current data type

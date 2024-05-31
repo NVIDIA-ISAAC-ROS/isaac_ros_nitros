@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
-// Copyright (c) 2022-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+// Copyright (c) 2022-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -47,27 +47,21 @@ public:
   // Constructor
   NitrosSubscriber(
     rclcpp::Node & node,
-    std::shared_ptr<NitrosTypeManager> nitros_type_manager,
-    const gxf::optimizer::ComponentInfo & gxf_component_info,
-    const std::vector<std::string> & supported_data_formats,
-    const NitrosPublisherSubscriberConfig & config);
-
-  NitrosSubscriber(
-    rclcpp::Node & node,
-    const gxf_context_t context,
-    std::shared_ptr<NitrosTypeManager> nitros_type_manager,
-    const gxf::optimizer::ComponentInfo & gxf_component_info,
-    const std::vector<std::string> & supported_data_formats,
-    const NitrosPublisherSubscriberConfig & config);
-
-  NitrosSubscriber(
-    rclcpp::Node & node,
     const gxf_context_t context,
     std::shared_ptr<NitrosTypeManager> nitros_type_manager,
     const gxf::optimizer::ComponentInfo & gxf_component_info,
     const std::vector<std::string> & supported_data_formats,
     const NitrosPublisherSubscriberConfig & config,
-    const NitrosStatisticsConfig & statistics_config);
+    const NitrosStatisticsConfig & statistics_config,
+    const bool use_callback_group = false);
+
+  NitrosSubscriber(
+    rclcpp::Node & node,
+    const gxf_context_t context,
+    std::shared_ptr<NitrosTypeManager> nitros_type_manager,
+    const gxf::optimizer::ComponentInfo & gxf_component_info,
+    const std::vector<std::string> & supported_data_formats,
+    const NitrosPublisherSubscriberConfig & config);
 
   // Constructor for creating a subscriber without an associated gxf ingress port
   NitrosSubscriber(
@@ -89,6 +83,8 @@ public:
   // Start negotiation
   void start();
 
+  void setIsGxfRunning(const bool is_gxf_running);
+
   // Create a compatible subscriber
   void createCompatibleSubscriber();
 
@@ -99,7 +95,7 @@ public:
   void setReceiverPointer(void * gxf_receiver_ptr);
 
   // Push an entity into the corresponding receiver in the underlying graph
-  bool pushEntity(const int64_t eid);
+  bool pushEntity(const int64_t eid, bool should_block = false);
 
   // The subscriber callback
   void subscriberCallback(
@@ -115,11 +111,21 @@ private:
   // A subscriber for receiving data from the base topic
   std::shared_ptr<rclcpp::SubscriptionBase> compatible_sub_{nullptr};
 
+  std::shared_ptr<rclcpp::CallbackGroup> callback_group_;
+
   // A flag to specifiy if this subscriber is associated with a gxf receiver
   bool use_gxf_receiver_{true};
 
   // A pinter to the associated receiver component for sending data into the running graph
   nvidia::gxf::Receiver * gxf_receiver_ptr_{nullptr};
+
+  // A flag to specify if the underlying GXF graph has been running
+  bool is_gxf_running_{false};
+
+  // A flag to specify if a callback group should be used in this NITROS subscriber
+  // If enabled, different NITROS sbuscriber callbacks can be executed in parallel
+  // and there is only one callback instance executed at a time in each NITROS subscriber
+  bool use_callback_group_{false};
 };
 
 }  // namespace nitros

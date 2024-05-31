@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
-// Copyright (c) 2021-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+// Copyright (c) 2021-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -34,7 +34,7 @@ typedef uint32_t GxfFlags;
 
 // -------------------------------------------------------------------------------------------------
 
-/// @brief Structure specifing parameters for loading extensions
+/// @brief Structure specifying parameters for loading extensions
 typedef struct {
   // Optional list of extension filenames to load
   const char* const* extension_filenames;
@@ -104,7 +104,7 @@ typedef enum GxfEntityCreateFlagBits {
   // 'GXF_ENTITY_CREATE_PROGRAM_BIT' specifies that the entity will be added to the program
   // entities. Program entities are kept alive for the duration of the program. They are activated
   // automatically when the program is activated and deactivated when the program is deactivated.
-  // If the program was already actived when the entity is created the entity must still be
+  // If the program was already activated when the entity is created the entity must still be
   // activated manually.
   GXF_ENTITY_CREATE_PROGRAM_BIT = 0x00000001
 } GxfEntityCreateFlagBits;
@@ -112,7 +112,7 @@ typedef enum GxfEntityCreateFlagBits {
 /// @brief Bitmask of GxfEntityCreateFlagBits
 typedef GxfFlags GxfEntityCreateFlags;
 
-/// @brief Structure specifing parameters for creating entities
+/// @brief Structure specifying parameters for creating entities
 typedef struct {
   // 'entity_name' is the name of the entity which is created. If this is a nullptr an undefined
   // unique name is chosen. The name must not start with a double underscore.
@@ -184,7 +184,7 @@ gxf_result_t GxfEntityIsValid(gxf_context_t context, gxf_uid_t eid, bool* valid)
 /// @param eid eid of an Entity
 /// @param num_resource_cids In/Out: the max number of components that can fit in
 /// the buffer/the number of resources in eid's EntityGroup
-/// @param resource_cids A buffer allocated by the caller for returned UIDs of all resouces, with
+/// @param resource_cids A buffer allocated by the caller for returned UIDs of all resources, with
 /// capacity for `num_resource_cids`.
 /// @return GXF_SUCCESS if the operation was successful, GXF_QUERY_NOT_ENOUGH_CAPACITY if more
 /// resources exist in eid's EntityGroup, or otherwise one of the GXF error codes.

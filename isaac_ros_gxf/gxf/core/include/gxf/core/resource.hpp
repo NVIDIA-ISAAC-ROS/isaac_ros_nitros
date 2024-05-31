@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
-// Copyright (c) 2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+// Copyright (c) 2023-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -14,6 +14,7 @@
 // limitations under the License.
 //
 // SPDX-License-Identifier: Apache-2.0
+
 #ifndef NVIDIA_GXF_CORE_RESOURCE_HPP_
 #define NVIDIA_GXF_CORE_RESOURCE_HPP_
 
@@ -21,7 +22,7 @@
 
 #include "gxf/core/expected.hpp"
 #include "gxf/core/handle.hpp"
-#include "gxf/std/resource_manager.hpp"
+#include "gxf/core/resource_manager.hpp"
 
 namespace nvidia {
 namespace gxf {
@@ -34,7 +35,7 @@ class Resource<Handle<T>> {
  public:
   // Tries to get the Resource value. If first time call, query ResourceManager and save
   // the value for subsequent calls.
-  // If invalid ResourceManager ptr, Handle<S>::Unspecified() keeps returning everytime
+  // If invalid ResourceManager ptr, Handle<S>::Unspecified() keeps returning every time
   // If ResourceManager cannot find the target, GXF_ENTITY_COMPONENT_NOT_FOUND
   // will be saved into value_. No repeat query.
   const Expected<Handle<T>>& try_get(const char* name = nullptr) const {
@@ -48,7 +49,7 @@ class Resource<Handle<T>> {
         Expected<Handle<T>> maybe_value =
           resource_manager_->findComponentResource<T>(owner_cid_, name);
         if (!maybe_value) {
-          GXF_LOG_INFO("Resource [type: %s] from component [cid: %ld] "
+          GXF_LOG_DEBUG("Resource [type: %s] from component [cid: %ld] "
                           "cannot find its value from ResourceManager",
                           TypenameAsString<T>(), owner_cid_);
           value_ = ForwardError(maybe_value);

@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
-// Copyright (c) 2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+// Copyright (c) 2023-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -46,10 +46,10 @@ extern "C" {
 /// @endcond
 
 /// Major version. API is guaranteed to be compatible between the same major version numbers.
-#define CUVSLAM_API_VERSION_MAJOR 11
+#define CUVSLAM_API_VERSION_MAJOR 12
 
 /// Minor version
-#define CUVSLAM_API_VERSION_MINOR 4
+#define CUVSLAM_API_VERSION_MINOR 2
 
 /**
  * @name Error codes
@@ -62,48 +62,31 @@ extern "C" {
 ///@{
 
 /// Success
-#define CUVSLAM_SUCCESS 0
+#define CUVSLAM_SUCCESS 0U
 
 /// Tracking lost
-#define CUVSLAM_TRACKING_LOST 1
+#define CUVSLAM_TRACKING_LOST 1U
 
 /// Invalid argument
-#define CUVSLAM_INVALID_ARG 2
+#define CUVSLAM_INVALID_ARG 2U
 
 /// Can't localize
-#define CUVSLAM_CAN_NOT_LOCALIZE 3
+#define CUVSLAM_CAN_NOT_LOCALIZE 3U
 
 /// Generic error
-#define CUVSLAM_GENERIC_ERROR 4
+#define CUVSLAM_GENERIC_ERROR 4U
 
 /// Unsupported number of cameras
-#define CUVSLAM_UNSUPPORTED_NUMBER_OF_CAMERAS 5
+#define CUVSLAM_UNSUPPORTED_NUMBER_OF_CAMERAS 5U
 
 /// Slam is not initialized
-#define CUVSLAM_SLAM_IS_NOT_INITIALIZED 6
+#define CUVSLAM_SLAM_IS_NOT_INITIALIZED 6U
 
 /// Not implemented
-#define CUVSLAM_NOT_IMPLEMENTED 7
+#define CUVSLAM_NOT_IMPLEMENTED 7U
 
 /// Reading slam internals is disabled
-#define CUVSLAM_READING_SLAM_INTERNALS_DISABLED 8
-///@}
-
-/**
- * @name CUVSLAM_VO_TRACKER_STATE
- *  @see CUVSLAM_PoseEstimate::vo_state
- */
-///@{
-
-/// Unknown
-#define CUVSLAM_VO_TRACKER_STATE_UNKNOWN         0
-
-/// Successes
-#define CUVSLAM_VO_TRACKER_STATE_SUCCESS         1
-
-/// Failed
-#define CUVSLAM_VO_TRACKER_STATE_FAILED          2
-
+#define CUVSLAM_READING_SLAM_INTERNALS_DISABLED 8U
 ///@}
 
 /**
@@ -122,6 +105,14 @@ enum CUVSLAM_DataLayer {
 };
 
 /**
+ * Image Encoding
+ */
+enum CUVSLAM_ImageEncoding {
+    MONO8,
+    RGB8
+};
+
+/**
  * Transformation from camera space to world space
  */
 struct CUVSLAM_Pose {
@@ -133,10 +124,10 @@ struct CUVSLAM_Pose {
  * IMU Calibration
  */
 struct CUVSLAM_ImuCalibration {
-    struct CUVSLAM_Pose left_from_imu;  /**< Left camera from imu transformation.
-                                             vLeft = left_from_imu * vImu
+    struct CUVSLAM_Pose rig_from_imu;   /**< Rig from imu transformation.
+                                             vRig = rig_from_imu * vImu
                                              - vImu - vector in imu coordinate system
-                                             - vLeft - vector in left eye coordinate system */
+                                             - vRig - vector in rig coordinate system */
     float gyroscope_noise_density;      ///< \f$rad / (s * \sqrt{hz})\f$
     float gyroscope_random_walk;        ///< \f$rad / (s^2 * \sqrt{hz})\f$
     float accelerometer_noise_density;  ///< \f$m / (s^2 * \sqrt{hz})\f$
@@ -154,6 +145,10 @@ struct CUVSLAM_ImuMeasurement {
 
 /**
  * Describes intrinsic and extrinsic parameters of a camera.
+ *
+ * For camera coordinate system top left pixel has (0, 0) coordinate (y is down, x is right).
+ * It's compatible with ROS CameraInfo/OpenCV.
+ *
  * Supported values of distortion_model:
  * - brown5k (9 parameters):
  *   * 0-1: principal point \f$(c_x, c_y)\f$\n
@@ -170,11 +165,22 @@ struct CUVSLAM_ImuMeasurement {
  *      \f$x_n = \frac{x}{z}\f$\n
  *      \f$y_n = \frac{y}{z}\f$\n
  *      \f$r = \sqrt{(x_n)^2 + (y_n)^2}\f$\n
+ *
  * - pinhole (4 parameters):\n
  *   no distortion, same as radial5 with \f$k_0=k_1=k_2=p_0=p_1=0\f$\n
  *   * 0-1: principal point \f$(c_x, c_y)\f$\n
  *   * 2-3: focal length \f$(f_x, f_y)\f$\n
+ *
  * - fisheye4 (8 parameters):\n
+ *   Also known as equidistant distortion model for pinhole cameras.\n
+ *   Coefficients k1, k2, k3, k4 are 100% compatible with ethz-asl/kalibr/pinhole-equi and OpenCV::fisheye.\n
+ *   See: "A Generic Camera Model and Calibration Method for Conventional, Wide-Angle, and Fish-Eye Lenses"\n
+ *   by Juho Kannala and Sami S. Brandt for further information.\n
+ *   Please note, this approach (pinhole+undistort) has a limitation and works only field-of-view below 180 deg.\n
+ *   For the TUMVI dataset FOV is ~190 deg.\n
+ *   EuRoC and ORB_SLAM3 use a different approach (direct project/unproject without pinhole) and support >180 deg, so\n
+ *   their coefficient is incompatible with this model.\n
+ *
  *   * 0-1: principal point \f$(c_x, c_y)\f$\n
  *   * 2-3: focal length \f$(f_x, f_y)\f$\n
  *   * 4-7: fisheye distortion coefficients \f$(k_1, k_2, k_3, k_4)\f$\n
@@ -186,6 +192,7 @@ struct CUVSLAM_ImuMeasurement {
  *      \f$x_n = \frac{x}{z}\f$\n
  *      \f$y_n = \frac{y}{z}\f$\n
  *      \f$r = \sqrt{(x_n)^2 + (y_n)^2}\f$\n
+ *
  * - polynomial (12 parameters):\n
  *   * 0-1: principal point \f$(c_x, c_y)\f$\n
  *   * 2-3: focal length \f$(f_x, f_y)\f$\n
@@ -209,6 +216,11 @@ struct CUVSLAM_Camera {
     int32_t num_parameters;        ///< parameters number
     int32_t width;                 ///< image width in pixels
     int32_t height;                ///< image height in pixels
+    int32_t border_top;            ///< top border to ignore in pixels (0 to use full frame)
+    int32_t border_bottom;         ///< bottom border to ignore in pixels (0 to use full frame)
+    int32_t border_left;           ///< left border to ignore in pixels (0 to use full frame)
+    int32_t border_right;          ///< right border to ignore in pixels (0 to use full frame)
+
     struct CUVSLAM_Pose pose;      ///< transformation from coordinate frame of the camera to frame of the rig
 };
 
@@ -294,11 +306,6 @@ struct CUVSLAM_Configuration {
     const char *debug_dump_directory;
 
     /**
-     * Enable verbose flag for logging
-     */
-    int32_t verbosity;
-
-    /**
      * Set maximum camera frame time in milliseconds.
      * Compares delta between frames in tracker with max_frame_delta_ms
      * to warn user and prevent mistakes depending on hardware settings.
@@ -336,6 +343,22 @@ struct CUVSLAM_Configuration {
      * Default is off (=0)
      */
     int32_t slam_gt_align_mode;
+
+    /** Maximum numbers of poses in SLAM pose graph.
+     * 300 is suitable for real-time mapping.
+     * Requirements:
+     *      enable_localization_n_mapping = true
+     * Default is 300
+     * The special value 0 means unlimited pose-graph.
+     */
+    int32_t slam_max_map_size;
+
+    /**
+     * Multicamera mode: moderate (0), performance (1) or precision (2).
+     * Multicamera odometry settings will be adjusted depending on a chosen strategy.
+     * Default is moderate (0).
+     */
+    int32_t multicam_mode;
 };
 
 /**
@@ -357,6 +380,8 @@ struct CUVSLAM_Image {
     int32_t width;         ///< image width must match what was provided in CUVSLAM_Camera
     int32_t height;        ///< image height must match what was provided in CUVSLAM_Camera
     int32_t camera_index;  ///< index of the camera in the rig
+    int32_t pitch;         ///< bytes per image row including padding for GPU memory images
+    enum CUVSLAM_ImageEncoding image_encoding; ///< 
 };
 
 /**
@@ -379,10 +404,10 @@ struct CUVSLAM_ObservationVector {
 
 /**
  * Landmark
- * x, y, z in camera frame
+ * x, y, z in world frame
  */
 struct CUVSLAM_Landmark {
-    int64_t id;  ///< identifier
+    uint64_t id; ///< identifier
     float x;     ///< x - coordinates
     float y;     ///< y - coordinates
     float z;     ///< z - coordinates
@@ -398,7 +423,7 @@ struct CUVSLAM_LandmarkVector {
 };
 
 /**
- * Gravity vector in the left camera space
+ * Gravity vector in the rig space
  */
 struct CUVSLAM_Gravity {
     float x;    ///< x - coordinate in meters
@@ -411,10 +436,7 @@ struct CUVSLAM_Gravity {
  * All fields will be set by the tracker.
  * The rig coordinate space is user-defined and depends on the extrinsic
  * parameters of the cameras.
- * Cameras are always looking in the negative z direction.
- * The code has only been tested for the cases when one of the cameras'
- * coordinate spaces matches the rig coordinate space: extrinsic
- * parameters of the camera are the identity matrix.
+ * The cameras' coordinate spaces may not match the rig coordinate space: extrinsic
  * The world coordinate space is an arbitrary 3D coordinate frame.
  * Pose covariance is defined via matrix exponential:
  * for a random zero-mean perturbation `u` in the tangent space
@@ -438,11 +460,6 @@ struct CUVSLAM_PoseEstimate {
      * Rotation in radians, translation in meters.
      */
     float covariance[6 * 6];
-
-    /**
-     * State of vo tracking @see CUVSLAM_VO_TRACKER_STATE_*
-     */
-    uint32_t vo_state;
 };
 
 /**
@@ -569,6 +586,13 @@ CUVSLAM_API
 void CUVSLAM_GetVersion(int32_t *major, int32_t *minor, const char **version);
 
 /**
+ * Set verbosity. The higher the value, the more output from the library. 0 (default) for no output.
+ * @param[in] verbosity new verbosity value
+ */
+CUVSLAM_API
+void CUVSLAM_SetVerbosity(int verbosity);
+
+/**
  * Set Log filename. For internal usage only.
  * @param[in] filename new log filename
  * @return result status (error code)
@@ -655,15 +679,19 @@ CUVSLAM_Status CUVSLAM_RegisterImuMeasurement(CUVSLAM_TrackerHandle tracker, int
  * rig->num_cameras in CUVSLAM_CreateTracker.
  * @param[in]  tracker        tracker handle
  * @param[in]  images         is a pointer to single image in case of mono or array of two images in case of stereo
+ * @param[in]  images_size    number of images, provided to cuVSLAM
  * @param[in]  predicted_pose If `predicted_pose` is not NULL, the tracker will use it as the initial guess.
  *                            For slam_gt_align_mode predicted pose is the ground truth pose.
- * @param[out] pose_estimate  On success `pose_estimate` contains estimated rig pose.
+ * @param[out] pose_estimate  On success (CUVSLAM_SUCCESS) `pose_estimate` contains estimated rig pose.
  *                            On failure value of `pose_estimate` is undefined.
  * @return result status (error code)
  * @see CUVSLAM_RegisterImuMeasurement
  */
 CUVSLAM_API
-CUVSLAM_Status CUVSLAM_Track(CUVSLAM_TrackerHandle tracker, const struct CUVSLAM_Image *images,
+CUVSLAM_Status CUVSLAM_Track(CUVSLAM_TrackerHandle tracker, const struct CUVSLAM_Image *images, size_t images_size,
+                             const struct CUVSLAM_Pose *predicted_pose, struct CUVSLAM_PoseEstimate *pose_estimate);
+CUVSLAM_API
+CUVSLAM_Status CUVSLAM_TrackGpuMem(CUVSLAM_TrackerHandle tracker, const struct CUVSLAM_Image *images, size_t images_size,
                              const struct CUVSLAM_Pose *predicted_pose, struct CUVSLAM_PoseEstimate *pose_estimate);
 
 /**
@@ -689,15 +717,33 @@ CUVSLAM_API
 CUVSLAM_Status CUVSLAM_GetSlamPose(CUVSLAM_TrackerHandle tracker, struct CUVSLAM_Pose *pose);
 
 /**
- * Get list of poses for each frame.
+ * Set rig pose estimated by customer.
+ * You should set enable_localization_n_mapping=1 in the parameters of CUVSLAM_CreateTracker()
+ * else CUVSLAM_SLAM_IS_NOT_INITIALIZED will be returned
+ * @param[in]  tracker tracker handle
+ * @param[in]  pose    rig pose estimated by customer
+ * @return result status (error code)
+ */
+CUVSLAM_API
+CUVSLAM_Status CUVSLAM_SetSlamPose(CUVSLAM_TrackerHandle tracker, const struct CUVSLAM_Pose *pose);
+
+/**
+ * Get a list of poses for each frame.
+ * cuVSLAM keeps all poses (trajectory) relative to the slam pose-graph.
+ * It's done special for CUVSLAM_GetAllPoses function.
+ * It returns all poses optimized with the latest pose graph, so it's not the same as keeping run-time output.
+ * With CUVSLAM_GetAllPoses, you will never have LC jumps because it recalculates past poses using
+ * the current pose graph.
  * @param[in]      tracker                  tracker handle
  * @param[in]      max_poses_stamped_count  size of poses_stamped array
  * @param[in, out] poses_stamped            pre-allocated array to store poses
  * @return number of items copied to poses_stamped array
- */
+ * Requirements:
+ *      enable_localization_n_mapping = true
+*/
 CUVSLAM_API
-uint32_t CUVSLAM_GetAllPoses(CUVSLAM_TrackerHandle tracker, uint32_t max_poses_stamped_count,
-                             struct CUVSLAM_PoseStamped *poses_stamped);
+uint32_t CUVSLAM_GetAllSLAMPoses(CUVSLAM_TrackerHandle tracker, uint32_t max_poses_stamped_count,
+                                 struct CUVSLAM_PoseStamped *poses_stamped);
 
 /**
  * Save Slam DB (map) to folder.
@@ -737,6 +783,7 @@ CUVSLAM_API
 CUVSLAM_Status CUVSLAM_LocalizeInExistDb(CUVSLAM_TrackerHandle tracker, const char *folder_name,
                                          const struct CUVSLAM_Pose *guess_pose, float radius CUVSLAM_DEFAULT(0),
                                          const struct CUVSLAM_Image *images CUVSLAM_DEFAULT(nullptr),
+                                         size_t images_size CUVSLAM_DEFAULT(2),
                                          CUVSLAM_LocalizeInExistDbResponse response CUVSLAM_DEFAULT(nullptr),
                                          void *response_context CUVSLAM_DEFAULT(nullptr));
 
@@ -776,6 +823,15 @@ CUVSLAM_Status CUVSLAM_GetLastGravity(CUVSLAM_TrackerHandle tracker, struct CUVS
  */
 CUVSLAM_API
 CUVSLAM_Status CUVSLAM_GetSlamMetrics(CUVSLAM_TrackerHandle tracker, struct CUVSLAM_SlamMetrics *slam_metrics);
+
+/**
+ * Get list of last 10 loop closure poses with timestamps.
+ * lc_poses_stamped will be filled.
+ * if lc_poses_stamped[index] is empty, then lc_poses_stamped[index].timestamp_ns < 0
+ */
+CUVSLAM_API
+CUVSLAM_Status CUVSLAM_GetLoopClosurePoseStamped(CUVSLAM_TrackerHandle tracker,
+                                                 struct CUVSLAM_PoseStamped* lc_poses_stamped);
 
 /**
  * Enable or disable landmarks layer reading
@@ -866,7 +922,7 @@ CUVSLAM_Status CUVSLAM_FinishReadingLocalizerProbes(CUVSLAM_TrackerHandle tracke
  * @return result status (error code)
  */
 CUVSLAM_API
-CUVSLAM_Status CUVSLAM_MergeDatabases(char const *const *databases, int32_t databases_num, char const *output_folder);
+CUVSLAM_Status CUVSLAM_MergeDatabases(const struct CUVSLAM_CameraRig* rig, char const *const *databases, int32_t databases_num, char const *output_folder);
 
 #ifdef __cplusplus
 } // extern "C"

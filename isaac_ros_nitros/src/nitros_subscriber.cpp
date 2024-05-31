@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
-// Copyright (c) 2022-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+// Copyright (c) 2022-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -30,17 +30,42 @@ namespace isaac_ros
 namespace nitros
 {
 
+constexpr char LOGGER_SUFFIX[] = "NitrosSubscriber";
+constexpr uint32_t kGxfReceiverPushPollPeriodNs = 100000;  // 100us
+constexpr uint32_t kGxfReceiverPushPollWarningPeriodLoopCount = 100000;  // 10s
+
 NitrosSubscriber::NitrosSubscriber(
   rclcpp::Node & node,
+  const gxf_context_t context,
   std::shared_ptr<NitrosTypeManager> nitros_type_manager,
   const gxf::optimizer::ComponentInfo & gxf_component_info,
   const std::vector<std::string> & supported_data_formats,
-  const NitrosPublisherSubscriberConfig & config)
+  const NitrosPublisherSubscriberConfig & config,
+  const NitrosStatisticsConfig & statistics_config,
+  const bool use_callback_group)
 : NitrosPublisherSubscriberBase(
-    node, nitros_type_manager, gxf_component_info, supported_data_formats, config)
+    node, context, nitros_type_manager, gxf_component_info, supported_data_formats, config),
+  use_callback_group_{use_callback_group}
 {
   if (config_.type == NitrosPublisherSubscriberType::NOOP) {
     return;
+  }
+
+  statistics_config_ = statistics_config;
+  if (statistics_config_.enable_statistics &&
+    statistics_config_.topic_name_expected_dt_map.find(config_.topic_name) !=
+    statistics_config_.topic_name_expected_dt_map.end())
+  {
+    // Initialize statistics variables and message fields
+    statistics_msg_.is_subscriber = true;
+    initStatistics();
+  }
+
+  if (use_callback_group_) {
+    callback_group_ = node_.create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive);
+    RCLCPP_DEBUG(
+      node_.get_logger(),
+      "[NitrosSubscriber] Created a MutuallyExclusive callback group");
   }
 
   // Check and throw error if the specified compatible data format is not supported
@@ -77,30 +102,8 @@ NitrosSubscriber::NitrosSubscriber(
   const std::vector<std::string> & supported_data_formats,
   const NitrosPublisherSubscriberConfig & config)
 : NitrosSubscriber(
-    node, nitros_type_manager, gxf_component_info, supported_data_formats, config)
-{
-  setContext(context);
-}
-
-NitrosSubscriber::NitrosSubscriber(
-  rclcpp::Node & node,
-  const gxf_context_t context,
-  std::shared_ptr<NitrosTypeManager> nitros_type_manager,
-  const gxf::optimizer::ComponentInfo & gxf_component_info,
-  const std::vector<std::string> & supported_data_formats,
-  const NitrosPublisherSubscriberConfig & config,
-  const NitrosStatisticsConfig & statistics_config)
-: NitrosSubscriber(
-    node, context, nitros_type_manager, gxf_component_info, supported_data_formats, config)
-{
-  statistics_config_ = statistics_config;
-
-  if (statistics_config_.enable_statistics) {
-    // Initialize statistics variables and message fields
-    statistics_msg_.is_subscriber = true;
-    initStatistics();
-  }
-}
+    node, context, nitros_type_manager, gxf_component_info, supported_data_formats, config, {})
+{}
 
 NitrosSubscriber::NitrosSubscriber(
   rclcpp::Node & node,
@@ -126,6 +129,9 @@ void NitrosSubscriber::addSupportedDataFormat(
 {
   rclcpp::SubscriptionOptions sub_options;
   sub_options.use_intra_process_comm = rclcpp::IntraProcessSetting::Enable;
+  if (use_callback_group_) {
+    sub_options.callback_group = callback_group_;
+  }
 
   if (!nitros_type_manager_->hasFormat(data_format)) {
     std::stringstream error_msg;
@@ -182,10 +188,18 @@ void NitrosSubscriber::start()
   }
 }
 
+void NitrosSubscriber::setIsGxfRunning(const bool is_gxf_running)
+{
+  is_gxf_running_ = is_gxf_running;
+}
+
 void NitrosSubscriber::createCompatibleSubscriber()
 {
   rclcpp::SubscriptionOptions sub_options;
   sub_options.use_intra_process_comm = rclcpp::IntraProcessSetting::Enable;
+  if (use_callback_group_) {
+    sub_options.callback_group = callback_group_;
+  }
 
   if (!nitros_type_manager_->hasFormat(config_.compatible_data_format)) {
     std::stringstream error_msg;
@@ -265,10 +279,41 @@ void NitrosSubscriber::setReceiverPointer(void * gxf_receiver_ptr)
   gxf_receiver_ptr_ = reinterpret_cast<nvidia::gxf::Receiver *>(gxf_receiver_ptr);
 }
 
-bool NitrosSubscriber::pushEntity(const int64_t eid)
+bool NitrosSubscriber::pushEntity(const int64_t eid, bool should_block)
 {
+  gxf_entity_status_t entity_status;
+  gxf_result_t code;
+  gxf_uid_t gxf_receiver_eid = gxf_receiver_ptr_->eid();
+  int loop_count = 0;
+  if (should_block) {
+    while ((gxf_receiver_ptr_->back_size() + 1) >
+      (gxf_receiver_ptr_->capacity() - gxf_receiver_ptr_->size()))
+    {
+      if (loop_count > 0 && loop_count % kGxfReceiverPushPollWarningPeriodLoopCount == 0) {
+        RCLCPP_WARN(
+          node_.get_logger().get_child(LOGGER_SUFFIX),
+          "%.1fs passed while waiting to push a message entity (eid=%ld) "
+          "to the receiver %s",
+          (loop_count * (kGxfReceiverPushPollPeriodNs / 1000000000.0)),
+          eid, gxf_receiver_ptr_->name());
+      }
+      rclcpp::sleep_for(std::chrono::nanoseconds(kGxfReceiverPushPollPeriodNs));
+      loop_count++;
+      // Check the status of the receiver entity in case the graph is terminated.
+      code = GxfEntityGetStatus(context_, gxf_receiver_eid, &entity_status);
+      if (code != GXF_SUCCESS) {
+        RCLCPP_ERROR(
+          node_.get_logger(),
+          "[NitrosSubscriber] Failed to get the receiver entity (eid=%ld) status: %s",
+          gxf_receiver_eid, GxfResultStr(code));
+        return false;
+      }
+    }
+  }
+
   auto msg_entity = nvidia::gxf::Entity::Shared(context_, eid);
   gxf_receiver_ptr_->push(std::move(msg_entity.value()));
+  GxfEntityNotifyEventType(context_, gxf_receiver_ptr_->eid(), GXF_EVENT_MESSAGE_SYNC);
 
   RCLCPP_DEBUG(
     node_.get_logger(),
@@ -289,8 +334,13 @@ void NitrosSubscriber::subscriberCallback(
     getTimestamp(msg_base) << ")";
   nvtxRangePushWrapper(nvtx_tag_name.str().c_str(), CLR_PURPLE);
 
-  if (statistics_config_.enable_statistics) {
-    updateStatistics();
+  // Only enable statistics if the ROS parameter flag is enabled and
+  // the topic has been specified in the topics_list ROS parameter
+  if (statistics_config_.enable_statistics &&
+    statistics_config_.topic_name_expected_dt_map.find(config_.topic_name) !=
+    statistics_config_.topic_name_expected_dt_map.end())
+  {
+    updateStatistics(getTimestamp(msg_base));
   }
 
   RCLCPP_DEBUG(node_.get_logger(), "[NitrosSubscriber] Received a Nitros-typed messgae");
@@ -305,11 +355,11 @@ void NitrosSubscriber::subscriberCallback(
     node_.get_logger(), "[NitrosSubscriber] \tReceiver's pointer: %p",
     (void *)gxf_receiver_ptr_);
 
-  if (gxf_receiver_ptr_ == nullptr && use_gxf_receiver_) {
-    RCLCPP_INFO(
+  if (use_gxf_receiver_ && (!is_gxf_running_ || gxf_receiver_ptr_ == nullptr)) {
+    RCLCPP_DEBUG(
       node_.get_logger(),
-      "[NitrosSubscriber] Received a message but the application receiver's pointer is "
-      "not yet set.");
+      "[NitrosSubscriber] Received a message but the underlying GXF graph is"
+      "not yet ready.");
     nvtxRangePopWrapper();
     return;
   }
@@ -333,9 +383,9 @@ void NitrosSubscriber::subscriberCallback(
     config_.callback(context_, msg_base);
   }
 
-  if (use_gxf_receiver_) {
+  if (use_gxf_receiver_ && gxf_receiver_ptr_ != nullptr && is_gxf_running_) {
     // Push the message to the associated gxf receiver if existed
-    pushEntity(msg_base.handle);
+    pushEntity(msg_base.handle, true);
   }
 
   nvtxRangePopWrapper();

@@ -1,5 +1,5 @@
 # SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
-# Copyright (c) 2022-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# Copyright (c) 2022-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -37,32 +37,24 @@ endif()
 
 # Determine the architecture
 if(CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64")
-    set(CUVSLAM_LIB_PATH "lib/cuvslam/lib_aarch64_jetpack51")
+    set(CUVSLAM_LIB_PATH "lib/cuvslam/lib_aarch64_jetpack60")
     set(CUAPRILTAGS_LIB_PATH "lib/cuapriltags/lib_aarch64_jetpack51")
 elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64")
-    set(CUVSLAM_LIB_PATH "lib/cuvslam/lib_x86_64_cuda_11_8")
+    set(CUVSLAM_LIB_PATH "lib/cuvslam/lib_x86_64_cuda_12_2")
     set(CUAPRILTAGS_LIB_PATH "lib/cuapriltags/lib_x86_64_cuda_11_8")
 else()
     message(FATAL_ERROR "Unsupported architecture: ${CMAKE_SYSTEM_PROCESSOR}")
 endif()
 
-# Install the correct libcuapriltags.a/libcuvslam.so based on the architecture
-if(CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64")
-    install(FILES ${CUAPRILTAGS_LIB_PATH}/libcuapriltags.a
-        DESTINATION "${CMAKE_INSTALL_PREFIX}/share/${PROJECT_NAME}/cuapriltags/lib_aarch64_jetpack51")
-    install(FILES ${CUVSLAM_LIB_PATH}/libcuvslam.so
-        DESTINATION "${CMAKE_INSTALL_PREFIX}/share/${PROJECT_NAME}/cuvslam/lib_aarch64_jetpack51")
-elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64")
-    install(FILES ${CUAPRILTAGS_LIB_PATH}/libcuapriltags.a
-        DESTINATION "${CMAKE_INSTALL_PREFIX}/share/${PROJECT_NAME}/cuapriltags/lib_x86_64_cuda_11_8")
-    install(FILES ${CUVSLAM_LIB_PATH}/libcuvslam.so
-        DESTINATION "${CMAKE_INSTALL_PREFIX}/share/${PROJECT_NAME}/cuvslam/lib_x86_64_cuda_11_8")
-else()
-    message(FATAL_ERROR "Unsupported architecture: ${CMAKE_SYSTEM_PROCESSOR}")
-endif()
+# Install exported libraries
+install(FILES ${CUAPRILTAGS_LIB_PATH}/libcuapriltags.a
+    DESTINATION "${CMAKE_INSTALL_PREFIX}/share/${PROJECT_NAME}/cuapriltags/lib")
+install(FILES ${CUVSLAM_LIB_PATH}/libcuvslam.so
+    DESTINATION "${CMAKE_INSTALL_PREFIX}/share/${PROJECT_NAME}/cuvslam/lib")
 
-# Install the header file for cuvslam
+# Install header files for cuvslam
 install(FILES lib/cuvslam/include/cuvslam.h
+              lib/cuvslam/include/ground_constraint.h
         DESTINATION "${CMAKE_INSTALL_PREFIX}/share/${PROJECT_NAME}/cuvslam/include")
 
 # cuVSLAM (register path)
@@ -73,17 +65,10 @@ install(FILES lib/cuapriltags/cuapriltags/cuAprilTags.h
         DESTINATION "${CMAKE_INSTALL_PREFIX}/share/${PROJECT_NAME}/cuapriltags/cuapriltags")
 
 # cuApriltags (register path)
-ament_index_register_resource(cuapriltags CONTENT share/${PROJECT_NAME}/cuapriltags/)
+ament_index_register_resource(cuapriltags CONTENT share/${PROJECT_NAME}/cuapriltags)
 
 # Dependencies
 find_package(Eigen3 3.3 REQUIRED NO_MODULE)
-find_package(GXF ${ISAAC_ROS_GXF_VERSION} MODULE REQUIRED
-    COMPONENTS
-    core
-    multimedia
-    gxf_optimizer
-    message_compositor
-)
 find_package(vpi REQUIRED)
 find_package(yaml-cpp)
 
@@ -99,42 +84,35 @@ ament_auto_add_library(${PROJECT_NAME} SHARED
   src/nitros_publisher_subscriber_group.cpp
   src/utils/vpi_utilities.cpp
 )
-# For the NitrosNode test node
-rclcpp_components_register_node(${PROJECT_NAME}
-  PLUGIN "nvidia::isaac_ros::nitros::NitrosNode"
-  EXECUTABLE ${PROJECT_NAME}_exe)
-
 target_link_libraries(${PROJECT_NAME}
-  GXF::core
-  GXF::gxf_optimizer
-  GXF::multimedia
-  GXF::message_compositor
   Eigen3::Eigen
   vpi
   yaml-cpp
 )
-set_target_properties(${PROJECT_NAME} PROPERTIES BUILD_RPATH_USE_ORIGIN TRUE)
-set_target_properties(${PROJECT_NAME} PROPERTIES INSTALL_RPATH_USE_LINK_PATH TRUE)
-
-# Re-export gxf_optimizer
-get_target_property(gxf_optimizer_includes GXF::gxf_optimizer INTERFACE_INCLUDE_DIRECTORIES)
-ament_export_include_directories(${gxf_optimizer_includes})
-
-# Re-export isaac_messages headers embedded directory
-find_package(isaac_ros_gxf)
-ament_export_include_directories("${isaac_ros_gxf_DIR}/../gxf/include/gxf/isaac_messages")
-
-# Re-export message_compositor headers embedded directory
-ament_export_include_directories("${isaac_ros_gxf_DIR}/../gxf/include/gxf/message_compositor")
-
+set_target_properties(${PROJECT_NAME} PROPERTIES
+  BUILD_WITH_INSTALL_RPATH TRUE
+  BUILD_RPATH_USE_ORIGIN TRUE
+  INSTALL_RPATH_USE_LINK_PATH TRUE)
 
 if(BUILD_TESTING)
-  find_package(ament_lint_auto REQUIRED)
+  # Install test/config directory
+  install(DIRECTORY test/config DESTINATION share/${PROJECT_NAME}/test)
+
+  # NitrosEmptyForwardNode
+  ament_auto_add_library(nitros_empty_forward_node SHARED test/src/nitros_empty_forward_node.cpp)
+  target_link_libraries(nitros_empty_forward_node ${PROJECT_NAME})
+  set_target_properties(nitros_empty_forward_node PROPERTIES
+    BUILD_WITH_INSTALL_RPATH TRUE
+    BUILD_RPATH_USE_ORIGIN TRUE
+    INSTALL_RPATH_USE_LINK_PATH TRUE)
+  rclcpp_components_register_nodes(nitros_empty_forward_node "nvidia::isaac_ros::nitros::NitrosEmptyForwardNode")
+  set(node_plugins "${node_plugins}nvidia::isaac_ros::nitros::NitrosEmpty;$<TARGET_FILE:nitros_empty_forward_node>\n")
+
+find_package(ament_lint_auto REQUIRED)
 
   # Ignore copyright notices since we use custom NVIDIA Isaac ROS Software License
   set(ament_cmake_copyright_FOUND TRUE)
   ament_lint_auto_find_test_dependencies()
-
 
   # The FindPythonInterp and FindPythonLibs modules are removed
   if(POLICY CMP0148)

@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
-// Copyright (c) 2020-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+// Copyright (c) 2020-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -46,7 +46,7 @@ enum class OverflowBehavior {
 // the main stage. Items are moved from the backstage to the main stage by calling the sync
 // function. The queue only provides a fixed number of slots for elements. If elements are added to
 // a full queue a user-selected strategy is used to determine how to proceed. Note that the overflow
-// strategy can by triggerd when calling push in case the backstage area is full, or when calling
+// strategy can by triggered when calling push in case the backstage area is full, or when calling
 // sync in case the main stage is too full to receive all items from the backstage. When items are
 // removed from the queue they are overwritten with a user-defined default value. This is useful
 // for example in case shared pointers are stored in the queue. All functions of this type are
@@ -75,7 +75,7 @@ class StagingQueue {
 
   // Creates a new staging queue. 'capacity' indicates the maximum number of elements allowed in
   // the queue. Note that the queue will allocate memory to hold two times capacity slots of item
-  // type T. 'overflow_behevior' defines what will happen if a new item is added to a full queue.
+  // type T. 'overflow_behavior' defines what will happen if a new item is added to a full queue.
   // 'null' is the default element which is used for empty slots. If an element is removed from the
   // queue the slot it occupied is set to this value.
   StagingQueue(size_t capacity, OverflowBehavior overflow_behavior, T null);
@@ -326,7 +326,7 @@ bool StagingQueue<T>::sync() {
   if (num_mainstage_ > capacity_) {
     switch (overflow_behavior_) {
       case OverflowBehavior::kPop: {
-        // Make sure that main and back stage together don't execeed capacity. Remove excess items
+        // Make sure that main and back stage together don't exceed capacity. Remove excess items
         // starting with the first item in the main stage. This effectively pops the oldest items to
         // make room for new items.
         const size_t new_begin = begin_ + num_mainstage_ - capacity_;
@@ -336,7 +336,7 @@ bool StagingQueue<T>::sync() {
         num_mainstage_ = capacity_;
       } break;
       case OverflowBehavior::kReject:
-        // Make sure that main and back stage together don't execeed capacity. Remove excess items
+        // Make sure that main and back stage together don't exceed capacity. Remove excess items
         // starting with the last item in the back stage. This effectively rejects new items.
         while (num_mainstage_ > capacity_) {
           at(begin_ + --num_mainstage_) = null_;

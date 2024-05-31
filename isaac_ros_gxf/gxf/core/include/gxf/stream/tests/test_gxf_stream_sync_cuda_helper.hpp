@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
-// Copyright (c) 2022-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+// Copyright (c) 2022-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -142,8 +142,6 @@ class StreamTensorGeneratorNew : public StreamBasedOpsNew {
     return GXF_SUCCESS;
   }
 
-  gxf_result_t start() override { return GXF_SUCCESS; }
-
   gxf_result_t tick() override {
     Expected<Entity> maybe_dev_msg = Entity::New(context());
     GXF_ASSERT(maybe_dev_msg, "New dev message failed");
@@ -183,8 +181,6 @@ class StreamTensorGeneratorNew : public StreamBasedOpsNew {
 
     return GXF_SUCCESS;
   }
-
-  gxf_result_t stop() override { return GXF_SUCCESS; }
 
   gxf_result_t registerInterface(Registrar* registrar) override {
     Expected<void> result;
@@ -362,8 +358,6 @@ class CublasDotProductNew : public StreamBasedOpsNew {
   }
 
   // gxf_result_t start() override { return ToResultCode(initOpsEvent()); }
-  gxf_result_t start() override { return GXF_SUCCESS; }
-  gxf_result_t stop() override { return GXF_SUCCESS; }
 
   gxf_result_t tick() override {
     Expected<Entity> in_msg = rx_->receive();
@@ -420,9 +414,6 @@ class HostDotProductNew : public Codelet {
     return GXF_SUCCESS;
   }
 
-  gxf_result_t start() override { return GXF_SUCCESS; }
-  gxf_result_t stop() override { return GXF_SUCCESS; }
-
   gxf_result_t tick() override {
     Expected<Entity> in_msg = rx_->receive();
 
@@ -450,9 +441,6 @@ class HostDotProductNew : public Codelet {
 // Stream based Memory copy from device to host
 class MemCpy2HostNew : public StreamBasedOpsNew {
  public:
-  gxf_result_t start() override { return GXF_SUCCESS; }
-  gxf_result_t stop() override { return GXF_SUCCESS; }
-
   gxf_result_t tick() override {
     auto in = rx_->receive();
     GXF_ASSERT(in, "rx received empty message");
@@ -511,9 +499,6 @@ class MemCpy2HostNew : public StreamBasedOpsNew {
 // Equal verification
 class VerifyEqualNew : public Codelet {
  public:
-  gxf_result_t start() override { return GXF_SUCCESS; }
-  gxf_result_t stop() override { return GXF_SUCCESS; }
-
   gxf_result_t tick() override {
     GXF_LOG_DEBUG("verifying frame: %d", count_++);
     auto in0 = rx0_->receive();

@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
-// Copyright (c) 2021-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+// Copyright (c) 2021-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -52,6 +52,9 @@ class Extension : public ComponentFactory {
   // Registers all components in the extension with the given context.
   virtual gxf_result_t registerComponents_abi(gxf_context_t context) = 0;
 
+  // Checks if a component is present in the extension or not
+  virtual gxf_result_t hasComponent_abi(const gxf_tid_t& tid) = 0;
+
   // Gets a list with IDs of all types which are registered with this factory.
   virtual gxf_result_t getComponentTypes_abi(gxf_tid_t* pointer, size_t* size) = 0;
 
@@ -63,6 +66,7 @@ class Extension : public ComponentFactory {
                        const char* key, gxf_parameter_info_t* info) = 0;
 
   Expected<void> registerComponents(gxf_context_t context);
+  Expected<void> hasComponent(const gxf_tid_t& tid);
   Expected<void> getComponentTypes(gxf_tid_t* pointer, size_t* size);
   Expected<void> setInfo(gxf_tid_t tid, const char* name, const char* desc,
                                    const char* author, const char* version, const char* license);

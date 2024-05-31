@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
-// Copyright (c) 2021-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+// Copyright (c) 2021-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -26,8 +26,8 @@
 #include "gxf/core/expected.hpp"
 #include "gxf/core/gxf.h"
 #include "gxf/core/handle.hpp"
-#include "gxf/std/parameter_parser.hpp"
-#include "gxf/std/parameter_wrapper.hpp"
+#include "gxf/core/parameter_parser.hpp"
+#include "gxf/core/parameter_wrapper.hpp"
 
 
 namespace nvidia {
@@ -48,7 +48,7 @@ class ParameterBackendBase {
   const char* key() const { return key_; }
 
   // Returns true if the parameter is guaranteed to always have a value set. Only mandatory
-  // parameters can be accessed direclty with 'get' instead of using 'try_get'.
+  // parameters can be accessed directly with 'get' instead of using 'try_get'.
   bool isMandatory() const { return (flags_ & GXF_PARAMETER_FLAGS_OPTIONAL) == 0; }
 
   // Returns true if the parameter can not be changed after the component has been activated.
@@ -111,7 +111,7 @@ class ParameterBackend : public ParameterBackendBase {
 
   Expected<YAML::Node> wrap() {
     if (!value_) {
-      return Unexpected{GXF_UNINITIALIZED_VALUE};
+      return Unexpected{GXF_PARAMETER_NOT_INITIALIZED};
     }
     return ParameterWrapper<T>::Wrap(context(), value_.value());
   }
@@ -151,7 +151,7 @@ class ParameterBackend<Handle<T>> : public HandleParameterBackend {
 
   Expected<YAML::Node> wrap() {
     if (!value_ || value_ == Handle<T>::Unspecified()) {
-      return Unexpected{GXF_UNINITIALIZED_VALUE};
+      return Unexpected{GXF_PARAMETER_NOT_INITIALIZED};
     }
 
     return ParameterWrapper<Handle<T>>::Wrap(context(), value_.value());
@@ -222,7 +222,7 @@ class Parameter : public ParameterBase {
     backend_ = other.backend_;
   }
   // Gets the current parameter value. Only valid if the parameter is marked as 'mandatory' in the
-  // paramater interface. Otherwise an assert will be raised.
+  // parameter interface. Otherwise an assert will be raised.
   const T& get() const {
     std::unique_lock<std::mutex> lock(mutex_);
     GXF_ASSERT(backend_ != nullptr, "A parameter with type '%s' was not registered.",
@@ -282,7 +282,7 @@ template <typename S>
 class Parameter<Handle<S>> : public ParameterBase {
  public:
   // Gets the current parameter value. Only valid if the parameter is marked as 'mandatory' in the
-  // paramater interface. Otherwise an assert will be raised.
+  // parameter interface. Otherwise an assert will be raised.
   const Handle<S>& get() const {
     GXF_ASSERT(backend_ != nullptr, "A handle parameter with type '%s' was not registered.",
                TypenameAsString<S>());

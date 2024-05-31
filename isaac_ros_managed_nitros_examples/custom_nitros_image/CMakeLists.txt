@@ -1,5 +1,5 @@
 # SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
-# Copyright (c) 2021-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# Copyright (c) 2021-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -29,11 +29,28 @@ ament_auto_find_build_dependencies()
 ament_auto_add_library(gpu_image_builder_node SHARED src/gpu_image_builder_node.cpp)
 rclcpp_components_register_nodes(gpu_image_builder_node "custom_nitros_image::GpuImageBuilderNode")
 set(node_plugins "${node_plugins}custom_nitros_image::GpuImageBuilderNode;$<TARGET_FILE:gpu_image_builder_node>\n")
+set_target_properties(gpu_image_builder_node PROPERTIES
+  BUILD_WITH_INSTALL_RPATH TRUE
+  BUILD_RPATH_USE_ORIGIN TRUE
+  INSTALL_RPATH_USE_LINK_PATH TRUE)
 
 # GPU Image Viewer node
 ament_auto_add_library(gpu_image_viewer_node SHARED src/gpu_image_viewer_node.cpp)
 rclcpp_components_register_nodes(gpu_image_viewer_node "custom_nitros_image::GpuImageViewerNode")
 set(node_plugins "${node_plugins}custom_nitros_image::GpuImageViewerNode;$<TARGET_FILE:gpu_image_viewer_node>\n")
+set_target_properties(gpu_image_viewer_node PROPERTIES
+  BUILD_WITH_INSTALL_RPATH TRUE
+  BUILD_RPATH_USE_ORIGIN TRUE
+  INSTALL_RPATH_USE_LINK_PATH TRUE)
+
+# GPU Image Viewer node
+ament_auto_add_library(nitros_image_switch_node SHARED src/nitros_image_switch_node.cpp)
+rclcpp_components_register_nodes(nitros_image_switch_node "nvidia::isaac_ros::custom_nitros_image::NitrosImageSwitchNode")
+set(node_plugins "${node_plugins}nvidia::isaac_ros::custom_nitros_image::NitrosImageSwitchNode;$<TARGET_FILE:nitros_image_switch_node>\n")
+set_target_properties(nitros_image_switch_node PROPERTIES
+  BUILD_WITH_INSTALL_RPATH TRUE
+  BUILD_RPATH_USE_ORIGIN TRUE
+  INSTALL_RPATH_USE_LINK_PATH TRUE)
 
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)
@@ -49,6 +66,7 @@ if(BUILD_TESTING)
   add_launch_test(test/custom_nitros_image_pol.py TIMEOUT "600")
   add_launch_test(test/custom_nitros_image_builder_pol.py TIMEOUT "600")
   add_launch_test(test/custom_nitros_image_viewer_pol.py TIMEOUT "600")
+  add_launch_test(test/test_nitros_image_switch_pol.py TIMEOUT "600")
 endif()
 
 ament_auto_package()

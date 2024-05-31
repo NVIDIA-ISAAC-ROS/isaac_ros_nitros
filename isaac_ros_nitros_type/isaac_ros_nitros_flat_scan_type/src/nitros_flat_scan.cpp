@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
-// Copyright (c) 2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+// Copyright (c) 2023-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -25,7 +25,7 @@
 #pragma GCC diagnostic ignored "-Wunused-parameter"
 #pragma GCC diagnostic ignored "-Wmissing-field-initializers"
 #pragma GCC diagnostic ignored "-Wpedantic"
-#include "flat_scan_message.hpp"
+#include "messages/flat_scan_message.hpp"
 #include "gems/pose_tree/pose_tree.hpp"
 #include "extensions/atlas/pose_tree_frame.hpp"
 #pragma GCC diagnostic pop

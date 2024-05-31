@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
-// Copyright (c) 2021-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+// Copyright (c) 2021-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -44,7 +44,7 @@ class SchedulingTerm : public Component {
 
   Expected<SchedulingCondition> check(int64_t timestamp) {
     SchedulingConditionType status;
-    int64_t target_timestamp;
+    int64_t target_timestamp = 0;
     gxf_result_t result = update_state_abi(timestamp);
     if (result != GXF_SUCCESS) { return Unexpected{result}; }
     const gxf_result_t error = check_abi(timestamp, &status, &target_timestamp);

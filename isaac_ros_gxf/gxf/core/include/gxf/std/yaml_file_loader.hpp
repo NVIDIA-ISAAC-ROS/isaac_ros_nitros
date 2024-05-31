@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
-// Copyright (c) 2020-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+// Copyright (c) 2020-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,11 +18,13 @@
 #define NVIDIA_GXF_STD_YAML_FILE_LOADER_HPP_
 
 #include <map>
+#include <memory>
 #include <string>
 #include <utility>
 #include <vector>
 
 #include "common/fixed_vector.hpp"
+#include "common/yaml_parser.hpp"
 #include "gxf/core/entity.hpp"
 #include "gxf/core/expected.hpp"
 #include "gxf/core/gxf.h"
@@ -41,7 +43,7 @@ class ParameterStorage;
 class YamlFileLoader {
  public:
   // Sets the mandatory parameter storage where parameters loaded from YAML are stored.
-  void setParameterStorage(ParameterStorage* parameter_storage) {
+  void setParameterStorage(std::shared_ptr<ParameterStorage> parameter_storage) {
     parameter_storage_ = parameter_storage;
   }
 
@@ -95,7 +97,7 @@ class YamlFileLoader {
                                       const FixedVectorBase<YAML::Node>& nodes,
                                       const std::string& entity_prefix);
 
-  ParameterStorage* parameter_storage_ = nullptr;
+  std::shared_ptr<ParameterStorage> parameter_storage_ = nullptr;
 
   std::string root_;
 };

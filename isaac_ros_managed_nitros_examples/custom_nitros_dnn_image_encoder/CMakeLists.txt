@@ -1,5 +1,5 @@
 # SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
-# Copyright (c) 2021-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# Copyright (c) 2021-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -32,11 +32,14 @@ ament_auto_add_library(image_encoder_node SHARED src/image_encoder_node.cpp)
 target_link_libraries(image_encoder_node cvcuda nvcv_types)
 rclcpp_components_register_nodes(image_encoder_node "custom_nitros_dnn_image_encoder::ImageEncoderNode")
 set(node_plugins "${node_plugins}custom_nitros_dnn_image_encoder::ImageEncoderNode;$<TARGET_FILE:image_encoder_node>\n")
+set_target_properties(image_encoder_node PROPERTIES
+  BUILD_WITH_INSTALL_RPATH TRUE
+  BUILD_RPATH_USE_ORIGIN TRUE
+  INSTALL_RPATH_USE_LINK_PATH TRUE)
 
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)
   ament_lint_auto_find_test_dependencies()
-
 
   # The FindPythonInterp and FindPythonLibs modules are removed
   if(POLICY CMP0148)

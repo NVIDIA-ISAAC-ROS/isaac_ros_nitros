@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
-// Copyright (c) 2021-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+// Copyright (c) 2021-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -33,7 +33,7 @@
 //
 // Components can have at most one base class. Multiple base classes are not supported.
 //
-// Every component must be registered with a unique 128-bit identifier. The identifer must be
+// Every component must be registered with a unique 128-bit identifier. The identifier must be
 // unique across all existing extensions.
 //
 // Note that the extension factory can also be created manually without using these macros.

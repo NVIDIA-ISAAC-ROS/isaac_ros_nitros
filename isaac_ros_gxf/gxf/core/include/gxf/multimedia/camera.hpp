@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
-// Copyright (c) 2021-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+// Copyright (c) 2021-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -122,10 +122,6 @@ struct CameraModelBase {
   DistortionType distortion_type;
   // Distortion coefficients of the camera.
   T distortion_coefficients[kMaxDistortionCoefficients];
-  // Rectification matrix R of stereo camera/camera pair
-  std::array<T, 9> rectification;
-  // Project/camera matrix P of stereo camera/camera pair
-  std::array<T, 12> projection_camera_rect;
 };
 
 using CameraModel = CameraModelBase<float>;
@@ -147,22 +143,6 @@ struct Pose3DBase {
 };
 
 using Pose3D = Pose3DBase<float>;
-
-// Message structure for camera messages
-struct CameraMessageParts {
-  // Message entity
-  Entity entity;
-  // Camera frame
-  Handle<VideoBuffer> frame;
-  // Camera intrinsics
-  Handle<CameraModel> intrinsics;
-  // Camera extrinsics
-  gxf::Handle<gxf::Pose3D> extrinsics;
-  // Frame sequence number
-  gxf::Handle<int64_t> sequence_number;
-  // Frame acquisition timestamp
-  Handle<Timestamp> timestamp;
-};
 
 }  // namespace gxf
 }  // namespace nvidia

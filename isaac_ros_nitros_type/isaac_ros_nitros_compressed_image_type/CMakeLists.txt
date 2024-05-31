@@ -1,5 +1,5 @@
 # SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
-# Copyright (c) 2022-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# Copyright (c) 2022-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -34,18 +34,11 @@ if(USE_NVTX)
 endif()
 
 # Dependencies
-find_package(GXF ${ISAAC_ROS_GXF_VERSION} MODULE REQUIRED
-    COMPONENTS
-    core
-    multimedia
-)
 find_package(yaml-cpp)
 
 # NitrosCompressedImage
 ament_auto_add_library(${PROJECT_NAME} SHARED src/nitros_compressed_image.cpp)
 target_link_libraries(${PROJECT_NAME}
-  GXF::core
-  GXF::multimedia
   yaml-cpp
 )
 set_target_properties(${PROJECT_NAME} PROPERTIES BUILD_RPATH_USE_ORIGIN TRUE)

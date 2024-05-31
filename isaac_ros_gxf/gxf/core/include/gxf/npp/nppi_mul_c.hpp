@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
-// Copyright (c) 2020-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+// Copyright (c) 2020-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -19,9 +19,9 @@
 
 #include <vector>
 
+#include "gxf/core/parameter_parser_std.hpp"
 #include "gxf/std/allocator.hpp"
 #include "gxf/std/codelet.hpp"
-#include "gxf/std/parameter_parser_std.hpp"
 #include "gxf/std/receiver.hpp"
 #include "gxf/std/transmitter.hpp"
 
@@ -34,9 +34,7 @@ class NppiMulC : public Codelet {
   virtual ~NppiMulC() = default;
 
   gxf_result_t registerInterface(Registrar* registrar) override;
-  gxf_result_t start() override { return GXF_SUCCESS; }
   gxf_result_t tick() override;
-  gxf_result_t stop() override { return GXF_SUCCESS; }
 
  private:
   Parameter<Handle<Receiver>> in_;

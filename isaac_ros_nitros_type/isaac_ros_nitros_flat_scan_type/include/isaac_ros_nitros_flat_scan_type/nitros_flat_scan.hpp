@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
-// Copyright (c) 2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+// Copyright (c) 2023-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -56,16 +56,15 @@ NITROS_FORMAT_ADD(nitros_flat_scan_t)
 NITROS_FORMAT_FACTORY_END()
 // Required extensions
 NITROS_TYPE_EXTENSION_FACTORY_BEGIN()
-NITROS_TYPE_EXTENSION_ADD("isaac_ros_gxf", "gxf/lib/std/libgxf_std.so")
 NITROS_TYPE_EXTENSION_ADD("isaac_ros_gxf", "gxf/lib/serialization/libgxf_serialization.so")
 // for nvidia::isaac::StringProvider
-NITROS_TYPE_EXTENSION_ADD("isaac_ros_gxf", "gxf/lib/libgxf_gxf_helpers.so")
+NITROS_TYPE_EXTENSION_ADD("gxf_isaac_gxf_helpers", "gxf/lib/libgxf_isaac_gxf_helpers.so")
 // for nvidia::isaac::SightReceiver
-NITROS_TYPE_EXTENSION_ADD("isaac_ros_gxf", "gxf/lib/libgxf_sight.so")
+NITROS_TYPE_EXTENSION_ADD("gxf_isaac_sight", "gxf/lib/libgxf_isaac_sight.so")
 // for nvidia::isaac::PoseTree
-NITROS_TYPE_EXTENSION_ADD("isaac_ros_gxf", "gxf/lib/libgxf_atlas.so")
+NITROS_TYPE_EXTENSION_ADD("gxf_isaac_atlas", "gxf/lib/libgxf_isaac_atlas.so")
 // for nvidia::isaac::PoseFrameUid
-NITROS_TYPE_EXTENSION_ADD("isaac_ros_gxf", "gxf/lib/libgxf_isaac_messages.so")
+NITROS_TYPE_EXTENSION_ADD("gxf_isaac_messages", "gxf/lib/libgxf_isaac_messages.so")
 NITROS_TYPE_EXTENSION_FACTORY_END()
 NITROS_TYPE_FACTORY_END()
 

@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
-// Copyright (c) 2021-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+// Copyright (c) 2021-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -74,6 +74,8 @@ class DefaultExtension : public Extension {
 
   gxf_result_t registerComponents_abi(gxf_context_t context) override;
 
+  gxf_result_t hasComponent_abi(const gxf_tid_t& tid) override;
+
   gxf_result_t getComponentTypes_abi(gxf_tid_t* pointer, size_t* size) override;
 
   gxf_result_t allocate_abi(gxf_tid_t tid, void** out_pointer) override;
@@ -82,6 +84,8 @@ class DefaultExtension : public Extension {
 
   gxf_result_t getParameterInfo_abi(gxf_context_t context, const gxf_tid_t cid, const char* key,
                gxf_parameter_info_t* info) override;
+
+  gxf_tid_t tid () const { return tid_; }
 
   template <typename T, typename Base = detail::VoidBaseHelper>
   Expected<void> add(gxf_tid_t tid, const char* description, const char* display_name = "",

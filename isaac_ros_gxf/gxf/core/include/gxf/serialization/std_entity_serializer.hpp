@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
-// Copyright (c) 2021-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+// Copyright (c) 2021-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -35,7 +35,7 @@ namespace gxf {
 //
 // Components will be serialized in the order they are added to the entity
 // Components without serializers will be skipped
-// Each component will be preceeded by a component header and the name of the component
+// Each component will be preceded by a component header and the name of the component
 // The component itself will be serialized with a component serializer
 // An entity header will be added at the beginning
 class StdEntitySerializer : EntitySerializer {
@@ -62,7 +62,7 @@ class StdEntitySerializer : EntitySerializer {
   #pragma pack(pop)
 
   gxf_result_t registerInterface(Registrar* registrar) override;
-  gxf_result_t initialize() override { return GXF_SUCCESS; }
+  gxf_result_t initialize() override;
   gxf_result_t deinitialize() override { return GXF_SUCCESS; }
 
   gxf_result_t serialize_entity_abi(gxf_uid_t eid, Endpoint* endpoint, uint64_t* size) override;

@@ -1,5 +1,5 @@
 # SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
-# Copyright (c) 2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# Copyright (c) 2023-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -35,23 +35,18 @@ endif()
 
 # Dependencies
 find_package(Eigen3 3.3 REQUIRED NO_MODULE)
-find_package(GXF ${ISAAC_ROS_GXF_VERSION} MODULE REQUIRED
-    COMPONENTS
-    core
-    isaac_messages
-)
 find_package(yaml-cpp)
 
 # NitrosPoseCovStamped
 ament_auto_add_library(${PROJECT_NAME} SHARED src/nitros_pose_cov_stamped.cpp)
 target_link_libraries(${PROJECT_NAME}
   Eigen3::Eigen
-  GXF::core
-  GXF::isaac_messages
   yaml-cpp
 )
-set_target_properties(${PROJECT_NAME} PROPERTIES BUILD_RPATH_USE_ORIGIN TRUE)
-set_target_properties(${PROJECT_NAME} PROPERTIES INSTALL_RPATH_USE_LINK_PATH TRUE)
+set_target_properties(${PROJECT_NAME} PROPERTIES
+  BUILD_WITH_INSTALL_RPATH TRUE
+  BUILD_RPATH_USE_ORIGIN TRUE
+  INSTALL_RPATH_USE_LINK_PATH TRUE)
 
 if(BUILD_TESTING)
   # Install test/config directory
@@ -60,8 +55,10 @@ if(BUILD_TESTING)
   # NitrosPoseCovStampedForwardNode
   ament_auto_add_library(isaac_ros_nitros_pose_cov_stamped_forward_node SHARED test/src/nitros_pose_cov_stamped_forward_node.cpp)
   target_link_libraries(isaac_ros_nitros_pose_cov_stamped_forward_node ${PROJECT_NAME})
-  set_target_properties(isaac_ros_nitros_pose_cov_stamped_forward_node PROPERTIES BUILD_RPATH_USE_ORIGIN TRUE)
-  set_target_properties(isaac_ros_nitros_pose_cov_stamped_forward_node PROPERTIES INSTALL_RPATH_USE_LINK_PATH TRUE)
+  set_target_properties(isaac_ros_nitros_pose_cov_stamped_forward_node PROPERTIES
+    BUILD_WITH_INSTALL_RPATH TRUE
+    BUILD_RPATH_USE_ORIGIN TRUE
+    INSTALL_RPATH_USE_LINK_PATH TRUE)
   rclcpp_components_register_nodes(isaac_ros_nitros_pose_cov_stamped_forward_node
     "nvidia::isaac_ros::nitros::NitrosPoseCovStampedForwardNode")
   set(node_plugins "${node_plugins}nvidia::isaac_ros::nitros::NitrosPoseCovStampedForwardNode;\

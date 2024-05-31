@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
-// Copyright (c) 2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+// Copyright (c) 2023-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -33,6 +33,7 @@
 
 #include "isaac_ros_nitros/types/nitros_type_view_factory.hpp"
 #include "isaac_ros_nitros_tensor_list_type/nitros_tensor_list.hpp"
+#include "isaac_ros_nitros_tensor_list_type/nitros_tensor_shape.hpp"
 
 
 namespace nvidia
@@ -42,8 +43,10 @@ namespace isaac_ros
 namespace nitros
 {
 
+using PrimitiveType = gxf::PrimitiveType;
+
 NITROS_TYPE_VIEW_FACTORY_BEGIN(NitrosTensorList)
-MARK_PRIVATE_SECTION()
+MARK_PUBLIC_SECTION()
 class NitrosTensorView
 {
 public:
@@ -54,6 +57,8 @@ public:
   inline uint64_t GetBytesPerElement() const {return tensor_.bytes_per_element();}
   inline uint64_t GetElementCount() const {return tensor_.element_count();}
   inline size_t GetTensorSize() const {return tensor_.size();}
+  inline NitrosTensorShape GetShape() const {return NitrosTensorShape(tensor_.shape());}
+  inline PrimitiveType GetElementType() const {return tensor_.element_type();}
 
 private:
   const gxf::Tensor & tensor_{};

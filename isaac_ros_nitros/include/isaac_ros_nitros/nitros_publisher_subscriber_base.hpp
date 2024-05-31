@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
-// Copyright (c) 2022-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+// Copyright (c) 2022-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -20,6 +20,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <limits>
 #include <map>
 #include <memory>
 #include <mutex>
@@ -46,7 +47,8 @@ namespace nitros
 
 namespace
 {
-constexpr float const kMicrosecondsInSeconds = 1000000;
+constexpr float const kSecondsToMicroseconds = 1000000;
+constexpr uint64_t const kMicrosecondsToNanoseconds = 1000;
 }
 
 // Enum for specifying vairous types of Nitros publishers/subscribers
@@ -86,6 +88,10 @@ struct NitrosStatisticsConfig
 {
   // Statistics toggle
   bool enable_statistics{false};
+  bool enable_all_statistics{false};
+  bool enable_node_time_statistics{false};
+  bool enable_msg_time_statistics{false};
+  bool enable_increasing_msg_time_statistics{false};
 
   // Rate (Hz) at which to publish statistics to a ROS topic
   float statistics_publish_rate{1.0};
@@ -207,7 +213,7 @@ public:
       return 0;
     }
 
-    RCLCPP_WARN(
+    RCLCPP_DEBUG(
       node_.get_logger(),
       "[NitrosPublisherSubscriberBase] Failed to get timestamp from a NITROS"
       " message (eid=%ld)",
@@ -247,51 +253,124 @@ public:
   }
 
   // Update statistics numbers. To be called in nitros Subscriber and Publisher
-  void updateStatistics()
+  void updateStatistics(uint64_t msg_timestamp_ns)
   {
     // Mutex lock to prevent simultaneous access of common parameters
     // used by updateStatistics() and publishNitrosStatistics()
     const std::lock_guard<std::mutex> lock(nitros_statistics_mutex_);
-    // NITROS statistics
-    std::chrono::time_point<std::chrono::steady_clock> current_timestamp = clock_.now();
+    // NITROS statistics checks message intervals both using the node clock
+    // and the message timestamp.
+    // All variables name _node refers to the node timestamp checks.
+    // All variables name _msg refers to the message timestamp checks.
+    std::chrono::time_point<std::chrono::steady_clock> current_timestamp_node = clock_.now();
+    // Convert nanoseconds to microseconds
+    uint64_t current_timestamp_msg_us = msg_timestamp_ns / kMicrosecondsToNanoseconds;
 
     // we can only calculate frame rate after 2 messages have been received
-    if (prev_msg_timestamp_ != std::chrono::steady_clock::time_point::min()) {
-      int microseconds = std::chrono::duration_cast<std::chrono::microseconds>(
-        current_timestamp - prev_msg_timestamp_).count();
-      // calculate difference between time between msgs(using system clock)
+    if (prev_timestamp_node_ != std::chrono::steady_clock::time_point::min() &&
+      statistics_config_.enable_node_time_statistics)
+    {
+      int microseconds_node = std::chrono::duration_cast<std::chrono::microseconds>(
+        current_timestamp_node - prev_timestamp_node_).count();
+      // calculate difference between time between msgs(using node clock)
       // and expected time between msgs
-      int abs_jitter = std::abs(
-        microseconds -
+      int abs_jitter_node = std::abs(
+        microseconds_node -
         statistics_config_.topic_name_expected_dt_map[statistics_msg_.topic_name]);
-      if (abs_jitter > statistics_config_.jitter_tolerance_us) {
+      if (abs_jitter_node > statistics_config_.jitter_tolerance_us) {
+        // Increment jitter outlier count
+        num_jitter_outliers_node_++;
         RCLCPP_WARN(
           node_.get_logger(),
-          "[NitrosStatistics] Difference of time between messages(%i) and expected time between"
+          "[NitrosStatistics Node Time]"
+          " Difference of time between messages(%i) and expected time between"
           " messages(%i) is out of tolerance(%i) by %i for topic %s. Units are microseconds.",
-          microseconds, statistics_config_.topic_name_expected_dt_map[statistics_msg_.topic_name],
-          statistics_config_.jitter_tolerance_us, abs_jitter, statistics_msg_.topic_name.c_str());
+          microseconds_node,
+          statistics_config_.topic_name_expected_dt_map[statistics_msg_.topic_name],
+          statistics_config_.jitter_tolerance_us,
+          abs_jitter_node, statistics_msg_.topic_name.c_str());
       }
       // Update max abs jitter
-      max_abs_jitter_ = std::max(max_abs_jitter_, abs_jitter);
-      msg_jitter_queue_.push(abs_jitter);
-      msg_interarrival_time_queue_.push(microseconds);
+      max_abs_jitter_node_ = std::max(max_abs_jitter_node_, abs_jitter_node);
+      jitter_queue_node_.push(abs_jitter_node);
+      interarrival_time_queue_node_.push(microseconds_node);
 
       // add and subtract weighted datapoints to prevent summation of entire queue at
       // each run of this function. Also, support mean filter when the filter size
       // has not reached the maximum limit of config_.filter_window_size
-      sum_msg_jitter_ += abs_jitter;
-      sum_msg_interarrival_time_ += microseconds;
-      if (static_cast<int>(msg_interarrival_time_queue_.size()) >
+      sum_jitter_node_ += abs_jitter_node;
+      sum_interarrival_time_node_ += microseconds_node;
+      if (static_cast<int>(interarrival_time_queue_node_.size()) >
         statistics_config_.filter_window_size)
       {
-        sum_msg_jitter_ -= msg_jitter_queue_.front();
-        sum_msg_interarrival_time_ -= msg_interarrival_time_queue_.front();
-        msg_jitter_queue_.pop();
-        msg_interarrival_time_queue_.pop();
+        sum_jitter_node_ -= jitter_queue_node_.front();
+        sum_interarrival_time_node_ -= interarrival_time_queue_node_.front();
+        jitter_queue_node_.pop();
+        interarrival_time_queue_node_.pop();
       }
     }
-    prev_msg_timestamp_ = current_timestamp;
+
+    // Do the same checks as above, but for message timestamp
+    if (prev_timestamp_msg_ != std::numeric_limits<uint64_t>::min() &&
+      statistics_config_.enable_msg_time_statistics)
+    {
+      uint64_t microseconds_msg = current_timestamp_msg_us - prev_timestamp_msg_;
+      // calculate difference between time between msgs(using msgtem clock)
+      // and expected time between msgs
+      int abs_jitter_msg = std::abs(
+        static_cast<int>(microseconds_msg) -
+        statistics_config_.topic_name_expected_dt_map[statistics_msg_.topic_name]);
+      if (abs_jitter_msg > statistics_config_.jitter_tolerance_us) {
+        // Increment jitter outlier count
+        num_jitter_outliers_msg_++;
+        RCLCPP_WARN(
+          node_.get_logger(),
+          "[NitrosStatistics Message Timestamp]"
+          " Difference of time between messages(%lu) and expected time between"
+          " messages(%i) is out of tolerance(%i) by %i for topic %s. Units are microseconds.",
+          microseconds_msg,
+          statistics_config_.topic_name_expected_dt_map[statistics_msg_.topic_name],
+          statistics_config_.jitter_tolerance_us,
+          abs_jitter_msg, statistics_msg_.topic_name.c_str());
+      }
+      // Update max abs jitter
+      max_abs_jitter_msg_ = std::max(max_abs_jitter_msg_, abs_jitter_msg);
+      jitter_queue_msg_.push(abs_jitter_msg);
+      interarrival_time_queue_msg_.push(microseconds_msg);
+
+      // add and subtract weighted datapoints to prevent summation of entire queue at
+      // each run of this function. Also, support mean filter when the filter size
+      // has not reached the maximum limit of config_.filter_window_size
+      sum_jitter_msg_ += abs_jitter_msg;
+      sum_interarrival_time_msg_ += microseconds_msg;
+      if (static_cast<int>(interarrival_time_queue_msg_.size()) >
+        statistics_config_.filter_window_size)
+      {
+        sum_jitter_msg_ -= jitter_queue_msg_.front();
+        sum_interarrival_time_msg_ -= interarrival_time_queue_msg_.front();
+        jitter_queue_msg_.pop();
+        interarrival_time_queue_msg_.pop();
+      }
+    }
+
+    if (prev_timestamp_msg_ != std::numeric_limits<uint64_t>::min() &&
+      statistics_config_.enable_increasing_msg_time_statistics)
+    {
+      // Check if message timestamp is increasing
+      if (current_timestamp_msg_us < prev_timestamp_msg_) {
+        // Increment non increasing message count
+        num_non_increasing_msg_++;
+        RCLCPP_WARN(
+          node_.get_logger(),
+          "[NitrosStatistics Message Timestamp Non Increasing]"
+          " Message timestamp is not increasing. Current timestamp: %lu, Previous timestamp: %lu"
+          " for topic %s. Units are microseconds.",
+          current_timestamp_msg_us, prev_timestamp_msg_, statistics_msg_.topic_name.c_str());
+      }
+    }
+
+    prev_timestamp_node_ = current_timestamp_node;
+    prev_timestamp_msg_ = current_timestamp_msg_us;
   }
 
   // Function to publish statistics to a ROS topic
@@ -301,15 +380,29 @@ public:
     // used by updateStatistics() and publishNitrosStatistics()
     const std::lock_guard<std::mutex> lock(nitros_statistics_mutex_);
     // publish zero until atleast one message has been received
-    if (sum_msg_interarrival_time_ != 0) {
-      statistics_msg_.frame_rate = kMicrosecondsInSeconds /
-        (static_cast<float>(sum_msg_interarrival_time_) / msg_interarrival_time_queue_.size());
-      statistics_msg_.mean_abs_jitter = sum_msg_jitter_ / msg_jitter_queue_.size();
+    if (sum_interarrival_time_node_ != 0) {
+      statistics_msg_.frame_rate_node = kSecondsToMicroseconds /
+        (static_cast<float>(sum_interarrival_time_node_) / interarrival_time_queue_node_.size());
+      statistics_msg_.mean_abs_jitter_node = sum_jitter_node_ / jitter_queue_node_.size();
+      statistics_msg_.num_jitter_outliers_node = num_jitter_outliers_node_;
     } else {
-      statistics_msg_.frame_rate = 0.0;
-      statistics_msg_.mean_abs_jitter = 0;
+      statistics_msg_.frame_rate_node = 0.0;
+      statistics_msg_.mean_abs_jitter_node = 0;
+      statistics_msg_.num_jitter_outliers_node = 0;
     }
-    statistics_msg_.max_abs_jitter = max_abs_jitter_;
+    if (sum_interarrival_time_msg_ != 0) {
+      statistics_msg_.frame_rate_msg = kSecondsToMicroseconds /
+        (static_cast<float>(sum_interarrival_time_msg_) / interarrival_time_queue_msg_.size());
+      statistics_msg_.mean_abs_jitter_msg = sum_jitter_msg_ / jitter_queue_msg_.size();
+      statistics_msg_.num_jitter_outliers_msg = num_jitter_outliers_msg_;
+    } else {
+      statistics_msg_.frame_rate_msg = 0.0;
+      statistics_msg_.mean_abs_jitter_msg = 0;
+      statistics_msg_.num_jitter_outliers_msg = 0;
+    }
+    statistics_msg_.max_abs_jitter_node = max_abs_jitter_node_;
+    statistics_msg_.max_abs_jitter_msg = max_abs_jitter_msg_;
+    statistics_msg_.num_non_increasing_msg = num_non_increasing_msg_;
     statistics_publisher_->publish(statistics_msg_);
   }
 
@@ -330,10 +423,17 @@ public:
     }
 
     // Initialize varibles to min and zero as a flag to detect no messages have been received
-    prev_msg_timestamp_ = std::chrono::steady_clock::time_point::min();
-    sum_msg_interarrival_time_ = 0;
-    sum_msg_jitter_ = 0;
-    max_abs_jitter_ = 0;
+    prev_timestamp_node_ = std::chrono::steady_clock::time_point::min();
+    prev_timestamp_msg_ = std::numeric_limits<uint64_t>::min();
+    sum_interarrival_time_node_ = 0;
+    sum_interarrival_time_msg_ = 0;
+    sum_jitter_node_ = 0;
+    sum_jitter_msg_ = 0;
+    max_abs_jitter_node_ = 0;
+    max_abs_jitter_msg_ = 0;
+    num_jitter_outliers_node_ = 0;
+    num_jitter_outliers_msg_ = 0;
+    num_non_increasing_msg_ = 0;
 
     // Initialize statistics publisher and start a timer callback to publish at a fixed rate
     statistics_publisher_ =
@@ -391,25 +491,40 @@ protected:
   std::chrono::steady_clock clock_;
 
   // Queue to store time between messages to implement windowed mean filter
-  std::queue<int> msg_interarrival_time_queue_;
+  std::queue<int> interarrival_time_queue_node_;
+  std::queue<uint64_t> interarrival_time_queue_msg_;
 
   // Queue to store message jitter to implement windowed mean filter
   // Jitter is the difference between the time between msgs(dt)
   // calculated from fps specified in NITROS statistics ROS param
-  // and measured using system clock
-  std::queue<int> msg_jitter_queue_;
+  // and measured using node clock
+  std::queue<int> jitter_queue_node_;
+  std::queue<int> jitter_queue_msg_;
 
   // Sum of the message interarrival times received on this topic within the configured window
-  int64_t sum_msg_interarrival_time_;
+  int64_t sum_interarrival_time_node_;
+  uint64_t sum_interarrival_time_msg_;
 
   // Sum of the message jitter on this topic within the configured window
-  int64_t sum_msg_jitter_;
+  int64_t sum_jitter_node_;
+  int sum_jitter_msg_;
 
   // Max absolute jitter
-  int max_abs_jitter_;
+  int max_abs_jitter_node_;
+  int max_abs_jitter_msg_;
+
+  // Number of messages outside the jitter tolerance
+  uint64_t num_jitter_outliers_node_;
+  uint64_t num_jitter_outliers_msg_;
+
+  // Number of non-increasing messages
+  uint64_t num_non_increasing_msg_;
 
   // Prev timestamp stored for calculating frame rate
-  std::chrono::time_point<std::chrono::steady_clock> prev_msg_timestamp_;
+  // Prev node timstamp
+  std::chrono::time_point<std::chrono::steady_clock> prev_timestamp_node_;
+  // Prev message timestamp in microseconds
+  uint64_t prev_timestamp_msg_;
 
   // NITROS statistics publisher timer
   rclcpp::TimerBase::SharedPtr statistics_publisher_timer_;

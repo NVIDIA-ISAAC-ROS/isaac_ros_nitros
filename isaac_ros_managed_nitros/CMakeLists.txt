@@ -1,5 +1,5 @@
 # SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
-# Copyright (c) 2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# Copyright (c) 2023-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -26,11 +26,31 @@ find_package(ament_cmake_auto REQUIRED)
 ament_auto_find_build_dependencies()
 
 # Isaac ROS Managed Nitros
-include_directories( include )
+# include_directories( include )
 
-install(DIRECTORY include/${PROJECT_NAME}/ DESTINATION include/${PROJECT_NAME}/)
-ament_export_include_directories(include)
+# install(DIRECTORY include/${PROJECT_NAME}/ DESTINATION include/${PROJECT_NAME}/)
+# ament_export_include_directories(include)
 
+
+# Add an interface target to export dependencies
+add_library(${PROJECT_NAME} INTERFACE)
+
+# Install headers
+install(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/include/"
+        DESTINATION "${CMAKE_INSTALL_PREFIX}/share/${PROJECT_NAME}/gxf/include")
+set_target_properties(${PROJECT_NAME} PROPERTIES
+  INTERFACE_INCLUDE_DIRECTORIES "$<INSTALL_PREFIX>/share/${PROJECT_NAME}/gxf/include")
+# set_property(TARGET ${PROJECT_NAME} PROPERTY
+#   INTERFACE_LINK_LIBRARIES
+#     gxf_isaac_message_compositor::gxf_isaac_message_compositor
+# )
+
+install(TARGETS ${PROJECT_NAME}
+        EXPORT export_${PROJECT_NAME}
+        LIBRARY DESTINATION lib
+        ARCHIVE DESTINATION lib
+        RUNTIME DESTINATION bin)
+ament_export_targets(export_${PROJECT_NAME} HAS_LIBRARY_TARGET)
 
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)

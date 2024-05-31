@@ -1,5 +1,5 @@
 # SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
-# Copyright (c) 2021-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# Copyright (c) 2021-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -29,11 +29,19 @@ ament_auto_find_build_dependencies()
 ament_auto_add_library(string_encoder_node SHARED src/string_encoder_node.cpp)
 rclcpp_components_register_nodes(string_encoder_node "custom_nitros_string::StringEncoderNode")
 set(node_plugins "${node_plugins}custom_nitros_string::StringEncoderNode;$<TARGET_FILE:string_encoder_node>\n")
+set_target_properties(string_encoder_node PROPERTIES
+  BUILD_WITH_INSTALL_RPATH TRUE
+  BUILD_RPATH_USE_ORIGIN TRUE
+  INSTALL_RPATH_USE_LINK_PATH TRUE)
 
 # String Decoder node
 ament_auto_add_library(string_decoder_node SHARED src/string_decoder_node.cpp)
 rclcpp_components_register_nodes(string_decoder_node "custom_nitros_string::StringDecoderNode")
 set(node_plugins "${node_plugins}custom_nitros_string::StringDecoderNode;$<TARGET_FILE:string_decoder_node>\n")
+set_target_properties(string_decoder_node PROPERTIES
+  BUILD_WITH_INSTALL_RPATH TRUE
+  BUILD_RPATH_USE_ORIGIN TRUE
+  INSTALL_RPATH_USE_LINK_PATH TRUE)
 
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)

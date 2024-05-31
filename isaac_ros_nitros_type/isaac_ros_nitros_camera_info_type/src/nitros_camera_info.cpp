@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
-// Copyright (c) 2022-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+// Copyright (c) 2022-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -129,6 +129,15 @@ void rclcpp::TypeAdapter<
     destination.d[5] = raw_gxf_camera_model.value()->distortion_coefficients[3];
     destination.d[6] = raw_gxf_camera_model.value()->distortion_coefficients[4];
     destination.d[7] = raw_gxf_camera_model.value()->distortion_coefficients[5];
+  } else if (raw_gxf_camera_model.value()->distortion_type == DistortionType::Brown) {
+    destination.d[0] = raw_gxf_camera_model.value()->distortion_coefficients[0];
+    destination.d[1] = raw_gxf_camera_model.value()->distortion_coefficients[1];
+    destination.d[2] = raw_gxf_camera_model.value()->distortion_coefficients[6];
+    destination.d[3] = raw_gxf_camera_model.value()->distortion_coefficients[7];
+    destination.d[4] = raw_gxf_camera_model.value()->distortion_coefficients[2];
+    destination.d[5] = 0;
+    destination.d[6] = 0;
+    destination.d[7] = 0;
   } else {
     std::copy(
       std::begin(raw_gxf_camera_model.value()->distortion_coefficients),
@@ -288,6 +297,24 @@ void rclcpp::TypeAdapter<
 
       for (uint16_t index = 2; index < source.d.size() - 2; index++) {
         raw_gxf_camera_model.value()->distortion_coefficients[index] = source.d[index + 2];
+      }
+      raw_gxf_camera_model.value()->distortion_coefficients[6] = source.d[2];
+      raw_gxf_camera_model.value()->distortion_coefficients[7] = source.d[3];
+    }
+  } else if (raw_gxf_camera_model.value()->distortion_type == DistortionType::Brown) {
+    // prevents distortion parameters array access if its empty
+    // simulators may send empty distortion parameter array since images are already rectified
+    if (!source.d.empty()) {
+      // distortion parameters in GXF: k1, k2, k3, k4, k5, k6, p1, p2
+      // distortion parameters in ROS message: k1, k2, p1, p2, k3 ...
+      raw_gxf_camera_model.value()->distortion_coefficients[0] = source.d[0];
+      raw_gxf_camera_model.value()->distortion_coefficients[1] = source.d[1];
+      raw_gxf_camera_model.value()->distortion_coefficients[2] = source.d[4];
+      for (uint16_t index = 3;
+        index < nvidia::gxf::CameraModel::kMaxDistortionCoefficients - 2;
+        index++)
+      {
+        raw_gxf_camera_model.value()->distortion_coefficients[index] = 0;
       }
       raw_gxf_camera_model.value()->distortion_coefficients[6] = source.d[2];
       raw_gxf_camera_model.value()->distortion_coefficients[7] = source.d[3];

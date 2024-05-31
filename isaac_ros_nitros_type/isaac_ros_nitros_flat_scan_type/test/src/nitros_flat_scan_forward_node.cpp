@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
-// Copyright (c) 2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+// Copyright (c) 2023-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -67,10 +67,7 @@ public:
       {},
       // Extension so file list
         {
-          {"isaac_ros_gxf", "gxf/lib/std/libgxf_std.so"},
-          {"isaac_ros_gxf", "gxf/lib/cuda/libgxf_cuda.so"},
-          {"isaac_ros_gxf", "gxf/lib/serialization/libgxf_serialization.so"},
-          {"isaac_ros_gxf", "gxf/lib/libgxf_message_compositor.so"}
+          {"gxf_isaac_message_compositor", "gxf/lib/libgxf_isaac_message_compositor.so"}
         },
       // Test node package name
       PACKAGE_NAME)

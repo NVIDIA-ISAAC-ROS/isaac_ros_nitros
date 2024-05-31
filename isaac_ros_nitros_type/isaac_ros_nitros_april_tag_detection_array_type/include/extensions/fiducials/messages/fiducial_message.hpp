@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
-// Copyright (c) 2021-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+// Copyright (c) 2021-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -16,7 +16,7 @@
 // SPDX-License-Identifier: Apache-2.0
 #pragma once
 
-#include "engine/core/math/pose3.hpp"
+#include "gems/core/math/pose3.hpp"
 #include "extensions/fiducials/gems/fiducial_info.hpp"
 #include "gxf/core/entity.hpp"
 #include "gxf/core/expected.hpp"
