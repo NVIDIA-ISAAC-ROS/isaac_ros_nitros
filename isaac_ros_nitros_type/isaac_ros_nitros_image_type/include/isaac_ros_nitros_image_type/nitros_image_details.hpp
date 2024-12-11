@@ -154,7 +154,25 @@ struct NoPaddingColorPlanes<VideoFormat::GXF_VIDEO_FORMAT_NV12>
 };
 
 template<>
+struct NoPaddingColorPlanes<VideoFormat::GXF_VIDEO_FORMAT_NV12_ER>
+{
+  NoPaddingColorPlanes(size_t width)
+  : planes({nvidia::gxf::ColorPlane("Y", 1, width),
+        nvidia::gxf::ColorPlane("UV", 2, width * 2)}) {}
+  std::array<nvidia::gxf::ColorPlane, 2> planes;
+};
+
+template<>
 struct NoPaddingColorPlanes<VideoFormat::GXF_VIDEO_FORMAT_NV24>
+{
+  NoPaddingColorPlanes(size_t width)
+  : planes({nvidia::gxf::ColorPlane("Y", 1, width),
+        nvidia::gxf::ColorPlane("UV", 2, width * 2)}) {}
+  std::array<nvidia::gxf::ColorPlane, 2> planes;
+};
+
+template<>
+struct NoPaddingColorPlanes<VideoFormat::GXF_VIDEO_FORMAT_NV24_ER>
 {
   NoPaddingColorPlanes(size_t width)
   : planes({nvidia::gxf::ColorPlane("Y", 1, width),

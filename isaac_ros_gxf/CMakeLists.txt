@@ -34,17 +34,17 @@ install(
 
 # Install extensions directory
 if( ${ARCHITECTURE} STREQUAL "x86_64" )
-  install(DIRECTORY gxf/core/lib/gxf_x86_64_cuda_12_2/ DESTINATION share/${PROJECT_NAME}/gxf/lib)
-  install(FILES gxf/core/lib/gxf_x86_64_cuda_12_2/core/libgxf_core.so DESTINATION lib)
-  install(FILES gxf/core/lib/gxf_x86_64_cuda_12_2/logger/libgxf_logger.so DESTINATION lib)
-  install(FILES gxf/core/lib/gxf_x86_64_cuda_12_2/multimedia/libgxf_multimedia.so DESTINATION lib)
-  install(FILES gxf/core/lib/gxf_x86_64_cuda_12_2/cuda/libgxf_cuda.so DESTINATION lib)
+  install(DIRECTORY gxf/core/lib/gxf_x86_64_cuda_12_6/ DESTINATION share/${PROJECT_NAME}/gxf/lib)
+  install(FILES gxf/core/lib/gxf_x86_64_cuda_12_6/core/libgxf_core.so DESTINATION lib)
+  install(FILES gxf/core/lib/gxf_x86_64_cuda_12_6/logger/libgxf_logger.so DESTINATION lib)
+  install(FILES gxf/core/lib/gxf_x86_64_cuda_12_6/multimedia/libgxf_multimedia.so DESTINATION lib)
+  install(FILES gxf/core/lib/gxf_x86_64_cuda_12_6/cuda/libgxf_cuda.so DESTINATION lib)
 elseif( ${ARCHITECTURE} STREQUAL "aarch64" )
-  install(DIRECTORY gxf/core/lib/gxf_jetpack60/ DESTINATION share/${PROJECT_NAME}/gxf/lib)
-  install(FILES gxf/core/lib/gxf_jetpack60/core/libgxf_core.so DESTINATION lib)
-  install(FILES gxf/core/lib/gxf_jetpack60/logger/libgxf_logger.so DESTINATION lib)
-  install(FILES gxf/core/lib/gxf_jetpack60/multimedia/libgxf_multimedia.so DESTINATION lib)
-  install(FILES gxf/core/lib/gxf_jetpack60/cuda/libgxf_cuda.so DESTINATION lib)
+  install(DIRECTORY gxf/core/lib/gxf_jetpack61/ DESTINATION share/${PROJECT_NAME}/gxf/lib)
+  install(FILES gxf/core/lib/gxf_jetpack61/core/libgxf_core.so DESTINATION lib)
+  install(FILES gxf/core/lib/gxf_jetpack61/logger/libgxf_logger.so DESTINATION lib)
+  install(FILES gxf/core/lib/gxf_jetpack61/multimedia/libgxf_multimedia.so DESTINATION lib)
+  install(FILES gxf/core/lib/gxf_jetpack61/cuda/libgxf_cuda.so DESTINATION lib)
 endif()
 
 # Register cmake in install.
@@ -123,5 +123,11 @@ if(BUILD_TESTING)
   set(ament_cmake_copyright_FOUND TRUE)
   ament_lint_auto_find_test_dependencies()
 endif()
+
+
+# Embed versioning information into installed files
+ament_index_get_resource(ISAAC_ROS_COMMON_CMAKE_PATH isaac_ros_common_cmake_path isaac_ros_common)
+include("${ISAAC_ROS_COMMON_CMAKE_PATH}/isaac_ros_common-version-info.cmake")
+generate_version_info(${PROJECT_NAME})
 
 ament_auto_package(INSTALL_TO_SHARE cmake)

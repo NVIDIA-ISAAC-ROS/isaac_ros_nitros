@@ -25,6 +25,7 @@
 
 #include "common/assert.hpp"
 #include "gxf/cuda/cuda_common.hpp"
+#include "gxf/cuda/cuda_stream.hpp"
 #include "gxf/cuda/cuda_stream_id.hpp"
 #include "gxf/cuda/cuda_stream_pool.hpp"
 #include "gxf/std/allocator.hpp"
@@ -124,8 +125,6 @@ class StreamTensorGeneratorNew : public StreamBasedOpsNew {
     GXF_ASSERT(stream_->stream(), "allocated stream is not initialized.");
 
     stream_sync = stream_sync_.get();
-
-    GXF_ASSERT_SUCCESS(stream_sync->initialize());
 
     void *syncObj{nullptr};
     GXF_ASSERT_SUCCESS(stream_sync->allocate_sync_object(static_cast<SyncType>(signaler_.get()),
@@ -270,7 +269,7 @@ class DotProductExeNew {
     GXF_ASSERT(rx_ && tx_ && tensor_pool_, "dotproduct received empty in_msg");
 
     // get tensors
-    auto in_tensors = in_msg.findAll<Tensor>();
+    auto in_tensors = in_msg.findAllHeap<Tensor>();
     GXF_ASSERT(in_tensors, "failed to find Tensors in in_msg");
     GXF_ASSERT(in_tensors->size() == 2, "doesn't find Tensors in in_msg");
     GXF_ASSERT(in_tensors->at(0).value()->rank() == 2, "Input tensor rank is not 2");

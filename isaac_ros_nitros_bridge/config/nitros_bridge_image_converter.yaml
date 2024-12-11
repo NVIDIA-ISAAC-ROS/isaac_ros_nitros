@@ -1,0 +1,13 @@
+topics:
+  -
+    topic: /ros1_input_bridge_image  # Topic name for ros1 bridge
+    type: isaac_ros_nitros_bridge_interfaces/msg/NitrosBridgeImage # Type type for ros1 bridge
+    queue_size: 10 
+  -
+    topic: /ros1_output_bridge_image # Topic name for ros1 bridge
+    type: isaac_ros_nitros_bridge_interfaces/msg/NitrosBridgeImage # Type type for ros1 bridge
+    queue_size: 10
+  - 
+    topic: /camera_info # Topic name for ros1 bridge
+    type: sensor_msgs/msg/CameraInfo # Type type for ros1 bridge
+    queue_size: 10  

@@ -18,12 +18,20 @@
 #define NVIDIA_GXF_CUDA_TESTS_TEST_CUDA_HELPER_HPP
 
 #include <cublas_v2.h>
+#include <algorithm>
 #include <limits>
 #include <numeric>
+#include <queue>
+#include <random>
 #include <string>
+#include <unordered_map>
 #include <utility>
+#include <vector>
+
+#include "convolution.h"
 
 #include "common/assert.hpp"
+#include "gxf/cuda/cuda_buffer.hpp"
 #include "gxf/cuda/cuda_common.hpp"
 #include "gxf/cuda/cuda_event.hpp"
 #include "gxf/cuda/cuda_stream.hpp"
@@ -137,6 +145,11 @@ class StreamTensorGenerator : public StreamBasedOps {
     stream_ = std::move(stream.value());
     GXF_ASSERT(stream_->stream(), "allocated stream is not initialized.");
     return GXF_SUCCESS;
+  }
+
+  gxf_result_t deinitialize() override {
+    auto result = stream_pool_->releaseStream(stream_);
+    return ToResultCode(result);
   }
 
   gxf_result_t tick() override {
@@ -329,9 +342,10 @@ class CublasDotProduct : public StreamBasedOps {
 
       auto maybe_event = codelet_->addNewEvent(out_msg, "cudotproduct_event");
       GXF_ASSERT(maybe_event, "failed to add cublas dot product event");
-      ret = stream->record(maybe_event.value(), in_msg,
-                           []() { GXF_LOG_DEBUG("cublas dotproduct event synced"); });
-      GXF_ASSERT(ret, "cublas dotproduct record event failed");
+      // Recording this event here causes a leak
+      // ret = stream->record(maybe_event.value(), in_msg,
+      //                      []() { GXF_LOG_ERROR("cublas dotproduct event synced"); });
+      // GXF_ASSERT(ret, "cublas dotproduct record event failed");
       return ret;
     }
   };
@@ -457,9 +471,10 @@ class MemCpy2Host : public StreamBasedOps {
 
     auto maybe_event = addNewEvent(out_msg.value(), "memcpy_event");
     GXF_ASSERT(maybe_event, "failed to add memcpy_event");
-    ret = stream->record(maybe_event.value(), in.value(),
-                         []() { GXF_LOG_DEBUG("memcpy_to_host event synced"); });
-    GXF_ASSERT(ret, "memcpy_to_host record event failed");
+    // Recording this event here causes a leak
+    // ret = stream->record(maybe_event.value(), in.value(),
+    //                      []() { GXF_LOG_ERROR("memcpy_to_host event synced"); });
+    // GXF_ASSERT(ret, "memcpy_to_host record event failed");
 
     ret = tx_->publish(out_msg.value());
     GXF_ASSERT(ret, "memcpy_to_host publishing tensors failed");
@@ -535,6 +550,264 @@ class VerifyEqual : public Codelet {
   Parameter<Handle<Receiver>> rx0_;
   Parameter<Handle<Receiver>> rx1_;
   int32_t count_ = 0;
+};
+
+// Creates a CudaBuffer object on each iteration with memory allocated in an
+// asynchronous manner. Downstream receivers can either enqueue more work on to
+// CudaStream associated with the CudaBuffer or sync on the stream before accessing the memory
+class CudaAsyncBufferGenerator : public Codelet {
+ public:
+  virtual ~CudaAsyncBufferGenerator() = default;
+
+  gxf_result_t registerInterface(Registrar* registrar) override {
+    Expected<void> result;
+    result &= registrar->parameter(signal_, "signal", "Signal",
+              "Transmitter channel publishing messages to other graph entities");
+    result &= registrar->parameter(allocator_, "allocator", "Allocator",
+              "A cuda allocator component that can serve device memory asynchronously");
+    result &= registrar->parameter(stream_pool_, "stream_pool", "StreamPool",
+              "A cuda stream pool component");
+    result &= registrar->parameter(size_, "size", "Size",
+              "Size of the CudaBuffer to be allocated", 1UL);
+    return ToResultCode(result);
+  }
+
+  gxf_result_t tick() override {
+    auto maybe_message = Entity::New(context());
+    if (!maybe_message) {
+      GXF_LOG_ERROR("Failure creating message entity.");
+      return maybe_message.error();
+    }
+
+    auto message = maybe_message.value();
+    auto maybe_buffer = message.add<CudaBuffer>(kDefaultCudaBufferName);
+    if (!maybe_buffer) {
+      GXF_LOG_ERROR("Failure creating cuda buffer");
+      return maybe_buffer.error();
+    }
+
+    auto buffer = maybe_buffer.value();
+    auto code = buffer->resizeAsync(allocator_, stream_pool_, size_);
+
+    auto min = std::numeric_limits<float>::min();
+    auto max = std::numeric_limits<float>::max();
+    std::uniform_real_distribution<float> distribution(min, max);
+    std::vector<float> elements;
+    auto element_count = size_ / sizeof(float);
+
+    for (size_t idx = 0; idx < element_count; idx++) {
+      elements.push_back(distribution(generator_));
+    }
+
+    auto stream_component = buffer->stream();
+    auto stream = stream_component->stream().value();
+
+    const cudaError_t error = cudaMemcpyAsync(buffer->pointer(), elements.data(),
+                                              size_, cudaMemcpyHostToDevice, stream);
+    CHECK_CUDA_ERROR_RESULT(error, "cudaMemcpyAsync failed");
+
+    auto result = signal_->publish(message);
+    GXF_LOG_INFO("Message Sent");
+    return GXF_SUCCESS;
+  }
+
+ private:
+  Parameter<Handle<Transmitter>> signal_;
+  Parameter<Handle<CudaAllocator>> allocator_;
+  Parameter<Handle<CudaStreamPool>> stream_pool_;
+  Parameter<size_t> size_;
+  std::default_random_engine generator_;
+};
+
+// Performs an async 2D convolution operation on
+// incoming CudaBuffer objects.
+class Convolve2D: public Codelet {
+ public:
+  virtual ~Convolve2D() = default;
+
+  gxf_result_t registerInterface(Registrar* registrar) override {
+    Expected<void> result;
+    result &= registrar->parameter(kernel_, "kernel", "Kernel",
+              "2d matrix of float values represented as a vector of vectors");
+    result &= registrar->parameter(output_, "output", "Output",
+              "Transmitter channel publishing messages to other graph entities");
+    result &= registrar->parameter(input_, "input", "Input",
+              "Receiver channel receiving messages from other graph entities");
+    result &= registrar->parameter(allocator_, "allocator", "Allocator",
+              "A cuda allocator component that can serve device memory asynchronously");
+    return ToResultCode(result);
+  }
+
+  gxf_result_t start() override {
+    auto& kernel = kernel_.get();
+    size_t kernel_size = kernel.size();
+
+    size_t index = 0;
+    float kernel_flat_host[kernel_size * kernel_size]; // NOLINT
+    for (const auto& k : kernel) {
+      GXF_ASSERT_EQ(k.size(), kernel_size);
+      for (const auto& value : k) {
+        kernel_flat_host[index] = value;
+        ++index;
+      }
+    }
+
+    auto maybe_kernel = allocator_->allocate(kernel_size * kernel_size * sizeof(float),
+                                             MemoryStorageType::kDevice);
+    if (!maybe_kernel) {
+      return maybe_kernel.error();
+    }
+
+    kernel_flat_ = maybe_kernel.value();
+    const cudaError_t error =
+        cudaMemcpy(kernel_flat_, kernel_flat_host, kernel_size * kernel_size * sizeof(float),
+                   cudaMemcpyHostToDevice);
+    if (error != cudaSuccess) {
+        GXF_LOG_ERROR("CUDA Mem copy Error: %s\n", cudaGetErrorString(error));
+        return GXF_FAILURE;
+    }
+    return GXF_SUCCESS;
+  }
+
+
+  gxf_result_t stop() override {
+    entity_queue_map_.clear();
+    return ToResultCode(allocator_->free(kernel_flat_));
+  }
+
+  gxf_result_t tick() override {
+    return ToResultCode(_tick());
+  }
+
+  // payload struct to access on the callback used to
+  // dereference the underlying message entity
+  typedef struct callBackData {
+    Entity data;
+    Convolve2D* ptr;
+  } callBackData;
+
+  static void CUDART_CB cudaEntityFreeCallback(void* data_ptr) {
+    auto data = reinterpret_cast<callBackData*>(data_ptr);
+    auto convolve = data->ptr;
+    GXF_LOG_VERBOSE("Received entity free callback from cuda stream for "
+    "cuda buffer in message entity E[%05ld]", data->data.eid());
+    // Entities consumed until now cannot be freed just yet in the host callback function.
+    // Host callback function gets executed from a cuda driver thread which cannot be used
+    // to call another cuda runtime api like cudaFreeAsync. Hence keep track of the
+    // entities to be freed the next time this codelet is executed.
+    std::unique_lock<std::shared_mutex> lock(convolve->mutex_);
+    convolve->entity_free_list_.push(data->data.eid());
+  }
+
+  Expected<void> _tick() {
+    // Dequeue any previously consumed message entities
+    {
+      std::unique_lock<std::shared_mutex> lock(mutex_);
+      while (!entity_free_list_.empty()) {
+        auto element = entity_free_list_.front();
+        entity_queue_map_.erase(element);
+        entity_free_list_.pop();
+      }
+    }
+
+    auto in_message = GXF_UNWRAP_OR_RETURN(input_->receive());
+    GXF_LOG_INFO("Message Received: %d", this->count_);
+    this->count_ = this->count_ + 1;
+    if (in_message.is_null()) {
+      return Unexpected{GXF_CONTRACT_MESSAGE_NOT_AVAILABLE};
+    }
+
+    auto in_buffer = GXF_UNWRAP_OR_RETURN(in_message.get<CudaBuffer>());
+    auto out_message = GXF_UNWRAP_OR_RETURN(Entity::New(context()));
+    auto out_buffer = GXF_UNWRAP_OR_RETURN(out_message.add<CudaBuffer>(kDefaultCudaBufferName));
+
+    auto stream_pool = in_buffer->streamPool();
+    auto stream_handle = in_buffer->transferStreamOwnership();
+    auto code = out_buffer->resizeAsync(allocator_, stream_pool, in_buffer->size(), stream_handle);
+
+    const int width = 32, height = 32;
+    auto cu_stream = GXF_UNWRAP_OR_RETURN(stream_handle->stream());
+
+    convolveKernel(reinterpret_cast<float*>(in_buffer->pointer()),
+                   reinterpret_cast<float*>(kernel_flat_),
+                   reinterpret_cast<float*>(out_buffer->pointer()),
+                   width, height, kernel_.get().size(), cu_stream);
+
+    cudaError_t err = cudaGetLastError();
+    if (err != cudaSuccess) {
+        GXF_LOG_ERROR("CUDA convolveKernel Error: %s\n", cudaGetErrorString(err));
+        return Unexpected{GXF_FAILURE};
+    }
+
+    // store the incoming message entity to prevent the cuda buffer getting released
+    // before it is consumed. The in_message entity is only released once the kernel
+    // has finished its execution
+    auto eid = in_message.eid();
+    {
+      std::unique_lock<std::shared_mutex> lock(mutex_);
+      entity_queue_map_.insert({eid, callBackData{std::move(in_message), this}});
+    }
+    auto it = entity_queue_map_.find(eid);
+
+
+    GXF_RETURN_IF_ERROR(in_buffer->registerCallbackOnStream(cudaEntityFreeCallback,
+                                                    reinterpret_cast<void*>(&it->second)));
+
+    auto stream_id = GXF_UNWRAP_OR_RETURN(out_message.add<CudaStreamId>());
+    stream_id->stream_cid = stream_handle.cid();
+    return output_->publish(out_message);
+  }
+
+ private:
+  Parameter<Handle<CudaAllocator>> allocator_;
+  Parameter<std::vector<std::vector<float>>> kernel_;
+  Parameter<Handle<Transmitter>> output_;
+  Parameter<Handle<Receiver>> input_;
+  byte* kernel_flat_;
+  std::unordered_map<gxf_uid_t, callBackData> entity_queue_map_;
+  std::queue<gxf_uid_t> entity_free_list_;
+  std::shared_mutex mutex_;
+  int count_ = 1;
+};
+
+// Dequeue a message entity with a cuda buffer and ensures
+// the data is available
+class CudaBufferRx: public Codelet {
+ public:
+  virtual ~CudaBufferRx() = default;
+
+  gxf_result_t registerInterface(Registrar* registrar) override {
+    Expected<void> result;
+    result &= registrar->parameter(signal_, "signal", "Signal",
+                        "Channel to receive messages from another graph entity");
+    return ToResultCode(result);
+  }
+
+  gxf_result_t tick() override {
+    auto maybe_message = signal_->receive();
+    GXF_LOG_INFO("Message Received: %d", this->count);
+    this->count = this->count + 1;
+    if (!maybe_message || maybe_message.value().is_null()) {
+      return GXF_CONTRACT_MESSAGE_NOT_AVAILABLE;
+    }
+
+    auto message = maybe_message.value();
+    auto maybe_cuda_buffer = message.get<CudaBuffer>();
+    if (!maybe_cuda_buffer) { return ToResultCode(maybe_cuda_buffer); }
+
+    auto cuda_buffer = maybe_cuda_buffer.value();
+    auto state = cuda_buffer->state();
+    if (state != CudaBuffer::State::DATA_AVAILABLE) {
+      GXF_LOG_ERROR("CudaBuffer found in an invalid state %d", static_cast<int>(state));
+      return GXF_FAILURE;
+    }
+
+    return GXF_SUCCESS;
+  }
+
+ private:
+  Parameter<Handle<Receiver>> signal_;
+  int count = 1;
 };
 
 }  // namespace cuda

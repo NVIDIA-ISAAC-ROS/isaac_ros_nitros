@@ -23,10 +23,6 @@
 #pragma GCC diagnostic ignored "-Wunused-parameter"
 #pragma GCC diagnostic ignored "-Wmissing-field-initializers"
 #pragma GCC diagnostic ignored "-Wpedantic"
-#include "gxf/core/entity.hpp"
-#include "gxf/core/gxf.h"
-#include "gxf/multimedia/camera.hpp"
-#include "gxf/std/timestamp.hpp"
 #pragma GCC diagnostic pop
 
 #include "isaac_ros_nitros_camera_info_type/nitros_camera_info.hpp"
@@ -39,12 +35,12 @@ constexpr char RAW_CAMERA_MODEL_GXF_NAME[] = "intrinsics";
 constexpr char RECT_CAMERA_MODEL_GXF_NAME[] = "target_camera";
 constexpr char EXTRINSICS_GXF_NAME[] = "extrinsics";
 constexpr char TARGET_EXTRINSICS_DELTA_GXF_NAME[] = "target_extrinsics_delta";
+constexpr int NUM_COFF_PLUMB_BOB = 5;
 
 namespace
 {
 using DistortionType = nvidia::gxf::DistortionType;
 const std::unordered_map<std::string, DistortionType> g_ros_to_gxf_distortion_model({
-    {"pinhole", DistortionType::Perspective},
     {"plumb_bob", DistortionType::Brown},
     {"rational_polynomial", DistortionType::Polynomial},
     {"equidistant", DistortionType::FisheyeEquidistant}
@@ -53,11 +49,206 @@ const std::unordered_map<std::string, DistortionType> g_ros_to_gxf_distortion_mo
 const std::unordered_map<DistortionType, std::string> g_gxf_to_ros_distortion_model({
     {DistortionType::Polynomial, "rational_polynomial"},
     {DistortionType::FisheyeEquidistant, "equidistant"},
-    {DistortionType::Perspective, "pinhole"},
+    {DistortionType::Perspective, "plumb_bob"},
     {DistortionType::Brown, "plumb_bob"}
   });
 }  // namespace
 
+
+namespace nvidia
+{
+namespace isaac_ros
+{
+namespace nitros
+{
+
+// Convert between an existing ROS CameraInfo message and an existing GXF CameraModel object
+// Also used in argus_camera_node.cpp
+void copy_ros_to_gxf_camera_info(
+  sensor_msgs::msg::CameraInfo source,
+  nvidia::gxf::Expected<nvidia::gxf::Entity> & destination)
+{
+  RCLCPP_DEBUG(
+    rclcpp::get_logger(
+      "NitrosCameraInfo"),
+    "[convert_to_custom] Overriding CameraModel with values loaded from URL");
+
+  auto raw_gxf_camera_model = destination->get<nvidia::gxf::CameraModel>(RAW_CAMERA_MODEL_GXF_NAME);
+  auto rect_gxf_camera_model =
+    destination->get<nvidia::gxf::CameraModel>(RECT_CAMERA_MODEL_GXF_NAME);
+  auto extrinsics_gxf_pose_3d = destination->get<nvidia::gxf::Pose3D>(EXTRINSICS_GXF_NAME);
+  auto target_extrinsics_delta_gxf_pose_3d = destination->get<nvidia::gxf::Pose3D>(
+    TARGET_EXTRINSICS_DELTA_GXF_NAME);
+
+  if (!raw_gxf_camera_model) {
+    std::stringstream error_msg;
+    error_msg <<
+      "[convert_to_custom] Failed to get the existing CameraModel object: " <<
+      GxfResultStr(raw_gxf_camera_model.error());
+    RCLCPP_ERROR(
+      rclcpp::get_logger("NitrosCameraInfo"), error_msg.str().c_str());
+    throw std::runtime_error(error_msg.str().c_str());
+  }
+
+  if (!extrinsics_gxf_pose_3d) {
+    std::stringstream error_msg;
+    error_msg << "[convert_to_custom] Failed to get Pose3D object from message entity: " <<
+      GxfResultStr(extrinsics_gxf_pose_3d.error());
+    RCLCPP_ERROR(
+      rclcpp::get_logger("NitrosCameraInfo"), error_msg.str().c_str());
+    throw std::runtime_error(error_msg.str().c_str());
+  }
+
+  if (!rect_gxf_camera_model) {
+    std::stringstream warn_msg;
+    warn_msg << "[convert_to_custom] Rectified camera model  from message entity: " <<
+      GxfResultStr(rect_gxf_camera_model.error()) << " this is expected for monocular cameras";
+    RCLCPP_WARN_ONCE(
+      rclcpp::get_logger("NitrosCameraInfo"), warn_msg.str().c_str());
+    rect_gxf_camera_model = raw_gxf_camera_model;
+  } else {
+    // Only set this to perspective/0 if we did not fall back to the raw camera model
+    // otherwise we will overwrite the distortion model
+    rect_gxf_camera_model.value()->distortion_type = DistortionType::Perspective;
+    memset(
+      rect_gxf_camera_model.value()->distortion_coefficients.data(), 0,
+      rect_gxf_camera_model.value()->kMaxDistortionCoefficients * sizeof(float));
+  }
+
+  if (!target_extrinsics_delta_gxf_pose_3d) {
+    std::stringstream warn_msg;
+    warn_msg <<
+      "[convert_to_custom] Failed to get the target extrinsics delta Pose3D object: " <<
+      GxfResultStr(target_extrinsics_delta_gxf_pose_3d.error()) <<
+      " this is expected for monocular cameras";
+    RCLCPP_WARN_ONCE(
+      rclcpp::get_logger("NitrosCameraInfo"), warn_msg.str().c_str());
+    // Add a target extrinsics delta, we should only be taking this path
+    // in the case where we override camera info for a monocular camera.
+    // So this delta should be identity rotation and 0 translation, but
+    // we will set it to whatever the rectification matrix passed in is.
+    // This way overridden camera info messages behave exactly like the
+    // original eeprom case.
+    target_extrinsics_delta_gxf_pose_3d = destination->add<nvidia::gxf::Pose3D>(
+      TARGET_EXTRINSICS_DELTA_GXF_NAME);
+  }
+
+  raw_gxf_camera_model.value()->dimensions = {source.width, source.height};
+  raw_gxf_camera_model.value()->focal_length = {
+    static_cast<float>(source.k[0]), static_cast<float>(source.k[4])};
+  raw_gxf_camera_model.value()->principal_point = {
+    static_cast<float>(source.k[2]), static_cast<float>(source.k[5])};
+
+  const auto distortion = g_ros_to_gxf_distortion_model.find(source.distortion_model);
+  if (distortion == std::end(g_ros_to_gxf_distortion_model)) {
+    std::stringstream error_msg;
+    error_msg <<
+      "[convert_to_custom] Unsupported distortion model from ROS [" <<
+      source.distortion_model.c_str() << "].";
+    RCLCPP_ERROR(
+      rclcpp::get_logger("NitrosCameraInfo"), error_msg.str().c_str());
+    throw std::runtime_error(error_msg.str().c_str());
+  } else {
+    raw_gxf_camera_model.value()->distortion_type = distortion->second;
+  }
+
+  memset(
+    raw_gxf_camera_model.value()->distortion_coefficients.data(), 0,
+    sizeof(raw_gxf_camera_model.value()->distortion_coefficients));
+
+  // If the distortion model is "Brown", check if all the distortion parameters are zero
+  // If yes, then set the distortion type to "Perspective"
+  if (distortion->second == DistortionType::Brown && source.d.size() == NUM_COFF_PLUMB_BOB) {
+    if (std::all_of(
+        source.d.begin(), source.d.end(),
+        [](const auto & value) {return value == 0;}))
+    {
+      raw_gxf_camera_model.value()->distortion_type = DistortionType::Perspective;
+    }
+  }
+
+  if (source.d.size() > nvidia::gxf::CameraModel::kMaxDistortionCoefficients) {
+    std::stringstream error_msg;
+    error_msg <<
+      "[convert_to_custom] More number of coefficients for distortion model found [ # of coeff: " <<
+      source.d.size() << " > " << nvidia::gxf::CameraModel::kMaxDistortionCoefficients << "].";
+    RCLCPP_ERROR(
+      rclcpp::get_logger("NitrosCameraInfo"), error_msg.str().c_str());
+    throw std::runtime_error(error_msg.str().c_str());
+  }
+
+  if (raw_gxf_camera_model.value()->distortion_type == DistortionType::Polynomial) {
+    // prevents distortion parameters array access if its empty
+    // simulators may send empty distortion parameter array since images are already rectified
+    if (!source.d.empty()) {
+      // distortion parameters in GXF: k1, k2, k3, k4, k5, k6, p1, p2
+      // distortion parameters in ROS message: k1, k2, p1, p2, k3 ...
+      raw_gxf_camera_model.value()->distortion_coefficients[0] = source.d[0];
+      raw_gxf_camera_model.value()->distortion_coefficients[1] = source.d[1];
+
+      for (uint16_t index = 2; index < source.d.size() - 2; index++) {
+        raw_gxf_camera_model.value()->distortion_coefficients[index] = source.d[index + 2];
+      }
+      raw_gxf_camera_model.value()->distortion_coefficients[6] = source.d[2];
+      raw_gxf_camera_model.value()->distortion_coefficients[7] = source.d[3];
+    }
+  } else if (raw_gxf_camera_model.value()->distortion_type == DistortionType::Brown) {
+    // prevents distortion parameters array access if its empty
+    // simulators may send empty distortion parameter array since images are already rectified
+    if (!source.d.empty()) {
+      // distortion parameters in GXF: k1, k2, k3, k4, k5, k6, p1, p2
+      // distortion parameters in ROS message: k1, k2, p1, p2, k3 ...
+      raw_gxf_camera_model.value()->distortion_coefficients[0] = source.d[0];
+      raw_gxf_camera_model.value()->distortion_coefficients[1] = source.d[1];
+      raw_gxf_camera_model.value()->distortion_coefficients[2] = source.d[4];
+      for (uint16_t index = 3;
+        index < nvidia::gxf::CameraModel::kMaxDistortionCoefficients - 2;
+        index++)
+      {
+        raw_gxf_camera_model.value()->distortion_coefficients[index] = 0;
+      }
+      raw_gxf_camera_model.value()->distortion_coefficients[6] = source.d[2];
+      raw_gxf_camera_model.value()->distortion_coefficients[7] = source.d[3];
+    }
+  } else {
+    std::copy(
+      std::begin(source.d), std::end(source.d),
+      std::begin(raw_gxf_camera_model.value()->distortion_coefficients));
+  }
+
+  rect_gxf_camera_model.value()->dimensions = {source.width, source.height};
+  rect_gxf_camera_model.value()->focal_length = {
+    static_cast<float>(source.p[0]), static_cast<float>(source.p[5])};
+  rect_gxf_camera_model.value()->principal_point = {
+    static_cast<float>(source.p[2]), static_cast<float>(source.p[6])};
+
+  // populate rectification rotation matrix into the TARGET_EXTRINSICS_DELTA_GXF_NAME
+  std::copy(
+    std::begin(source.r), std::end(source.r),
+    std::begin(target_extrinsics_delta_gxf_pose_3d.value()->rotation));
+
+  // Based on the comments for the camera info msg type, p[0] == 0 means the topic
+  // contains no calibration data, ie, its an uncalibrated camera
+  if (source.p[0] == 0.0f) {
+    RCLCPP_WARN(
+      rclcpp::get_logger("NitrosCameraInfo"),
+      "[convert_to_custom] Received an uncalibrated camera info msg.");
+    extrinsics_gxf_pose_3d.value()->translation = {
+      0,
+      0,
+      0};
+  } else {
+    // populate extrinsics translation the EXTRINSICS_GXF_NAME
+    extrinsics_gxf_pose_3d.value()->translation = {
+      static_cast<float>(source.p[3]) / static_cast<float>(source.p[0]),
+      static_cast<float>(source.p[7]),
+      static_cast<float>(source.p[11])};
+  }
+}
+
+}  // namespace nitros
+}  // namespace isaac_ros
+}  // namespace nvidia
 
 void rclcpp::TypeAdapter<
   nvidia::isaac_ros::nitros::NitrosCameraInfo,
@@ -115,12 +306,11 @@ void rclcpp::TypeAdapter<
     destination.distortion_model = distortion->second;
   }
 
-  // Resize d buffer to the right size
-  destination.d.resize(
-    sizeof(raw_gxf_camera_model.value()->distortion_coefficients) /
-    sizeof(float));
-
   if (raw_gxf_camera_model.value()->distortion_type == DistortionType::Polynomial) {
+    // Resize d buffer to the right size
+    destination.d.resize(
+      sizeof(raw_gxf_camera_model.value()->distortion_coefficients) /
+      sizeof(float));
     destination.d[0] = raw_gxf_camera_model.value()->distortion_coefficients[0];
     destination.d[1] = raw_gxf_camera_model.value()->distortion_coefficients[1];
     destination.d[2] = raw_gxf_camera_model.value()->distortion_coefficients[6];
@@ -130,15 +320,26 @@ void rclcpp::TypeAdapter<
     destination.d[6] = raw_gxf_camera_model.value()->distortion_coefficients[4];
     destination.d[7] = raw_gxf_camera_model.value()->distortion_coefficients[5];
   } else if (raw_gxf_camera_model.value()->distortion_type == DistortionType::Brown) {
+    // Resize d buffer to the right size
+    destination.d.resize(NUM_COFF_PLUMB_BOB);
     destination.d[0] = raw_gxf_camera_model.value()->distortion_coefficients[0];
     destination.d[1] = raw_gxf_camera_model.value()->distortion_coefficients[1];
     destination.d[2] = raw_gxf_camera_model.value()->distortion_coefficients[6];
     destination.d[3] = raw_gxf_camera_model.value()->distortion_coefficients[7];
     destination.d[4] = raw_gxf_camera_model.value()->distortion_coefficients[2];
-    destination.d[5] = 0;
-    destination.d[6] = 0;
-    destination.d[7] = 0;
+  } else if (raw_gxf_camera_model.value()->distortion_type == DistortionType::Perspective) {
+    // Resize d buffer to the right size
+    destination.d.resize(NUM_COFF_PLUMB_BOB);
+    destination.d[0] = 0.0;
+    destination.d[1] = 0.0;
+    destination.d[2] = 0.0;
+    destination.d[3] = 0.0;
+    destination.d[4] = 0.0;
   } else {
+    // Resize d buffer to the right size
+    destination.d.resize(
+      sizeof(raw_gxf_camera_model.value()->distortion_coefficients) /
+      sizeof(float));
     std::copy(
       std::begin(raw_gxf_camera_model.value()->distortion_coefficients),
       std::end(raw_gxf_camera_model.value()->distortion_coefficients), std::begin(destination.d));
@@ -256,86 +457,7 @@ void rclcpp::TypeAdapter<
   }
 
   auto raw_gxf_camera_model = message->add<nvidia::gxf::CameraModel>(RAW_CAMERA_MODEL_GXF_NAME);
-
-  raw_gxf_camera_model.value()->dimensions = {source.width, source.height};
-  raw_gxf_camera_model.value()->focal_length = {
-    static_cast<float>(source.k[0]), static_cast<float>(source.k[4])};
-  raw_gxf_camera_model.value()->principal_point = {
-    static_cast<float>(source.k[2]), static_cast<float>(source.k[5])};
-
-  const auto distortion = g_ros_to_gxf_distortion_model.find(source.distortion_model);
-  if (distortion == std::end(g_ros_to_gxf_distortion_model)) {
-    std::stringstream error_msg;
-    error_msg <<
-      "[convert_to_custom] Unsupported distortion model from ROS [" <<
-      source.distortion_model.c_str() << "].";
-    RCLCPP_ERROR(
-      rclcpp::get_logger("NitrosCameraInfo"), error_msg.str().c_str());
-    throw std::runtime_error(error_msg.str().c_str());
-  } else {
-    raw_gxf_camera_model.value()->distortion_type = distortion->second;
-  }
-
-  if (source.d.size() > nvidia::gxf::CameraModel::kMaxDistortionCoefficients) {
-    std::stringstream error_msg;
-    error_msg <<
-      "[convert_to_custom] More number of coefficients for distortion model found [ # of coeff: " <<
-      source.d.size() << " > " << nvidia::gxf::CameraModel::kMaxDistortionCoefficients << "].";
-    RCLCPP_ERROR(
-      rclcpp::get_logger("NitrosCameraInfo"), error_msg.str().c_str());
-    throw std::runtime_error(error_msg.str().c_str());
-  }
-
-  if (raw_gxf_camera_model.value()->distortion_type == DistortionType::Polynomial) {
-    // prevents distortion parameters array access if its empty
-    // simulators may send empty distortion parameter array since images are already rectified
-    if (!source.d.empty()) {
-      // distortion parameters in GXF: k1, k2, k3, k4, k5, k6, p1, p2
-      // distortion parameters in ROS message: k1, k2, p1, p2, k3 ...
-      raw_gxf_camera_model.value()->distortion_coefficients[0] = source.d[0];
-      raw_gxf_camera_model.value()->distortion_coefficients[1] = source.d[1];
-
-      for (uint16_t index = 2; index < source.d.size() - 2; index++) {
-        raw_gxf_camera_model.value()->distortion_coefficients[index] = source.d[index + 2];
-      }
-      raw_gxf_camera_model.value()->distortion_coefficients[6] = source.d[2];
-      raw_gxf_camera_model.value()->distortion_coefficients[7] = source.d[3];
-    }
-  } else if (raw_gxf_camera_model.value()->distortion_type == DistortionType::Brown) {
-    // prevents distortion parameters array access if its empty
-    // simulators may send empty distortion parameter array since images are already rectified
-    if (!source.d.empty()) {
-      // distortion parameters in GXF: k1, k2, k3, k4, k5, k6, p1, p2
-      // distortion parameters in ROS message: k1, k2, p1, p2, k3 ...
-      raw_gxf_camera_model.value()->distortion_coefficients[0] = source.d[0];
-      raw_gxf_camera_model.value()->distortion_coefficients[1] = source.d[1];
-      raw_gxf_camera_model.value()->distortion_coefficients[2] = source.d[4];
-      for (uint16_t index = 3;
-        index < nvidia::gxf::CameraModel::kMaxDistortionCoefficients - 2;
-        index++)
-      {
-        raw_gxf_camera_model.value()->distortion_coefficients[index] = 0;
-      }
-      raw_gxf_camera_model.value()->distortion_coefficients[6] = source.d[2];
-      raw_gxf_camera_model.value()->distortion_coefficients[7] = source.d[3];
-    }
-  } else {
-    std::copy(
-      std::begin(source.d), std::end(source.d),
-      std::begin(raw_gxf_camera_model.value()->distortion_coefficients));
-  }
-
-  // add rectified image camera model
   auto rect_gxf_camera_model = message->add<nvidia::gxf::CameraModel>(RECT_CAMERA_MODEL_GXF_NAME);
-  rect_gxf_camera_model.value()->dimensions = {source.width, source.height};
-  rect_gxf_camera_model.value()->focal_length = {
-    static_cast<float>(source.p[0]), static_cast<float>(source.p[5])};
-  rect_gxf_camera_model.value()->principal_point = {
-    static_cast<float>(source.p[2]), static_cast<float>(source.p[6])};
-  rect_gxf_camera_model.value()->distortion_type = DistortionType::Perspective;
-  memset(
-    rect_gxf_camera_model.value()->distortion_coefficients, 0,
-    rect_gxf_camera_model.value()->kMaxDistortionCoefficients * sizeof(float));
   // this pose3D entity is used to passthrough the translation between the two cameras
   // this translation data is not used by the tensorops rectification library
   // Note: The rotation of this EXTRINSICS_GXF_NAME pose3D entity is set identity
@@ -346,28 +468,8 @@ void rclcpp::TypeAdapter<
   auto target_extrinsics_delta_gxf_pose_3d = message->add<nvidia::gxf::Pose3D>(
     TARGET_EXTRINSICS_DELTA_GXF_NAME);
 
-  // populate rectification rotation matrix into the TARGET_EXTRINSICS_DELTA_GXF_NAME
-  std::copy(
-    std::begin(source.r), std::end(source.r),
-    std::begin(target_extrinsics_delta_gxf_pose_3d.value()->rotation));
 
-  // Based on the comments for the camera info msg type, p[0] == 0 means the topic
-  // contains no calibration data, ie, its an uncalibrated camera
-  if (source.p[0] == 0.0f) {
-    RCLCPP_WARN(
-      rclcpp::get_logger("NitrosCameraInfo"),
-      "[convert_to_custom] Received an uncalibrated camera info msg.");
-    extrinsics_gxf_pose_3d.value()->translation = {
-      0,
-      0,
-      0};
-  } else {
-    // populate extrinsics translation the EXTRINSICS_GXF_NAME
-    extrinsics_gxf_pose_3d.value()->translation = {
-      static_cast<float>(source.p[3]) / static_cast<float>(source.p[0]),
-      static_cast<float>(source.p[7]),
-      static_cast<float>(source.p[11])};
-  }
+  nvidia::isaac_ros::nitros::copy_ros_to_gxf_camera_info(source, message);
 
   // Add timestamp to the message
   uint64_t input_timestamp =

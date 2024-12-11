@@ -113,7 +113,7 @@ public:
     const std::vector<std::string> & supported_data_formats,
     const NitrosPublisherSubscriberConfig & config,
     const negotiated::NegotiatedPublisherOptions & negotiated_pub_options,
-    const NitrosStatisticsConfig & statistics_config);
+    const NitrosDiagnosticsConfig & diagnostics_config);
 
   // Constructor for creating a publisher without an associated gxf egress port
   NitrosPublisher(
@@ -122,7 +122,7 @@ public:
     std::shared_ptr<NitrosTypeManager> nitros_type_manager,
     const std::vector<std::string> & supported_data_formats,
     const NitrosPublisherSubscriberConfig & config,
-    const NitrosStatisticsConfig & statistics_config);
+    const NitrosDiagnosticsConfig & diagnostics_config);
 
   // Getter for the negotiated_pub_
   std::shared_ptr<negotiated::NegotiatedPublisher> getNegotiatedPublisher();

@@ -57,6 +57,7 @@ class FixedVectorBase {
     kArgumentOutOfRange,  // Argument is out of valid range
     kContainerEmpty,      // Container is empty
     kContainerFull,       // Container is fixed and reached max capacity
+    kInvalidIterator,     // Iterator is invalid
   };
 
   // Expected type which uses class specific errors
@@ -187,6 +188,27 @@ class FixedVectorBase {
   constexpr Expected<void> insert(size_t index, T&& obj) {
     return emplace(index, std::forward<T>(obj));
   }
+
+  // Insert elements from another fixed vector object to the specified index
+  constexpr Expected<void> insert(iterator index, iterator start, iterator end) {
+        size_t count = static_cast<size_t>(std::distance(start, end));
+        size_t pos = static_cast<size_t>(std::distance(begin(), index));
+        if ((pos > size_) || (pos + count > capacity_) || (count < 0)) {
+            return Unexpected<Error>{Error::kArgumentOutOfRange};
+        }
+
+        auto maybe_value = *start;
+        if (maybe_value) {
+          T* ptr = &(*maybe_value);
+          ArrayCopyConstruct(BytePointer(data_ + pos), ptr, count);
+          size_ += count;
+        } else {
+          return Unexpected<Error>{Error::kInvalidIterator};
+        }
+
+        return kSuccess;
+  }
+
   // Copies the object to the end of the vector
   constexpr Expected<void> push_back(const T& obj) { return emplace_back(obj); }
   // Moves the object to the end of the vector

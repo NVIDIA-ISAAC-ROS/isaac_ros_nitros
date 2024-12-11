@@ -41,7 +41,7 @@ class Resource<Handle<T>> {
   const Expected<Handle<T>>& try_get(const char* name = nullptr) const {
     if (value_ == Handle<T>::Unspecified()) {
       if (resource_manager_ == nullptr) {
-        GXF_LOG_WARNING("Resource [type: %s] from comonent [cid: %ld] cannot get "
+        GXF_LOG_WARNING("Resource [type: %s] from component [cid: %ld] cannot get "
                         "its value because of nullptr ResourceManager",
                         TypenameAsString<T>(), owner_cid_);
         return unspecified_handle_;

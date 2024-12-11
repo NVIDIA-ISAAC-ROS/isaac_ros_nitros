@@ -123,7 +123,7 @@ class IsaacROSNitrosDetection3DArrayTest(IsaacROSBaseTest):
             self.assertEqual(len(nitros_detection3_d_array.detections),
                              len(received_nitros_detection3_d_array.detections))
 
-            if(len(nitros_detection3_d_array.detections) ==
+            if (len(nitros_detection3_d_array.detections) ==
                     len(received_nitros_detection3_d_array.detections)):
                 for detection_count, detection3_d in \
                         enumerate(nitros_detection3_d_array.detections):
@@ -131,7 +131,7 @@ class IsaacROSNitrosDetection3DArrayTest(IsaacROSBaseTest):
                         detection_count]
                     self.assertEqual(len(detection3_d.results),
                                      len(received_detection3_d.results))
-                    if(len(detection3_d.results) ==
+                    if (len(detection3_d.results) ==
                             len(received_detection3_d.results)):
                         for result_count, result in enumerate(detection3_d.results):
                             received_result = received_detection3_d.results[result_count]

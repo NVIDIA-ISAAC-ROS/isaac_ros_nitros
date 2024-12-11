@@ -17,6 +17,9 @@
 #ifndef NVIDIA_GXF_CORE_HANDLE_HPP
 #define NVIDIA_GXF_CORE_HANDLE_HPP
 
+#include <cinttypes>
+#include <string>
+
 #include "common/assert.hpp"
 #include "common/type_name.hpp"
 #include "gxf/core/expected.hpp"
@@ -53,12 +56,20 @@ class UntypedHandle {
     return untyped_handle;
   }
 
+  // Creates a new untyped handle with component pointer
+  static Expected<UntypedHandle> Create(gxf_context_t context, gxf_uid_t cid,
+                                        gxf_tid_t tid, void* ptr) {
+    return UntypedHandle{context, cid, tid, ptr};
+  }
+
   // The context to which the component belongs
   gxf_context_t context() const { return context_; }
   // The ID of the component.
   gxf_uid_t cid() const { return cid_; }
   // The type ID describing the component type.
   gxf_tid_t tid() const { return tid_; }
+  // Get the pointer to underlying component object
+  void* get_ptr() const {return pointer_;}
   // Returns null if the handle is equivalent to a nullptr.
   bool is_null() const {
     return context_ == kNullContext || cid_ == kNullUid || pointer_ == nullptr;
@@ -76,9 +87,15 @@ class UntypedHandle {
   UntypedHandle(gxf_context_t context, gxf_uid_t cid)
     : context_{context}, cid_{cid}, tid_{GxfTidNull()}, pointer_{nullptr} { }
 
+  UntypedHandle(gxf_context_t context, gxf_uid_t cid, gxf_tid_t tid, void* pointer)
+    : context_{context}, cid_{cid}, tid_{tid}, pointer_{pointer} {}
+
   Expected<void> initialize(gxf_tid_t tid) {
     tid_ = tid;
-    return ExpectedOrCode(GxfComponentPointer(context_, cid_, tid_, &pointer_));
+    if (pointer_ == nullptr) {
+        return ExpectedOrCode(GxfComponentPointer(context_, cid_, tid_, &pointer_));
+    }
+    return Success;
   }
 
   Expected<void> initialize(const char* type_name) {
@@ -143,9 +160,19 @@ class Handle : public UntypedHandle {
     return handle;
   }
 
+  static Expected<Handle> Create(gxf_context_t context, gxf_uid_t cid,
+                                 gxf_tid_t tid, void * ptr) {
+    if (GxfTidIsNull(tid) || ptr == nullptr) {
+      return Create(context, cid);
+    }
+    Handle handle{context, cid, tid, ptr};
+    return handle;
+  }
+
   // Creates a new handle from an untyped handle
   static Expected<Handle> Create(const UntypedHandle& untyped_handle) {
-    return Create(untyped_handle.context(), untyped_handle.cid());
+    return Create(untyped_handle.context(), untyped_handle.cid(),
+                  untyped_handle.tid(), untyped_handle.get_ptr());
   }
 
   friend bool operator==(const Handle& lhs, const Handle& rhs) {
@@ -162,6 +189,9 @@ class Handle : public UntypedHandle {
 
   Handle(gxf_context_t context = kNullContext, gxf_uid_t uid = kNullUid)
     : UntypedHandle{context, uid} {}
+
+  Handle(gxf_context_t context , gxf_uid_t uid , gxf_tid_t tid, void* ptr)
+    : UntypedHandle{context, uid, tid, ptr} {}
 
   ~Handle() = default;
 
@@ -184,18 +214,82 @@ class Handle : public UntypedHandle {
   }
 
   T* get() const {
-    GXF_ASSERT(verifyPointer(), "Invalid Component Pointer.");
+    // Verifying the pointer every time the handle is accessed causes a
+    // significant bottle neck in perf. This should be removed in a future
+    // release. Uncomment below line if there is any problem.
+    // GXF_ASSERT(verifyPointer(), "Invalid Component Pointer.");
+    GXF_ASSERT_FALSE(pointer_ == nullptr);
     return reinterpret_cast<T*>(pointer_);
   }
 
   Expected<T*> try_get() const {
-    if (!verifyPointer()) { return Unexpected{GXF_FAILURE}; }
+    // Verifying the pointer every time the handle is accessed causes a
+    // significant bottle neck in perf. This should be removed in a future
+    // release. Uncomment below line if there is any problem.
+    // if (!verifyPointer()) { return Unexpected{GXF_FAILURE}; }
+    if (pointer_ == nullptr) { return Unexpected{GXF_FAILURE}; }
     return reinterpret_cast<T*>(pointer_);
   }
 
  private:
   using UntypedHandle::UntypedHandle;
 };
+
+
+// Creates a new handle given the string representation of the handle in a yaml blob
+// If the value is of format <entity-name>/<component-name> then cid is ignored.
+// If the entity name is not specified, the value indicates just the component name, then
+// 'cid' is used to query the entity name to create the handle
+template <typename T>
+static Expected<Handle<T>> CreateHandleFromString(gxf_context_t context, gxf_uid_t cid,
+                                                  const char* value) {
+  gxf_uid_t eid;
+  std::string component_name;
+  const std::string tag{value};
+  const size_t pos = tag.find('/');
+
+  if (pos == std::string::npos) {
+    // Get the entity of this component
+    auto result = GxfComponentEntity(context, cid, &eid);
+    if (result != GXF_SUCCESS) {
+      GXF_LOG_ERROR("Failed to find entity for component [C%05" PRId64 "] with name [%s] with"
+                    " error %s", cid, value, GxfResultStr(result));
+      return Unexpected{result};
+    }
+    component_name = tag;
+  } else {
+    // Split the tag into entity and component name
+    const std::string entity_name = tag.substr(0, pos);
+    component_name = tag.substr(pos + 1);
+    // Search for the entity
+    auto result = GxfEntityFind(context, entity_name.c_str(), &eid);
+    if (result != GXF_SUCCESS) {
+      GXF_LOG_ERROR("Failed to find entity [E%05" PRId64 "] with name [%s] while parsing '%s'",
+          eid, entity_name.c_str(), tag.c_str());
+      return Unexpected{result};
+    }
+  }
+
+  // Get the type id of the component we are are looking for.
+  gxf_tid_t tid;
+  auto result = GxfComponentTypeId(context, TypenameAsString<T>(), &tid);
+  if (result != GXF_SUCCESS) {
+    GXF_LOG_ERROR("Failed to find type ID of component type [%s] with error %s",
+        TypenameAsString<T>(), GxfResultStr(result));
+    return Unexpected{result};
+  }
+
+  gxf_uid_t cid2;
+  // Find the component in the indicated entity
+  result = GxfComponentFind(context, eid, tid, component_name.c_str(), nullptr, &cid2);
+  if (result != GXF_SUCCESS) {
+    GXF_LOG_ERROR("Failed to find component in entity [E%05" PRId64 "] with name [%s]",
+        eid, component_name.c_str());
+    return Unexpected{result};
+  }
+
+  return Handle<T>::Create(context, cid2);
+}
 
 }  // namespace gxf
 }  // namespace nvidia

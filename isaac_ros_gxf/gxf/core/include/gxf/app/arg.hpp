@@ -92,7 +92,7 @@ struct ArgOverride<Handle<T>> {
       GXF_LOG_ERROR("Unable to find the entity for %s", c_name.c_str());
       return Unexpected{result};
     }
-    result = GxfParameterGetStr(value.context(), eid, kInternalNameParameterKey, &entity_name);
+    result = GxfEntityGetName(value.context(), eid, &entity_name);
     if (result != GXF_SUCCESS) {
       GXF_LOG_ERROR("Unable to get the entity name");
       return Unexpected{result};

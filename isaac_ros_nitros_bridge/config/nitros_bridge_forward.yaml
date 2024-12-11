@@ -1,0 +1,9 @@
+topics:
+  -
+    topic: /r2b/ros2_input_image  # Topic name for ros1 bridge
+    type: sensor_msgs/msg/Image # Type type for ros1 bridge
+    queue_size: 10
+  -
+    topic: /r2b/ros2_output_image # Topic name for ros1 bridge
+    type: sensor_msgs/msg/Image # Type type for ros1 bridge
+    queue_size: 10

@@ -177,7 +177,7 @@ public:
     const rmw_qos_profile_t qos,
     rclcpp::SubscriptionOptions options,
     const std::string & compatible_data_format = "",
-    const NitrosStatisticsConfig & statistics_config = {})
+    const NitrosDiagnosticsConfig & diagnostics_config = {})
   {
     unsubscribe();
 
@@ -196,7 +196,7 @@ public:
         [this](const NitrosTypeViewT & nitrosViewMsg) {
           this->cb(EventType(std::make_shared<const MessageType>(nitrosViewMsg.GetMessage())));
         },
-        statistics_config,
+        diagnostics_config,
         rclcpp_qos
       );
 

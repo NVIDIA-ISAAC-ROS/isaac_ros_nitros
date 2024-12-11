@@ -167,15 +167,16 @@ struct ParameterParser<Handle<S>> {
                                    &component_name);
     if (code != GXF_SUCCESS) { return Unexpected{code}; }
 
+    gxf_uid_t owner_eid, param_eid;
+    const char* owner_entity_name = "UNKNOWN";
+    std::string param_entity_name;
     // Get the entity of this component
-    gxf_uid_t eid;
-    const gxf_result_t result_1 = GxfComponentEntity(context, component_uid, &eid);
+    const gxf_result_t result_1 = GxfComponentEntity(context, component_uid, &owner_eid);
     if (result_1 != GXF_SUCCESS) {
       return Unexpected{result_1};
     }
 
-    const char* e_name = "UNKNOWN";
-    code = GxfParameterGetStr(context, eid, kInternalNameParameterKey, &e_name);
+    code = GxfEntityGetName(context, owner_eid, &owner_entity_name);
     if (code != GXF_SUCCESS) { return Unexpected{code}; }
 
     // Parse string from node
@@ -193,6 +194,8 @@ struct ParameterParser<Handle<S>> {
     const size_t pos = tag.find('/');
     if (pos == std::string::npos) {
       handle_component_name = tag;
+      // target param component and owner component reside in the same entity
+      param_eid = owner_eid;
     } else {
       handle_component_name = tag.substr(pos + 1);
 
@@ -200,27 +203,31 @@ struct ParameterParser<Handle<S>> {
       gxf_result_t result_1_with_prefix = GXF_FAILURE;
       // Try using entity name with prefix
       if (!prefix.empty()) {
-        const std::string entity_name = prefix + tag.substr(0, pos);
-        result_1_with_prefix = GxfEntityFind(context, entity_name.c_str(), &eid);
+        param_entity_name = prefix + tag.substr(0, pos);
+        // param eid
+        result_1_with_prefix = GxfEntityFind(context, param_entity_name.c_str(), &param_eid);
         if (result_1_with_prefix != GXF_SUCCESS) {
           GXF_LOG_WARNING("Could not find entity (with prefix) '%s' while parsing parameter '%s' "
-                          "of component %s with id %zu", entity_name.c_str(), key, component_name,
-                          component_uid);
+                          "of component %s with id %zu",
+                          param_entity_name.c_str(), key, component_name, component_uid);
         }
       }
       // Try using entity name without prefix, if lookup with prefix failed
       if (result_1_with_prefix != GXF_SUCCESS) {
-        const std::string entity_name = tag.substr(0, pos);
-        const gxf_result_t result_1_no_prefix  = GxfEntityFind(context, entity_name.c_str(), &eid);
+        param_entity_name = tag.substr(0, pos);
+        // param eid
+        const gxf_result_t result_1_no_prefix = GxfEntityFind(context,
+          param_entity_name.c_str(), &param_eid);
         if (result_1_no_prefix != GXF_SUCCESS) {
           GXF_LOG_ERROR("Could not find entity '%s' while parsing parameter '%s' of component %s"
-                        " with id %zu", entity_name.c_str(), key, component_name, component_uid);
+                        " with id %zu",
+                        param_entity_name.c_str(), key, component_name, component_uid);
           return Unexpected{result_1_no_prefix};
         } else if (!prefix.empty()) {
           GXF_LOG_WARNING("Found entity (without prefix) '%s' while parsing parameter '%s' "
                           "of component '%s' with id %zu in a subgraph, however the approach is"
-                          " deprecated, please use prerequisites instead", entity_name.c_str(),
-                          key, component_name, component_uid);
+                          " deprecated, please use prerequisites instead",
+                          param_entity_name.c_str(), key, component_name, component_uid);
         }
       }
     }
@@ -233,20 +240,52 @@ struct ParameterParser<Handle<S>> {
     }
 
     // Find the component in the indicated entity
+    // param eid
     gxf_uid_t cid;
-    const gxf_result_t result_3 = GxfComponentFind(context, eid, tid, handle_component_name.c_str(),
-                                                   nullptr, &cid);
+    const gxf_result_t result_3 = GxfComponentFind(context, param_eid, tid,
+      handle_component_name.c_str(), nullptr, &cid);
     if (result_3 != GXF_SUCCESS) {
       if (handle_component_name == "<Unspecified>") {
         GXF_LOG_DEBUG("Using an <Unspecified> handle in entity '%s' with id %zu while parsing "
         "parameter '%s' of component '%s' with id %zu. This handle must be set to a valid component"
-        " before graph activation", e_name, eid, key, component_name, component_uid);
+        " before graph activation",
+        owner_entity_name, owner_eid, key, component_name, component_uid);
         return Handle<S>::Unspecified();
       } else {
-        GXF_LOG_WARNING("Could not find component '%s' in entity %s with id %zu while parsing "
-                        "parameter '%s' of component '%s' with id %zu",
-                        handle_component_name.c_str(), e_name, eid, key, component_name,
-                        component_uid);
+        GXF_LOG_WARNING("Cannot find target paramter component[entity name: %s, component name: %s]"
+          " in type[%s] "
+          "for owner component[entity name: %s, component name: %s, cid: %ld], "
+          "during parsing its parameter[key: %s, value: %s]",
+          param_entity_name.c_str(), handle_component_name.c_str(),  // param component info
+          TypenameAsString<S>(),  // expected param component type
+          owner_entity_name, component_name, component_uid,  // owner component info
+          key, tag.c_str());  // param key:value string presentation
+        // print help info
+        for (int offset = 0; ; offset++) {
+          auto code1 = GxfComponentFind(context, param_eid, GxfTidNull(),
+            handle_component_name.c_str(), &offset, &cid);
+          if (code1 == GXF_ENTITY_COMPONENT_NOT_FOUND) {
+            GXF_LOG_DEBUG("No more component instance found as entity/component: %s",
+              tag.c_str());
+            break;
+          } else if (code1 != GXF_SUCCESS) {
+            GXF_LOG_ERROR("Failed to execute component cid find with eid: %ld, "
+              "component name: %s, offset: %d", param_eid, handle_component_name.c_str(), offset);
+            return Unexpected{code1};
+          }
+          const char* component_type_name = nullptr;
+          auto code2 = GxfComponentTypeNameFromUID(context, cid, &component_type_name);
+          if (code2 != GXF_SUCCESS) {
+            GXF_LOG_ERROR("Failed to find component type name from cid [%ld]", cid);
+            return Unexpected{code2};
+          }
+          GXF_LOG_WARNING("Found component[%s] in type[%s]; "
+            "however type[%s] is expected for "
+            "component[entity name: %s, component name: %s, key: %s]",
+            tag.c_str(), component_type_name,
+            TypenameAsString<S>(), owner_entity_name, component_name, key);
+        }
+        // end help info print
       }
 
       return Unexpected{result_3};

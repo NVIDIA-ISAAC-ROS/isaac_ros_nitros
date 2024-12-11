@@ -48,9 +48,9 @@ class StdEntityIdSerializer : public EntitySerializer {
 
  private:
   // Sequence number for outgoing messages
-  uint64_t outgoing_sequence_number_;
+  uint64_t outgoing_sequence_number_{0};
   // Sequence number for incoming messages
-  uint64_t incoming_sequence_number_;
+  uint64_t incoming_sequence_number_{0};
 };
 
 }  // namespace gxf

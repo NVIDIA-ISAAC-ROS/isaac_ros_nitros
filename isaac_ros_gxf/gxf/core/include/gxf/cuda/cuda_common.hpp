@@ -32,6 +32,16 @@
         }                                                                       \
     } while (0)
 
+#define CHECK_CUDA_ERROR_RESULT(cu_result, fmt, ...)                      \
+  do {                                                                    \
+    cudaError_t err = (cu_result);                                        \
+    if (err != cudaSuccess) {                                             \
+      GXF_LOG_ERROR(fmt ", cuda_error: %s, error_str: %s", ##__VA_ARGS__, \
+                    cudaGetErrorName(err), cudaGetErrorString(err));      \
+      return GXF_FAILURE;                                                 \
+    }                                                                     \
+  } while (0)
+
 #define CONTINUE_CUDA_ERROR(cu_result, fmt, ...)                               \
     do {                                                                       \
         cudaError_t err = (cu_result);                                          \

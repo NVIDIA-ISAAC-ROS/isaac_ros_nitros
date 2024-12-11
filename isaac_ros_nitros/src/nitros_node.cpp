@@ -209,33 +209,53 @@ NitrosNode::NitrosNode(
   nitros_context_ptr_->setNode(this);
 
   // Create an NITROS type manager for the node
-  statistics_config_ = std::make_shared<NitrosStatisticsConfig>();
+  diagnostics_config_ = std::make_shared<NitrosDiagnosticsConfig>();
 
-  // Setup ROS parameters for NITROS statistics
-  statistics_config_->enable_node_time_statistics = declare_parameter<bool>(
-    "enable_node_time_statistics", false);
-  statistics_config_->enable_msg_time_statistics = declare_parameter<bool>(
-    "enable_msg_time_statistics", false);
-  statistics_config_->enable_increasing_msg_time_statistics = declare_parameter<bool>(
-    "enable_increasing_msg_time_statistics", false);
-  statistics_config_->enable_all_statistics = declare_parameter<bool>(
-    "enable_all_statistics", false);
-  if (statistics_config_->enable_all_statistics) {
-    this->set_parameter(rclcpp::Parameter("enable_node_time_statistics", true));
-    this->set_parameter(rclcpp::Parameter("enable_msg_time_statistics", true));
-    this->set_parameter(rclcpp::Parameter("enable_increasing_msg_time_statistics", true));
+  // Setup ROS parameters for NITROS diagnostics
+  diagnostics_config_->enable_node_time_diagnostics = declare_parameter<bool>(
+    "enable_node_time_diagnostics", false);
+  diagnostics_config_->enable_msg_time_diagnostics = declare_parameter<bool>(
+    "enable_msg_time_diagnostics", false);
+  diagnostics_config_->enable_increasing_msg_time_diagnostics = declare_parameter<bool>(
+    "enable_increasing_msg_time_diagnostics", false);
+  diagnostics_config_->enable_all_diagnostics = declare_parameter<bool>(
+    "enable_all_diagnostics", false);
+  if (diagnostics_config_->enable_all_diagnostics) {
+    diagnostics_config_->enable_node_time_diagnostics = true;
+    diagnostics_config_->enable_msg_time_diagnostics = true;
+    diagnostics_config_->enable_increasing_msg_time_diagnostics = true;
   }
-  if (statistics_config_->enable_node_time_statistics ||
-    statistics_config_->enable_msg_time_statistics ||
-    statistics_config_->enable_increasing_msg_time_statistics)
+
+  const char * enable_global_diagnostics = std::getenv("ENABLE_GLOBAL_NITROS_DIAGNOSTICS");
+  std::string global_env_value;
+
+  if (enable_global_diagnostics != nullptr) {
+    global_env_value = std::string(enable_global_diagnostics);
+  } else {
+    global_env_value = "";
+  }
+
+  if (global_env_value == "True" ||
+    global_env_value == "TRUE" ||
+    global_env_value == "true" ||
+    global_env_value == "1")
   {
-    statistics_config_->enable_statistics = true;
-    statistics_config_->statistics_publish_rate = declare_parameter<float>(
-      "statistics_publish_rate",
+    diagnostics_config_->enable_all_topic_diagnostics = true;
+  }
+
+  if (
+    diagnostics_config_->enable_all_topic_diagnostics ||
+    diagnostics_config_->enable_node_time_diagnostics ||
+    diagnostics_config_->enable_msg_time_diagnostics ||
+    diagnostics_config_->enable_increasing_msg_time_diagnostics)
+  {
+    diagnostics_config_->enable_diagnostics = true;
+    diagnostics_config_->diagnostics_publish_rate = declare_parameter<float>(
+      "diagnostics_publish_rate",
       1.0);
-    statistics_config_->filter_window_size =
+    diagnostics_config_->filter_window_size =
       declare_parameter<int>("filter_window_size", 100);
-    statistics_config_->jitter_tolerance_us =
+    diagnostics_config_->jitter_tolerance_us =
       declare_parameter<int>("jitter_tolerance_us", 5000.0);
     // List of expected topic names
     std::vector<std::string> topics_name_list =
@@ -253,7 +273,7 @@ NitrosNode::NitrosNode(
     }
     // Populate the topic_name -> expected time difference
     for (size_t i = 0; i < topics_name_list.size(); i++) {
-      statistics_config_->topic_name_expected_dt_map[topics_name_list[i]] = 1000000 /
+      diagnostics_config_->topic_name_expected_dt_map[topics_name_list[i]] = 1000000 /
         expected_fps_list[i];
     }
   }
@@ -515,7 +535,7 @@ void NitrosNode::startNitrosNode()
     nitros_pub_sub_groups_.emplace_back(
       std::make_shared<NitrosPublisherSubscriberGroup>(
         *this, nitros_context_ptr_->getContext(),
-        nitros_type_manager_, gxf_io_group, config_map_, frame_id_map_ptr_, *statistics_config_));
+        nitros_type_manager_, gxf_io_group, config_map_, frame_id_map_ptr_, *diagnostics_config_));
   }
 
   // Start negotiation
@@ -615,8 +635,16 @@ void NitrosNode::postNegotiationCallback()
         RCLCPP_ERROR(get_logger(), error_msg.str().c_str());
         throw std::runtime_error(error_msg.str().c_str());
       }
+      RCLCPP_DEBUG(
+        get_logger(),
+        "[NitrosNode] Setting up a subscriber's underyling receiver (pointer=%p)", pointer);
       sub_ptr->setReceiverPointer(pointer);
-      RCLCPP_DEBUG(get_logger(), "[NitrosNode] Setting a subscriber's pointer: %p", pointer);
+      sub_ptr->setReceiverPolicy(0);
+      const std::string topic_qos_parameter_name = sub_ptr->getConfig().topic_name + "_qos_depth";
+      const int custom_sub_qos_depth = get_parameter(topic_qos_parameter_name).as_int();
+      if (custom_sub_qos_depth > 0) {
+        sub_ptr->setReceiverCapacity(custom_sub_qos_depth);
+      }
       if (heartbeat_eid_ == -1) {
         nitros_context_ptr_->getEid(comp_info.entity_name, heartbeat_eid_);
       }

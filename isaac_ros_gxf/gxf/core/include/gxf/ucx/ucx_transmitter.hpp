@@ -49,6 +49,8 @@ class UcxTransmitter : public Transmitter {
                             ucp_ep_h* ep,
                             bool* connection_closed_p,
                             bool reconnect,
+                            bool cpu_data_only,
+                            bool enable_async,
                             std::list<UcxTransmitterSendContext_>* send_queue,
                             std::condition_variable* cv,
                             std::mutex* mtx);
@@ -107,11 +109,13 @@ class UcxTransmitter : public Transmitter {
   std::unique_ptr<queue_t> queue_;
   bool* connection_closed_p_;
   bool reconnect_;
+  bool cpu_data_only_;
   std::list<UcxTransmitterSendContext_>* send_queue_;
   std::condition_variable* cv_;
   std::mutex* mtx_;
   int index = 0;
   int* id_;
+  int enable_async_ = true;
 };
 
 }  // namespace gxf

@@ -176,20 +176,20 @@ NitrosPublisher::NitrosPublisher(
   const std::vector<std::string> & supported_data_formats,
   const NitrosPublisherSubscriberConfig & config,
   const negotiated::NegotiatedPublisherOptions & negotiated_pub_options,
-  const NitrosStatisticsConfig & statistics_config)
+  const NitrosDiagnosticsConfig & diagnostics_config)
 : NitrosPublisher(
     node, context, nitros_type_manager, gxf_component_info, supported_data_formats, config,
     negotiated_pub_options)
 {
-  statistics_config_ = statistics_config;
+  diagnostics_config_ = diagnostics_config;
 
-  if (statistics_config_.enable_statistics &&
-    statistics_config_.topic_name_expected_dt_map.find(config_.topic_name) !=
-    statistics_config_.topic_name_expected_dt_map.end())
+  if (diagnostics_config_.enable_all_topic_diagnostics ||
+    (diagnostics_config_.enable_diagnostics &&
+    diagnostics_config_.topic_name_expected_dt_map.find(config_.topic_name) !=
+    diagnostics_config_.topic_name_expected_dt_map.end()))
   {
     // Initialize statistics variables and message fields
-    statistics_msg_.is_subscriber = false;
-    initStatistics();
+    initDiagnostics();
   }
 }
 
@@ -199,10 +199,10 @@ NitrosPublisher::NitrosPublisher(
   std::shared_ptr<NitrosTypeManager> nitros_type_manager,
   const std::vector<std::string> & supported_data_formats,
   const NitrosPublisherSubscriberConfig & config,
-  const NitrosStatisticsConfig & statistics_config)
+  const NitrosDiagnosticsConfig & diagnostics_config)
 : NitrosPublisher(
     node, context, nitros_type_manager, {}, supported_data_formats, config,
-    {}, statistics_config)
+    {}, diagnostics_config)
 {}
 
 std::shared_ptr<negotiated::NegotiatedPublisher> NitrosPublisher::getNegotiatedPublisher()
@@ -552,11 +552,12 @@ void NitrosPublisher::publish(NitrosTypeBase & base_msg)
       base_msg);
   }
 
-  if (statistics_config_.enable_statistics &&
-    statistics_config_.topic_name_expected_dt_map.find(config_.topic_name) !=
-    statistics_config_.topic_name_expected_dt_map.end())
+  if (diagnostics_config_.enable_all_topic_diagnostics ||
+    (diagnostics_config_.enable_diagnostics &&
+    diagnostics_config_.topic_name_expected_dt_map.find(config_.topic_name) !=
+    diagnostics_config_.topic_name_expected_dt_map.end()))
   {
-    updateStatistics(getTimestamp(base_msg));
+    updateDiagnostics(getTimestamp(base_msg));
   }
 
   nvtxRangePopWrapper();

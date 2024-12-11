@@ -39,7 +39,7 @@ NitrosImageSwitchNode::NitrosImageSwitchNode(const rclcpp::NodeOptions options)
         nvidia::isaac_ros::nitros::NitrosImage>>(
       this, "switched_image",
       ::nvidia::isaac_ros::nitros::nitros_image_rgb8_t::supported_type_name,
-      nvidia::isaac_ros::nitros::NitrosStatisticsConfig{}, output_qos_)},
+      nvidia::isaac_ros::nitros::NitrosDiagnosticsConfig{}, output_qos_)},
   pub_camera_info_{create_publisher<sensor_msgs::msg::CameraInfo>(
       "switched_camera_info",
       output_qos_)},

@@ -162,28 +162,28 @@ class Application : public Segment {
    * each segment is launched asynchronously and this thread is blocked until each one of
    * the segments have finished execution. If the graph contains multiple entities,
    * then this thread is blocked until the graph execution is complete.
-   * @return gxf_result_t On success the function returns GXF_SUCCESS.
+   * @return Expected<void> Success or error code
    */
   Expected<void> run();
 
   /**
    * @brief A non blocking api call to run an application. If the application contains multiple
    * segments, each segment is launched asynchronously.
-   * @return gxf_result_t On success the function returns GXF_SUCCESS.
+   * @return Expected<void> Success or error code
    */
   Expected<void> runAsync();
 
   /**
    * @brief A non blocking api to stop all running running segments or entities.
    *
-   * @return gxf_result_t On success the function returns GXF_SUCCESS.
+   * @return Expected<void> Success or error code
    */
   Expected<void> interrupt();
 
   /**
    * @brief A blocking API to waits until the graph execution has completed
    *
-   * @return gxf_result_t On success the function returns GXF_SUCCESS.
+   * @return Expected<void> Success or error code
    */
   Expected<void> wait();
 
@@ -284,6 +284,7 @@ class Application : public Segment {
   Expected<void> activate();
   Expected<void> deactivate();
   Expected<void> finalize();
+  Expected<void> setupCrashHandler();
 
   std::map<std::string, std::shared_ptr<Segment>> segments_;
   std::map<std::string, std::shared_ptr<Segment>> segments_plan_;

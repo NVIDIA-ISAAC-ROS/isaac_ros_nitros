@@ -46,7 +46,7 @@ class FileStream : public Endpoint {
   static constexpr const char* kBinaryFileExtension = ".gxf_entities";
 
   FileStream(std::string input_file, std::string output_file)
-    : input_file_path_{input_file}, output_file_path_{output_file} {}
+    : input_file_path_{std::move(input_file)}, output_file_path_{output_file} {}
   FileStream() = default;
   ~FileStream() = default;
   FileStream(const FileStream& other) = delete;

@@ -44,7 +44,7 @@ public:
     const std::string & topic_name,
     const std::string & format,
     std::function<void(const NitrosMsgView & msg_view)> callback = nullptr,
-    const NitrosStatisticsConfig & statistics_config = {},
+    const NitrosDiagnosticsConfig & diagnostics_config = {},
     const rclcpp::QoS qos = rclcpp::QoS(1))
   : node_{node}, topic_{topic_name},
     nitros_type_manager_{std::make_shared<NitrosTypeManager>(node_)}
@@ -67,7 +67,7 @@ public:
 
     nitros_sub_ = std::make_shared<NitrosSubscriber>(
       *node_, GetTypeAdapterNitrosContext().getContext(), nitros_type_manager_,
-      supported_data_formats, component_config, statistics_config);
+      supported_data_formats, component_config, diagnostics_config);
 
     nitros_sub_->start();
 

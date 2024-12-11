@@ -82,15 +82,15 @@ class Codelet : public Component {
   void beforeStop();
 
   // The number of times the codelet tick function was called.
-  int64_t execution_count_;
+  int64_t execution_count_{0};
   // The timestamp of the previous execution. Equal to 'execution_timestamp' during 'start'.
-  int64_t previous_execution_timestamp_;
+  int64_t previous_execution_timestamp_{0};
   // The timestamp of the current execution in nanoseconds.
   int64_t execution_timestamp_;
   // Same as execution_timestamp_ but in seconds and as a floating point.
   double execution_time_;
   // The difference between the current and the previous execution time in seconds.
-  double delta_time_;
+  double delta_time_{0.0};
 };
 
 }  // namespace gxf

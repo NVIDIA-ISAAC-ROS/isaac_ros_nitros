@@ -27,9 +27,9 @@ ament_auto_find_build_dependencies()
 
 # Determine the architecture
 if(CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64")
-    set(GXF_EXT_LIB_PATH "${CMAKE_CURRENT_SOURCE_DIR}/lib/gxf_jetpack60")
+    set(GXF_EXT_LIB_PATH "${CMAKE_CURRENT_SOURCE_DIR}/lib/gxf_jetpack61")
 elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64")
-    set(GXF_EXT_LIB_PATH "${CMAKE_CURRENT_SOURCE_DIR}/lib/gxf_x86_64_cuda_12_2")
+    set(GXF_EXT_LIB_PATH "${CMAKE_CURRENT_SOURCE_DIR}/lib/gxf_x86_64_cuda_12_6")
 else()
     message(FATAL_ERROR "Unsupported architecture: ${CMAKE_SYSTEM_PROCESSOR}")
 endif()
@@ -51,5 +51,11 @@ if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/gxf")
     set_target_properties(${PROJECT_NAME} PROPERTIES
             INTERFACE_INCLUDE_DIRECTORIES "$<INSTALL_PREFIX>/share/${PROJECT_NAME}/gxf/include")
 endif()
+
+
+# Embed versioning information into installed files
+ament_index_get_resource(ISAAC_ROS_COMMON_CMAKE_PATH isaac_ros_common_cmake_path isaac_ros_common)
+include("${ISAAC_ROS_COMMON_CMAKE_PATH}/isaac_ros_common-version-info.cmake")
+generate_version_info(${PROJECT_NAME})
 
 ament_auto_package(INSTALL_TO_SHARE)

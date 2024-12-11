@@ -164,7 +164,7 @@ void rclcpp::TypeAdapter<
       "[convert_to_custom] Failed to get allocator's handle: " <<
       GxfResultStr(maybe_allocator_handle.error());
     RCLCPP_ERROR(
-      rclcpp::get_logger("NitrosAprilTagDetectionArray"), error_msg.str().c_str());
+      rclcpp::get_logger("NitrosOdometry"), error_msg.str().c_str());
     throw std::runtime_error(error_msg.str().c_str());
   }
   auto allocator_handle = maybe_allocator_handle.value();

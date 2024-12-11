@@ -27,7 +27,9 @@ namespace gxf {
 
 class EntityExecutor;  // forward declaration
 
-// A simple poll-based single-threaded scheduler which executes codelets.
+// An interface which extends the nvidia::gxf::System interface to create schedulers
+// which can execute codelets.
+
 class Scheduler : public System {
  public:
   virtual gxf_result_t prepare_abi(EntityExecutor* executor) = 0;

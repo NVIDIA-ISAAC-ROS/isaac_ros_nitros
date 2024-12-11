@@ -184,6 +184,7 @@ GXF_VIDEO_TYPE_TRAITS(GXF_VIDEO_FORMAT_RAW16_BGGR);
 GXF_VIDEO_TYPE_TRAITS(GXF_VIDEO_FORMAT_RAW16_GRBG);
 GXF_VIDEO_TYPE_TRAITS(GXF_VIDEO_FORMAT_RAW16_GBRG);
 
+
 // Struct to hold the information regarding a single color plane
 struct ColorPlane {
   std::string color_space;
@@ -878,6 +879,7 @@ class VideoBuffer {
   static Expected<PrimitiveType> getPlanarPrimitiveType(VideoFormat color_format) {
     PrimitiveType primitive_type;
     switch (color_format) {
+        case   VideoFormat::GXF_VIDEO_FORMAT_NV12:          // BT.601 2 planes Y, UV
         case   VideoFormat::GXF_VIDEO_FORMAT_RGBA:          // RGBA-8-8-8-8 single plane
         case   VideoFormat::GXF_VIDEO_FORMAT_BGRA:          // BGRA-8-8-8-8 single plane
         case   VideoFormat::GXF_VIDEO_FORMAT_ARGB:          // ARGB-8-8-8-8 single plane
@@ -923,6 +925,10 @@ class VideoBuffer {
 
         case VideoFormat::GXF_VIDEO_FORMAT_D64F: {               // Depth 64 bit float single plane
           primitive_type = PrimitiveType::kFloat64;
+        } break;
+
+        case   VideoFormat::GXF_VIDEO_FORMAT_CUSTOM: {        // CUSTOM undefined
+          primitive_type = PrimitiveType::kCustom;
         } break;
 
         default: {                                               // Non-planar type given

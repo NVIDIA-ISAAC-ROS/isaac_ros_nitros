@@ -50,23 +50,34 @@ MARK_PUBLIC_SECTION()
 class NitrosTensorView
 {
 public:
-  explicit NitrosTensorView(const gxf::Tensor & tensor)
-  : tensor_{tensor} {}
+  explicit NitrosTensorView(const gxf::Tensor & tensor, const std::string & name = "")
+  : tensor_{tensor}, name_{name} {FillStrides();}
   inline const unsigned char * GetBuffer() const {return tensor_.pointer();}
+  inline const std::string GetName() const {return name_;}
   inline uint32_t GetRank() const {return tensor_.rank();}
   inline uint64_t GetBytesPerElement() const {return tensor_.bytes_per_element();}
   inline uint64_t GetElementCount() const {return tensor_.element_count();}
   inline size_t GetTensorSize() const {return tensor_.size();}
   inline NitrosTensorShape GetShape() const {return NitrosTensorShape(tensor_.shape());}
   inline PrimitiveType GetElementType() const {return tensor_.element_type();}
+  inline std::vector<uint64_t> GetStrides() const {return strides_;}
 
 private:
   const gxf::Tensor & tensor_{};
+  const std::string name_{};
+  std::vector<uint64_t> strides_{};
+  inline void FillStrides()
+  {
+    for (size_t i = 0; i < tensor_.shape().rank(); i++) {
+      strides_.push_back(tensor_.stride(i));
+    }
+  }
 };
 
 MARK_PUBLIC_SECTION()
 // Public methods
 size_t GetTensorCount() const;
+const std::vector<NitrosTensorListView::NitrosTensorView> GetAllTensor() const;
 const NitrosTensorView GetAnyNamedTensor(std::string tensor_name) const;
 const NitrosTensorView GetNamedTensor(std::string tensor_name) const;
 

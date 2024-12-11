@@ -19,6 +19,7 @@
 
 #include <set>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "common/assert.hpp"
@@ -51,9 +52,9 @@ class Component {
   //   class Foo : public Component {
   //    public:
   //     gxf_result_t registerInterface(Registrar* registrar) override {
-  //       GXF_REGISTER_PARAMETER(count, 1);
+  //       registrar->parameter(count_, "count", 1);
   //     }
-  //     GXF_PARAMETER(int, count);
+  //     Parameter<int> count_;
   //   };
   virtual gxf_result_t registerInterface(Registrar* registrar) {
     registrar_ = registrar;
@@ -114,7 +115,7 @@ class Component {
   template <typename T>
   Expected<void> setParameter(const char* key, T value) {
     if (!parameter_storage_) { return Unexpected{GXF_ARGUMENT_NULL}; }
-    return parameter_storage_->set<T>(cid_, key, value);
+    return parameter_storage_->set<T>(cid_, key, std::move(value));
   }
 
   // set a parameter "key" of handle type with value

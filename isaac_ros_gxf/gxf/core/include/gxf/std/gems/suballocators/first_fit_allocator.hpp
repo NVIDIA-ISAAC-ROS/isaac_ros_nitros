@@ -110,7 +110,7 @@ class FirstFitAllocator {
   // the requested size.
   int32_t chunk_size_;
   // Buffer holding the pre-allocated memory that is provided on demand.
-  std::unique_ptr<T[]> buffer_;
+  std::unique_ptr<T[]> buffer_{nullptr};
 };
 
 }  // namespace gxf

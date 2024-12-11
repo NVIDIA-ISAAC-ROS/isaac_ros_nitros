@@ -33,8 +33,6 @@
 namespace nvidia {
 namespace gxf {
 
-class CudaStreamPool;
-
 // Holds and provides access to cudaStream_t. CudaStream is allocated and
 // recycled by CudaStreamPool
 class CudaStream {

@@ -30,6 +30,7 @@
 #include "common/assert.hpp"
 #include "gxf/app/arg.hpp"
 #include "gxf/app/arg_parse.hpp"
+#include "gxf/app/entity_group.hpp"
 #include "gxf/app/graph_entity.hpp"
 #include "gxf/app/graph_utils.hpp"
 #include "gxf/app/proxy_component.hpp"
@@ -175,9 +176,13 @@ class Segment {
 
   virtual ~Segment() = default;
 
-  Segment(Segment&&) = default;
+  Segment(Segment&&) = delete;
 
-  Segment& operator=(Segment&&) = default;
+  Segment& operator=(Segment&&) = delete;
+
+  Segment(const Segment&) = delete;
+
+  Segment& operator=(const Segment&) = delete;
 
   virtual void compose() {}
 
@@ -254,6 +259,14 @@ class Segment {
     return entity;
   }
 
+  EntityGroupPtr makeEntityGroup(const char* name,
+    const std::vector<GraphEntityPtr>& entity_members = {}) {
+    auto entity_group = createEntityGroup(name);
+    entity_group->add(entity_members);
+
+    return entity_group;
+  }
+
   /**
    * @brief Creates a scheduling term of requested type and applies parameter component values
    * from a parameter pack of arguments. This api does not create the requested gxf native component.
@@ -305,7 +318,7 @@ class Segment {
    * @tparam T Type of GXF clock component. Type must be derived from nvidia::gxf::Clock type.
    * @param name Name of the clock component
    * @param args Parameter pack of arguments / parameter values to be applied to the component
-   * @return Handle<Clock> Handle to newly created clock component. Nullptr if component was not
+   * @return Handle<Clock> Handle to newly created clock component. Null handle if component was not
    * created.
    */
   template <typename ClockT, typename... Args>
@@ -325,9 +338,8 @@ class Segment {
    * from a parameter pack of arguments.
    *
    * @tparam T Type of GXF scheduler component. Type must be derived from nvidia::gxf::Scheduler type.
-   * @param name Name of the scheduler component
    * @param args Parameter pack of arguments / parameter values to be applied to the component
-   * @return Handle<Scheduler> Handle to newly created scheduler component. Nullptr if component was not
+   * @return Handle<Scheduler> Handle to newly created scheduler component. Null handle if component was not
    * created.
    */
   template <SchedulerType schedulerType, typename... Args>
@@ -344,7 +356,8 @@ class Segment {
    * are found in the segment, a new RealTimeClock component will be added to the segment.
    *
    * @param scheduler Type of the scheduler to be added. One of kGreedy, kMultithread or kEventBased
-   * @return Expected<void> On success the function returns Success
+   * @return Handle<Scheduler> Handle to newly created scheduler component. Null handle if component was not
+   * created.
    */
   Handle<Scheduler> setScheduler(const SchedulerType& scheduler, std::vector<Arg> arg_list = {});
 
@@ -401,7 +414,7 @@ class Segment {
   /**
    * @brief Fetch the name of the segment
    *
-   * @return const char*
+   * @return const char* pointer to name of the segment
    */
   const char* name() const { return name_.c_str(); }
 
@@ -472,7 +485,7 @@ class Segment {
   }
 
   /**
-   * @brief A blocking API to waitW until the segment execution has completed.
+   * @brief A blocking API to wait until the segment execution has completed.
    *
    * @return gxf_result_t On success the function returns GXF_SUCCESS.
    */
@@ -577,6 +590,22 @@ class Segment {
     return entity;
   }
 
+  /**
+   * @brief Creates a programmable graph entity group with the given name
+   *
+   * @param name Name of the graph entity
+   * @return EntityGroupPtr Pointer to newly created entity group
+   */
+  EntityGroupPtr createEntityGroup(std::string name) {
+    GXF_LOG_DEBUG("Creating graph entity group [%s]", name.c_str());
+    auto entity_group = std::make_shared<EntityGroup>();
+    if (!entity_group->setup(context_, name.c_str())) {
+      return nullptr;
+    }
+    entity_groups_.emplace(entity_group->gid(), entity_group);
+    return entity_group;
+  }
+
   // Registers a new codelet type with the runtime extension
   template <typename T>
   gxf_result_t registerCodelet() {
@@ -591,6 +620,7 @@ class Segment {
   // Extension to register components on the fly
   std::shared_ptr<DefaultExtension> runtime_ext_;
   std::map<gxf_uid_t, GraphEntityPtr> entities_;
+  std::map<gxf_uid_t, EntityGroupPtr> entity_groups_;
   GraphEntityPtr scheduler_entity_;
   GraphEntityPtr clock_entity_;
   GraphEntityPtr connect_entity_;
@@ -601,7 +631,6 @@ class Segment {
 };
 
 typedef std::shared_ptr<Segment> SegmentPtr;
-// typedef std::shared_ptr<Proxy<Segment>> ProxySegmentPtr;
 
 struct SegmentConnection {
   SegmentConnection(SegmentPtr source, SegmentPtr target, std::vector<SegmentPortPair> port_maps)

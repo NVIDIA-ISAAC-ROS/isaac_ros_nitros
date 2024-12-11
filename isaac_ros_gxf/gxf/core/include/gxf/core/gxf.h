@@ -63,8 +63,12 @@ typedef enum {
   GXF_FACTORY_INCOMPATIBLE,
 
   GXF_ENTITY_NOT_FOUND,
+  GXF_ENTITY_NAME_EXCEEDS_LIMIT,
   GXF_ENTITY_COMPONENT_NOT_FOUND,
+  GXF_ENTITY_COMPONENT_NAME_EXCEEDS_LIMIT,
   GXF_ENTITY_CAN_NOT_ADD_COMPONENT_AFTER_INITIALIZATION,
+  GXF_ENTITY_CAN_NOT_REMOVE_COMPONENT_AFTER_INITIALIZATION,
+  GXF_ENTITY_MAX_COMPONENTS_LIMIT_EXCEEDED,
 
   GXF_PARAMETER_NOT_FOUND,
   GXF_PARAMETER_ALREADY_REGISTERED,
@@ -176,7 +180,7 @@ typedef void* gxf_context_t;
 #define kNullContext nullptr
 
 /// @brief GXF Core Version
-#define kGxfCoreVersion "4.0.0"
+#define kGxfCoreVersion "4.1.0"
 
 /// @brief Creates a new GXF context
 ///
@@ -223,12 +227,6 @@ gxf_result_t GxfContextDestroy(gxf_context_t context);
 
 /// @brief Maximum number of extensions in a context
 #define kMaxExtensions 1024
-
-/// @deprecated Use 'GxfLoadExtensions' instead
-gxf_result_t GxfLoadExtension(gxf_context_t context, const char* filename);
-
-/// @deprecated Use 'GxfLoadExtensions' instead
-gxf_result_t GxfLoadExtensionManifest(gxf_context_t context, const char* manifest_filename);
 
 /// @brief Loads an extension from a pointer to the Extension object.
 ///
@@ -317,9 +315,6 @@ typedef enum {
   GXF_BEHAVIOR_UNKNOWN = 4,
 } entity_state_t;
 
-/// @deprecated Use 'GxfCreateEntity' instead
-gxf_result_t GxfEntityCreate(gxf_context_t context, gxf_uid_t* eid);
-
 /// @brief Activates a previously created and inactive entity
 ///
 /// Activating an entity generally marks the official start of its lifetime and has multiple
@@ -333,7 +328,7 @@ gxf_result_t GxfEntityCreate(gxf_context_t context, gxf_uid_t* eid);
 /// - Adding or removing components of an entity after activation will result in a failure.
 ///
 /// @param context A valid GXF context
-/// @param eid UID of a valid entity
+/// @param eid The unique object ID (UID) of a valid entity
 /// @return GXF error code
 gxf_result_t GxfEntityActivate(gxf_context_t context, gxf_uid_t eid);
 
@@ -350,7 +345,7 @@ gxf_result_t GxfEntityActivate(gxf_context_t context, gxf_uid_t eid);
 ///       the current execution is finished.
 ///
 /// @param context A valid GXF context
-/// @param eid UID of a valid entity
+/// @param eid The unique object ID (UID) of a valid entity
 /// @return GXF error code
 gxf_result_t GxfEntityDeactivate(gxf_context_t context, gxf_uid_t eid);
 
@@ -391,13 +386,13 @@ gxf_result_t GxfEntityFindAll(gxf_context_t context, uint64_t* num_entities, gxf
 /// @brief Increases the reference count for an entity by 1.
 ///
 /// By default reference counting is disabled for an entity. This means that entities created with
-/// 'GxfEntityCreate' are not automatically destroyed. If this function is called for an entity
+/// 'GxfCreateEntity' are not automatically destroyed. If this function is called for an entity
 /// with disabled reference count, reference counting is enabled and the reference count is set to
 /// 1. Once reference counting is enabled an entity will be automatically destroyed if the reference
-/// count reaches zero, or if 'GxfEntityCreate' is called explicitly.
+/// count reaches zero, or if 'GxfEntityDestroy' is called explicitly.
 ///
 /// @param context A valid GXF context
-/// @param eid The UID of a valid entity
+/// @param eid The unique object ID (UID) of a valid entity
 /// @return GXF_SUCCESS if the operation was successful, or otherwise one of the GXF error codes.
 gxf_result_t GxfEntityRefCountInc(gxf_context_t context, gxf_uid_t eid);
 
@@ -406,27 +401,47 @@ gxf_result_t GxfEntityRefCountInc(gxf_context_t context, gxf_uid_t eid);
 /// See 'GxfEntityRefCountInc' for more details on reference counting.
 ///
 /// @param context A valid GXF context
-/// @param eid The UID of a valid entity
+/// @param eid The unique object ID (UID) of a valid entity
 /// @return GXF_SUCCESS if the operation was successful, or otherwise one of the GXF error codes.
 gxf_result_t GxfEntityRefCountDec(gxf_context_t context, gxf_uid_t eid);
+
+/// @brief Provides the reference count for an entity.
+///
+/// See 'GxfEntityRefCountInc' for more details on reference counting.
+///
+/// @param context A valid GXF context
+/// @param eid The unique object ID (UID) of a valid entity
+/// @param count The reference count of a valid entity
+/// @return GXF_SUCCESS if the operation was successful, or otherwise one of the GXF error codes.
+gxf_result_t GxfEntityGetRefCount(gxf_context_t context, gxf_uid_t eid, int64_t* count);
 
 /// @brief Gets the status of the entity.
 ///
 /// See 'gxf_entity_status_t' for the various status.
 ///
 /// @param context A valid GXF context
-/// @param eid The UID of a valid entity
+/// @param eid The unique object ID (UID) of a valid entity
 /// @param entity_status output; status of an entity eid
 /// @return GXF_SUCCESS if the operation was successful, or otherwise one of the GXF error codes.
 gxf_result_t GxfEntityGetStatus(gxf_context_t context, gxf_uid_t eid,
                               gxf_entity_status_t* entity_status);
+
+/// @brief Gets the name of the entity.
+///
+///
+/// @param context A valid GXF context
+/// @param eid The unique object ID (UID) of a valid entity
+/// @param entity_name output; name of the entity
+/// @return GXF_SUCCESS if the operation was successful, or otherwise one of the GXF error codes.
+gxf_result_t GxfEntityGetName(gxf_context_t context, gxf_uid_t eid,
+                              const char** entity_name);
 
 /// @brief Gets the state of the entity.
 ///
 /// See 'entity_state_t' for the various status.
 ///
 /// @param context A valid GXF context
-/// @param eid The UID of a valid entity
+/// @param eid The unique object ID (UID) of a valid entity
 /// @param entity_state output; behavior status of an entity eid used by the
 /// behavior tree parent codelet
 /// @return GXF_SUCCESS if the operation was successful, or otherwise one of the
@@ -444,7 +459,7 @@ gxf_result_t GxfEntityGetState(gxf_context_t context, gxf_uid_t eid,
 ///  See 'AsynchronousEventState' for various states
 ///
 /// @param context A valid GXF context
-/// @param eid The UID of a valid entity
+/// @param eid The unique object ID (UID) of a valid entity
 /// @return GXF_SUCCESS if the operation was successful, or otherwise one of the
 /// GXF error codes.
 
@@ -469,10 +484,24 @@ typedef enum {
 
 gxf_result_t GxfEntityNotifyEventType(gxf_context_t context, gxf_uid_t eid, gxf_event_t event);
 
+/// @brief Gets a string describing an GXF event type
+///
+/// The caller does not get ownership of the return C string and must not delete it.
+///
+/// @param result A GXF error code
+/// @return A pointer to a C string with the error code description.
+const char* GxfEventStr(gxf_event_t event);
+
 // --  Components  ---------------------------------------------------------------------------------
 
 /// @brief Maximum number of components in an entity or extension
-#define kMaxComponents 10240
+#define kMaxComponents 1024
+
+/// @brief Maximum number of characters in the name of an entity
+#define kMaxEntityNameSize 2048
+
+/// @brief Maximum number of characters in the name of a component
+#define kMaxComponentNameSize 256
 
 /// @brief Gets the GXF unique type ID (TID) of a component
 ///
@@ -527,9 +556,21 @@ gxf_result_t GxfComponentName(gxf_context_t context, gxf_uid_t cid, const char**
 ///
 /// @param context A valid GXF context
 /// @param cid The unique object ID (UID) of the component
-/// @param eid The returned UID of the entity
+/// @param eid The returned unique object ID (UID) of the entity
 /// @return GXF_SUCCESS if the operation was successful, or otherwise one of the GXF error codes.
 gxf_result_t GxfComponentEntity(gxf_context_t context, gxf_uid_t cid, gxf_uid_t* eid);
+
+/// @brief Gets the pointer to an entity item
+///
+/// Each entity has a unique ID with respect to the context and is stored in the entity warden. This
+/// function can be used to retrieve the pointer to entity item stored in the entity warden for a
+/// given entity id.
+///
+/// @param context A valid GXF context
+/// @param eid The unique object ID (UID) of the entity
+/// @param ptr The returned pointer to the entity item
+/// @return GXF_SUCCESS if the operation was successful, or otherwise one of the GXF error codes.
+gxf_result_t GxfEntityGetItemPtr(gxf_context_t context, gxf_uid_t eid, void** ptr);
 
 /// @brief Adds a new component to an entity
 ///
@@ -547,8 +588,50 @@ gxf_result_t GxfComponentEntity(gxf_context_t context, gxf_uid_t cid, gxf_uid_t*
 gxf_result_t GxfComponentAdd(gxf_context_t context, gxf_uid_t eid, gxf_tid_t tid, const char* name,
                              gxf_uid_t* cid);
 
+/// @brief Adds a new component to an entity
+///
+/// An entity can contain multiple components and this function can be used to add a new component
+/// to an Entity. A component must be added before an entity is activated, or after it was
+/// deactivated. Components must not be added to active entities. The order of components is stable
+/// and identical to the order in which components are added (see 'GxfComponentFind').
+///
+/// @param context A valid GXF context
+/// @param item_ptr The pointer to entity item
+/// @param tid The unique type ID (TID) of the component to be added to the entity.
+/// @param name The name of the new component. Ownership is not transferred.
+/// @param cid The returned UID of the created component
+/// @param comp_ptr The returned pointer to the created component object
+/// @return GXF_SUCCESS if the operation was successful, or otherwise one of the GXF error codes.
+gxf_result_t GxfComponentAddAndGetPtr(gxf_context_t context, void* item_ptr, gxf_tid_t tid,
+                                      const char* name, gxf_uid_t* cid, void ** comp_ptr);
+
+/// @brief Removes a component from an entity
+///
+/// An entity can contain multiple components and this function can be used to remove a component
+/// from an entity. A component must be removed before an entity is activated, or after it was
+/// deactivated. Components must not be removed from active entities.
+///
+/// @param context A valid GXF context
+/// @param cid The UID of the component
+/// @return GXF_SUCCESS if the operation was successful, or otherwise one of the GXF error codes.
+gxf_result_t GxfComponentRemoveWithUID(gxf_context_t context, gxf_uid_t cid);
+
+/// @brief Removes a component from an entity
+///
+/// An entity can contain multiple components and this function can be used to remove a component
+/// from an entity. A component must be removed before an entity is activated, or after it was
+/// deactivated. Components must not be removed from active entities.
+///
 /// @brief Adds an existing component to the interface of an entity
 ///
+/// @param context A valid GXF context
+/// @param eid The unique object ID (UID) of the entity to which the component is added.
+/// @param tid The unique type ID (TID) of the component to be added to the entity.
+/// @param name The name of the new component. Ownership is not transferred.
+/// @return GXF_SUCCESS if the operation was successful, or otherwise one of the GXF error codes.
+gxf_result_t GxfComponentRemove(gxf_context_t context, gxf_uid_t eid, gxf_tid_t tid,
+ const char * name);
+
 /// An entity can holds references to other components in its interface, so that when finding a
 /// component in an entity, both the component this entity holds and those it refers to will be
 /// returned.
@@ -583,6 +666,30 @@ gxf_result_t GxfComponentAddToInterface(gxf_context_t context, gxf_uid_t eid,
 ///         component matching the criteria was found, or otherwise one of the GXF error codes.
 gxf_result_t GxfComponentFind(gxf_context_t context, gxf_uid_t eid, gxf_tid_t tid, const char* name,
                               int32_t* offset, gxf_uid_t* cid);
+
+/// @brief Finds a component in an entity and returns pointer to component
+///
+/// Searches components in an entity which satisfy certain criteria: component type, component name
+/// . All two criteria are optional; in case no criteria is given the first component is returned
+/// The main use case for "component min index" is a repeated search which continues at the index
+/// which was returned by a previous search.
+///
+/// In case no entity with the given criteria was found GXF_ENTITY_NOT_FOUND is returned.
+///
+/// @param context A valid GXF context
+/// @param eid The unique object ID (UID) of the entity which is searched.
+/// @param item_ptr The pointer to entity item
+/// @param tid The component type ID (TID) of the component to find (optional)
+/// @param name The component name of the component to find (optional). Ownership not transferred.
+/// @param offset The index of the first component in the entity to search. Also contains the index
+///               of the component which was found.
+/// @param cid The returned UID of the searched component
+/// @param ptr The returned pointer of the searched component
+/// @return GXF_SUCCESS if a component matching the criteria was found, GXF_ENTITY_NOT_FOUND if no
+///         component matching the criteria was found, or otherwise one of the GXF error codes.
+gxf_result_t GxfComponentFindAndGetPtr(gxf_context_t context, gxf_uid_t eid, void* item_ptr,
+                                       gxf_tid_t tid, const char* name, int32_t* offset,
+                                       gxf_uid_t* cid, void** ptr);
 
 /// @brief Finds all components in an entity
 ///

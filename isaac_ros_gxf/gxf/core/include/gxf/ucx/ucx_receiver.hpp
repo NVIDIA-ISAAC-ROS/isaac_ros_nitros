@@ -48,7 +48,8 @@ class UcxReceiver : public Receiver {
   gxf_result_t initialize() override;
   gxf_result_t deinitialize() override;
   gxf_result_t init_context(ucp_worker_h  ucp_worker,
-                            ucx_am_data_desc* am_data_desc, int fd);
+                            ucx_am_data_desc* am_data_desc, int fd,
+                            bool cpu_data_only, bool enable_async);
 
   gxf_result_t pop_abi(gxf_uid_t* uid) override;
 
@@ -89,12 +90,18 @@ class UcxReceiver : public Receiver {
  private:
   gxf_result_t receive_message();
 
+  /// @brief finalize request when enable_async_ == false
+  gxf_result_t request_finalize_sync(ucp_worker_h ucp_worker, test_req_t* request,
+                                     test_req_t* ctx);
+
   ucp_worker_h     ucp_worker_;
   ucx_am_data_desc* am_data_desc_;
   std::unique_ptr<queue_t> queue_;
   int32_t dev_id_ = 0;
   int efd_signal_;
+  bool cpu_data_only_ = false;
   std::list<std::pair<void*, test_req_t*>> requests;
+  int enable_async_ = true;
 };
 
 }  // namespace gxf

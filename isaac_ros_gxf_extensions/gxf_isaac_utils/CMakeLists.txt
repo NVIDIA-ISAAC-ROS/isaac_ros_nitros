@@ -34,9 +34,9 @@ find_package(yaml-cpp)
 add_library(libgxf_utils SHARED IMPORTED)
 # Determine the architecture
 if(CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64")
-    set(GXF_EXT_LIB_PATH "lib/gxf_jetpack60")
+    set(GXF_EXT_LIB_PATH "lib/gxf_jetpack61")
 elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64")
-    set(GXF_EXT_LIB_PATH "lib/gxf_x86_64_cuda_12_2")
+    set(GXF_EXT_LIB_PATH "lib/gxf_x86_64_cuda_12_6")
 else()
     message(FATAL_ERROR "Unsupported architecture: ${CMAKE_SYSTEM_PROCESSOR}")
 endif()
@@ -77,5 +77,11 @@ set_property(TARGET ${PROJECT_NAME} PROPERTY COMPILE_OPTIONS ${target_options})
 
 # Install the binary file
 install(TARGETS ${PROJECT_NAME} DESTINATION share/${PROJECT_NAME}/gxf/lib)
+
+
+# Embed versioning information into installed files
+ament_index_get_resource(ISAAC_ROS_COMMON_CMAKE_PATH isaac_ros_common_cmake_path isaac_ros_common)
+include("${ISAAC_ROS_COMMON_CMAKE_PATH}/isaac_ros_common-version-info.cmake")
+generate_version_info(${PROJECT_NAME})
 
 ament_auto_package(INSTALL_TO_SHARE)
