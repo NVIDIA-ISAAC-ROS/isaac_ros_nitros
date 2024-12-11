@@ -110,11 +110,11 @@ class NitrosCameraDropNodeMode1Test(IsaacROSBaseTest):
         try:
             image_msg_1 = self.create_image('test_image_1')
             camera_info_msg_1 = CameraInfo()
-            camera_info_msg_1.distortion_model = 'pinhole'
+            camera_info_msg_1.distortion_model = 'plumb_bob'
 
             image_msg_2 = self.create_image('test_image_2')
             camera_info_msg_2 = CameraInfo()
-            camera_info_msg_2.distortion_model = 'pinhole'
+            camera_info_msg_2.distortion_model = 'plumb_bob'
             self.node.get_logger().info('Starting to publish messages')
 
             # Publish TOTAL_COUNT number of messages

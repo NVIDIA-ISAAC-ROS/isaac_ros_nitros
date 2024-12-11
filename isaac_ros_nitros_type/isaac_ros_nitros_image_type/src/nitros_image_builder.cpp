@@ -294,8 +294,18 @@ NitrosImage NitrosImageBuilder::Build()
         width_, height_, message, data_, nitros_image_.frame_id);
       break;
 
+    case VideoFormat::GXF_VIDEO_FORMAT_NV24_ER:
+      create_image<VideoFormat::GXF_VIDEO_FORMAT_NV24_ER>(
+        width_, height_, message, data_, nitros_image_.frame_id);
+      break;
+
     case VideoFormat::GXF_VIDEO_FORMAT_NV12:
       create_image<VideoFormat::GXF_VIDEO_FORMAT_NV12>(
+        width_, height_, message, data_, nitros_image_.frame_id);
+      break;
+
+    case VideoFormat::GXF_VIDEO_FORMAT_NV12_ER:
+      create_image<VideoFormat::GXF_VIDEO_FORMAT_NV12_ER>(
         width_, height_, message, data_, nitros_image_.frame_id);
       break;
 

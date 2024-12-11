@@ -157,7 +157,8 @@ def generate_launch_description():
             'object_name': object_name,
         }],
         remappings=[('belief_map_array', 'tensor_sub'),
-                    ('dope/pose_array', 'poses')])
+                    ('dope/detections', 'detections'),
+                    ('camera_info', '/dope_encoder/crop/info')])
 
     container = ComposableNodeContainer(
         name='dope_container',

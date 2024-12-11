@@ -41,7 +41,7 @@ typedef struct ucx_server_ctx {
     volatile ucp_conn_request_h conn_request;
     ucp_listener_h              listener;
     ucp_worker_h                listener_worker;
-    int                         listener_fd;
+    int                         listener_fd;  ///< epoll fd used only when enable_async_ == true
 } ucx_server_ctx_t;
 
 
@@ -54,7 +54,7 @@ typedef struct UcxReceiverContext {
     ucx_am_data_desc        am_data_desc;
     FixedVector<std::shared_ptr<ucx_am_data_desc>, kMaxRxContexts> headers;
     ucp_worker_h            ucp_worker;
-    int                     worker_fd;
+    int                     worker_fd;  ///< epoll fd used only when enable_async_ == true
     int                     index;
 } UcxReceiverContext_;
 
@@ -86,14 +86,21 @@ class UcxContext : public NetworkContext {
     gxf_result_t init_context();
     gxf_result_t init_tx(Handle<UcxTransmitter> tx);
     gxf_result_t init_rx(Handle<UcxReceiver> rx);
+
+    /// @brief start server for the case with enable_async_ == false
     void start_server();
-    void poll_queue();
+
     gxf_result_t am_desc_to_iov(std::shared_ptr<UcxReceiverContext> rx_context);
     void destroy_rx_contexts();
     void destroy_tx_contexts();
 
+    // The remaining methods are specific to the case with enable_async_ == true
 
-    gxf_result_t wait_for_event();
+    /// @brief start server for the case with enable_async_ == true
+    void start_server_async_queue();
+    /// @brief method run by tx_thread_ when enable_async_ == true
+    void poll_queue();
+    gxf_result_t wait_for_event();   ///< primary function called by start_server_async_queue
     gxf_result_t epoll_add_worker(std::shared_ptr<UcxReceiverContext> rx_context,
             bool is_listener);
     gxf_result_t progress_work(std::shared_ptr<UcxReceiverContext> rx_context);
@@ -104,23 +111,27 @@ class UcxContext : public NetworkContext {
             bool is_listener);
     void copy_header_to_am_desc(std::shared_ptr<UcxReceiverContext> rx_context);
 
-    ConnManager rx_conns_ = {0};
-
     bool close_server_loop_;
     FixedVector<std::shared_ptr<UcxReceiverContext>, kMaxRxContexts> rx_contexts_;
     FixedVector<std::shared_ptr<UcxTransmitterContext>, kMaxRxContexts> tx_contexts_;
     ucp_context_h ucp_context_;
-    std::thread rx_thread_;
-    std::thread tx_thread_;
     Parameter<Handle<EntitySerializer>> entity_serializer_;
     Parameter<bool> reconnect_;
     Resource<Handle<GPUDevice>> gpu_device_;
+    Parameter<bool> cpu_data_only_;
+    Parameter<bool> enable_async_;
     int32_t dev_id_ = 0;
+
+    std::thread t_;  ///< server thread used only when enable_async_ == false
+
+    // The following data members are only used when enable_async_ == true
+    ConnManager rx_conns_ = {0};
+    std::thread rx_thread_;  ///< async receiver thread used only when enable_async_ == true
+    std::thread tx_thread_;  ///< async transmitter thread used only when enable_async_ == true
     std::list<UcxTransmitterSendContext_> pending_send_requests_;
     std::mutex mtx_;
     std::condition_variable cv_;
     bool areTransmittersDone = false;
-    int msg_id_ = 0;
     int epoll_fd_;
     int efd_signal_;
 };

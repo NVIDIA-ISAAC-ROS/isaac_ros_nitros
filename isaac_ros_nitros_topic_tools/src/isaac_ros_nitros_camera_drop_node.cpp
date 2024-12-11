@@ -69,7 +69,7 @@ NitrosCameraDropNode::NitrosCameraDropNode(const rclcpp::NodeOptions & options)
     nvidia::isaac_ros::nitros::ManagedNitrosPublisher<nvidia::isaac_ros::nitros::NitrosImage>>(
     this, "image_1_drop",
     nvidia::isaac_ros::nitros::nitros_image_rgb8_t::supported_type_name,
-    nvidia::isaac_ros::nitros::NitrosStatisticsConfig(), output_qos);
+    nvidia::isaac_ros::nitros::NitrosDiagnosticsConfig(), output_qos);
   camera_info_pub_1_ = this->create_publisher<
     sensor_msgs::msg::CameraInfo>("camera_info_1_drop", output_qos);
 
@@ -91,7 +91,7 @@ NitrosCameraDropNode::NitrosCameraDropNode(const rclcpp::NodeOptions & options)
       nvidia::isaac_ros::nitros::ManagedNitrosPublisher<nvidia::isaac_ros::nitros::NitrosImage>>(
       this, "image_2_drop",
       nvidia::isaac_ros::nitros::nitros_image_rgb8_t::supported_type_name,
-      nvidia::isaac_ros::nitros::NitrosStatisticsConfig(), output_qos);
+      nvidia::isaac_ros::nitros::NitrosDiagnosticsConfig(), output_qos);
     camera_info_pub_2_ = this->create_publisher<
       sensor_msgs::msg::CameraInfo>("camera_info_2_drop", output_qos);
     // Initialize sync policy

@@ -81,13 +81,13 @@ class GraphEntity {
    * @tparam T Type of component. Must be derived from nvidia::gxf::Component
    * @param name Name of the component
    * @param args Args must be of type Arg
-   * @return Handle<T> Handle to newly created component
+   * @return Handle<T> Handle to newly created component. Null handle if component was not created.
    */
   template <typename T, typename... Args>
   Handle<T> add(const char* name = nullptr, Args... args) {
     std::vector<Arg> arg_list;
     if constexpr (sizeof...(args) > 0) { arg_list = parseArgsOfType<Arg>(args...); }
-    return add<T>(name, arg_list);
+    return add<T>(name, std::move(arg_list));
   }
 
   /**
@@ -98,7 +98,7 @@ class GraphEntity {
    * @tparam T Type of component. Must be derived from nvidia::gxf::Component
    * @param name Name of the component
    * @param arg_list vector of Arg used for initializing the component's parameters.
-   * @return Handle<T> Handle to newly created component
+   * @return Handle<T> Handle to newly created component. Null handle if component was not created.
    */
   template <typename T>
   Handle<T> add(const char* name, std::vector<Arg> arg_list) {
@@ -115,7 +115,7 @@ class GraphEntity {
    */
   template <typename T, size_t N = kMaxComponents>
   FixedVector<Handle<T>, N> findAll() const {
-    auto maybe_result = entity_.findAll<T>();
+    auto maybe_result = entity_.findAll<T, N>();
     return maybe_result ? maybe_result.value() : FixedVector<Handle<T>, N>();
   }
 
@@ -685,7 +685,7 @@ class GraphEntity {
   // resource lookup by name
   std::map<std::string, Handle<ResourceBase>> resources_;
 
-  gxf_uid_t eid_;
+  gxf_uid_t eid_{kNullUid};
   Entity entity_;
 };
 

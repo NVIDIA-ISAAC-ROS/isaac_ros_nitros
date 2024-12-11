@@ -240,8 +240,8 @@ private:
   // Map for frame_id passthrough
   std::shared_ptr<std::map<ComponentKey, std::string>> frame_id_map_ptr_;
 
-  // Configurations for a Nitros statistics
-  std::shared_ptr<NitrosStatisticsConfig> statistics_config_;
+  // Configurations for a Nitros diagnostics
+  std::shared_ptr<NitrosDiagnosticsConfig> diagnostics_config_;
 
   // When enabled namespacing and the graph optimizer are ignored
   // In such a case, graph(s) will be loaded intact

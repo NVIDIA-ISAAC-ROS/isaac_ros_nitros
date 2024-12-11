@@ -22,6 +22,7 @@
 #include <unordered_map>
 
 #include "common/fixed_vector.hpp"
+#include "gxf/core/gxf.h"
 #include "gxf/serialization/component_serializer.hpp"
 #include "gxf/serialization/entity_serializer.hpp"
 #include "gxf/serialization/tid_hash.hpp"
@@ -56,7 +57,7 @@ class UcxEntitySerializer : public EntitySerializer {
   struct ComponentHeader {
     uint64_t serialized_size;  // Size of the serialized component in bytes
     gxf_tid_t tid;             // Type ID of the component
-    char name[256];            // Component name
+    char name[kMaxComponentNameSize];            // Component name
   };
   #pragma pack(pop)
 
@@ -97,9 +98,9 @@ class UcxEntitySerializer : public EntitySerializer {
   // Table that caches type ID with a valid component serializer
   std::unordered_map<gxf_tid_t, Handle<ComponentSerializer>, TidHash> serializer_cache_;
   // Sequence number for outgoing messages
-  uint64_t outgoing_sequence_number_ = 0;
+  uint64_t outgoing_sequence_number_{0};
   // Sequence number for incoming messages
-  uint64_t incoming_sequence_number_ = 0;
+  uint64_t incoming_sequence_number_{0};
 };
 
 }  // namespace gxf

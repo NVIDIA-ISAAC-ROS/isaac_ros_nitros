@@ -27,7 +27,7 @@ ament_auto_find_build_dependencies()
 
 # Determine the architecture
 if(CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64")
-  set(GXF_EXT_LIB_PATH "${CMAKE_CURRENT_SOURCE_DIR}/lib/gxf_jetpack60")
+  set(GXF_EXT_LIB_PATH "${CMAKE_CURRENT_SOURCE_DIR}/lib/gxf_jetpack61")
 else()
   message(WARNING
           "Unsupported architecture: ${CMAKE_SYSTEM_PROCESSOR}. "
@@ -62,5 +62,11 @@ install(TARGETS ${PROJECT_NAME}
         ARCHIVE DESTINATION lib
         RUNTIME DESTINATION bin)
 ament_export_targets(export_${PROJECT_NAME} HAS_LIBRARY_TARGET)
+
+
+# Embed versioning information into installed files
+ament_index_get_resource(ISAAC_ROS_COMMON_CMAKE_PATH isaac_ros_common_cmake_path isaac_ros_common)
+include("${ISAAC_ROS_COMMON_CMAKE_PATH}/isaac_ros_common-version-info.cmake")
+generate_version_info(${PROJECT_NAME})
 
 ament_auto_package(INSTALL_TO_SHARE)

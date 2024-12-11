@@ -14,14 +14,15 @@
 // limitations under the License.
 //
 // SPDX-License-Identifier: Apache-2.0
+
 #ifndef DETECTNET__DETECTION2_D_ARRAY_MESSAGE_HPP_
 #define DETECTNET__DETECTION2_D_ARRAY_MESSAGE_HPP_
 
 #include <vector>
 
+#include "detection2_d.hpp"
 #include "gxf/core/entity.hpp"
 #include "gxf/std/timestamp.hpp"
-#include "detection2_d.hpp"
 
 namespace nvidia
 {

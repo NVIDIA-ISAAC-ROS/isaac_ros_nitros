@@ -78,13 +78,13 @@ class ParameterBackendBase {
   }
 
   // FIXME(v1) make private
-  gxf_context_t context_;
-  gxf_uid_t uid_;
-  gxf_parameter_flags_t flags_;
-  bool is_dynamic_;
-  const char* key_;
-  const char* headline_;
-  const char* description_;
+  gxf_context_t context_{nullptr};
+  gxf_uid_t uid_{kNullUid};
+  gxf_parameter_flags_t flags_{0};
+  bool is_dynamic_{false};
+  const char* key_{nullptr};
+  const char* headline_{nullptr};
+  const char* description_{nullptr};
 };
 
 template <typename T>

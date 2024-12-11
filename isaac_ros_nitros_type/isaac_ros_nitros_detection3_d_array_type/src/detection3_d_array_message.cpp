@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
-// Copyright (c) 2023-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+// Copyright (c) 2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -16,6 +16,8 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include "detection3_d_array_message/detection3_d_array_message.hpp"
+
+#include "gems/gxf_helpers/expected_macro_gxf.hpp"
 
 namespace nvidia
 {
@@ -56,16 +58,12 @@ gxf::Expected<Detection3DListMessageParts> GetDetection3DListMessage(gxf::Entity
 {
   Detection3DListMessageParts parts;
   parts.entity = entity;
-  auto result =
-    parts.entity.findAll<::nvidia::isaac::Pose3d>(parts.poses)
-    .and_then([&]() {parts.entity.findAll<::nvidia::isaac::Vector3f>(parts.bbox_sizes);})
-    .and_then([&]() {parts.entity.findAll<ObjectHypothesis>(parts.hypothesis);})
-    .and_then([&]() {return parts.entity.get<gxf::Timestamp>(kTimestampName);})
-    .log_error("Entity does not contain component Timestamp %s.", kTimestampName)
-    .assign_to(parts.timestamp);
-  if (!result) {
-    return gxf::ForwardError(result);
-  }
+
+  parts.poses = UNWRAP_OR_RETURN(parts.entity.findAll<::nvidia::isaac::Pose3d>());
+  parts.bbox_sizes = UNWRAP_OR_RETURN(parts.entity.findAll<::nvidia::isaac::Vector3f>());
+  parts.hypothesis = UNWRAP_OR_RETURN(parts.entity.findAll<::nvidia::isaac::ObjectHypothesis>());
+  parts.timestamp = UNWRAP_OR_RETURN(parts.entity.get<gxf::Timestamp>(kTimestampName));
+
   if (parts.poses.size() != parts.bbox_sizes.size() ||
     parts.poses.size() != parts.hypothesis.size())
   {

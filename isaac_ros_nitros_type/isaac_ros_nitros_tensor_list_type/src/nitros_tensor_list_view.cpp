@@ -52,6 +52,27 @@ size_t NitrosTensorListView::GetTensorCount() const
   return tensor_list_.size();
 }
 
+const std::vector<NitrosTensorListView::NitrosTensorView> NitrosTensorListView::GetAllTensor() const
+{
+  std::vector<NitrosTensorListView::NitrosTensorView> tensor_view_list;
+  auto gxf_tensors = msg_entity_->findAll<gxf::Tensor>();
+  if (!gxf_tensors) {
+    std::stringstream error_msg;
+    error_msg <<
+      "[GetTensorCount] failed to get all GXF tensors: " <<
+      GxfResultStr(gxf_tensors.error());
+    RCLCPP_ERROR(
+      rclcpp::get_logger("NitrosTensorListView"), error_msg.str().c_str());
+    throw std::runtime_error(error_msg.str().c_str());
+  }
+
+  for (auto gxf_tensor : gxf_tensors.value()) {
+    tensor_view_list.push_back(
+      NitrosTensorListView::NitrosTensorView(*(gxf_tensor.value()), gxf_tensor.value().name()));
+  }
+  return tensor_view_list;
+}
+
 const NitrosTensorListView::NitrosTensorView NitrosTensorListView::GetAnyNamedTensor(
   std::string tensor_name) const
 {
@@ -65,7 +86,7 @@ const NitrosTensorListView::NitrosTensorView NitrosTensorListView::GetAnyNamedTe
       rclcpp::get_logger("NitrosTensorListView"), error_msg.str().c_str());
     throw std::runtime_error(error_msg.str().c_str());
   }
-  return NitrosTensorListView::NitrosTensorView(*(gxf_tensor.value()));
+  return NitrosTensorListView::NitrosTensorView(*(gxf_tensor.value()), tensor_name);
 }
 
 const NitrosTensorListView::NitrosTensorView NitrosTensorListView::GetNamedTensor(

@@ -22,6 +22,8 @@ if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
   add_compile_options(-Wall -Wextra -Wpedantic)
 endif()
 
+install(PROGRAMS scripts/diagnostic_viewer.py DESTINATION lib/${PROJECT_NAME})
+
 find_package(ament_cmake_auto REQUIRED)
 ament_auto_find_build_dependencies()
 
@@ -37,11 +39,11 @@ endif()
 
 # Determine the architecture
 if(CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64")
-    set(CUVSLAM_LIB_PATH "lib/cuvslam/lib_aarch64_jetpack60")
-    set(CUAPRILTAGS_LIB_PATH "lib/cuapriltags/lib_aarch64_jetpack51")
+    set(CUVSLAM_LIB_PATH "lib/cuvslam/lib_aarch64_jetpack61")
+    set(CUAPRILTAGS_LIB_PATH "lib/cuapriltags/lib_aarch64_jetpack61")
 elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64")
-    set(CUVSLAM_LIB_PATH "lib/cuvslam/lib_x86_64_cuda_12_2")
-    set(CUAPRILTAGS_LIB_PATH "lib/cuapriltags/lib_x86_64_cuda_11_8")
+    set(CUVSLAM_LIB_PATH "lib/cuvslam/lib_x86_64_cuda_12_6")
+    set(CUAPRILTAGS_LIB_PATH "lib/cuapriltags/lib_x86_64_cuda_12_6")
 else()
     message(FATAL_ERROR "Unsupported architecture: ${CMAKE_SYSTEM_PROCESSOR}")
 endif()
@@ -49,7 +51,9 @@ endif()
 # Install exported libraries
 install(FILES ${CUAPRILTAGS_LIB_PATH}/libcuapriltags.a
     DESTINATION "${CMAKE_INSTALL_PREFIX}/share/${PROJECT_NAME}/cuapriltags/lib")
-install(FILES ${CUVSLAM_LIB_PATH}/libcuvslam.so
+install(FILES
+      ${CUVSLAM_LIB_PATH}/libcuvslam.so
+      ${CUVSLAM_LIB_PATH}/cuvslam_api_launcher
     DESTINATION "${CMAKE_INSTALL_PREFIX}/share/${PROJECT_NAME}/cuvslam/lib")
 
 # Install header files for cuvslam
@@ -121,6 +125,13 @@ find_package(ament_lint_auto REQUIRED)
 
   find_package(launch_testing_ament_cmake REQUIRED)
   add_launch_test(test/isaac_ros_nitros_test_pol.py TIMEOUT "15")
+  add_launch_test(test/isaac_ros_nitros_diagnostics_test_pol.py TIMEOUT "15")
 endif()
+
+
+# Embed versioning information into installed files
+ament_index_get_resource(ISAAC_ROS_COMMON_CMAKE_PATH isaac_ros_common_cmake_path isaac_ros_common)
+include("${ISAAC_ROS_COMMON_CMAKE_PATH}/isaac_ros_common-version-info.cmake")
+generate_version_info(${PROJECT_NAME})
 
 ament_auto_package(INSTALL_TO_SHARE config)

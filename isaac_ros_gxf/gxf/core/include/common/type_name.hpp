@@ -20,7 +20,10 @@
 #include <cstdint>
 
 #if defined(__clang__)
-// Not yet implemented
+inline char* TypenameAsStringImpl(const char* begin, char* output, int32_t max_length) {
+  // Return nullptr since this is not implemented
+  return nullptr;
+}
 #elif defined(__GNUC__)
 #include "type_name_gnuc.hpp"
 #elif defined(_MSC_VER)

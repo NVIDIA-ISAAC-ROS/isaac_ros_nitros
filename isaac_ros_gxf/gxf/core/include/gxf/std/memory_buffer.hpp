@@ -64,7 +64,7 @@ class MemoryBuffer {
     return Success;
   }
 
-  ~MemoryBuffer() { freeBuffer(); }
+  virtual ~MemoryBuffer() { freeBuffer(); }
 
   Expected<void> resize(Handle<Allocator> allocator, uint64_t size,
                          MemoryStorageType storage_type) {
@@ -121,7 +121,7 @@ class MemoryBuffer {
   // Size of buffer contents in bytes
   uint64_t size() const { return size_; }
 
- private:
+ protected:
   uint64_t size_ = 0;
   byte* pointer_ = nullptr;
   MemoryStorageType storage_type_ = MemoryStorageType::kHost;

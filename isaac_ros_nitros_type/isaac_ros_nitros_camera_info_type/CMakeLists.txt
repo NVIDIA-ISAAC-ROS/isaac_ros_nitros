@@ -37,7 +37,11 @@ endif()
 find_package(yaml-cpp)
 
 # NitrosCameraInfo
-ament_auto_add_library(${PROJECT_NAME} SHARED src/nitros_camera_info.cpp)
+ament_auto_add_library(${PROJECT_NAME} SHARED
+  src/nitros_camera_info.cpp
+  src/nitros_camera_info_view.cpp
+)
+
 target_link_libraries(${PROJECT_NAME}
   yaml-cpp
 )
@@ -77,5 +81,11 @@ if(BUILD_TESTING)
   find_package(launch_testing_ament_cmake REQUIRED)
   add_launch_test(test/isaac_ros_nitros_camera_info_type_test_pol.py TIMEOUT "15")
 endif()
+
+
+# Embed versioning information into installed files
+ament_index_get_resource(ISAAC_ROS_COMMON_CMAKE_PATH isaac_ros_common_cmake_path isaac_ros_common)
+include("${ISAAC_ROS_COMMON_CMAKE_PATH}/isaac_ros_common-version-info.cmake")
+generate_version_info(${PROJECT_NAME})
 
 ament_auto_package()

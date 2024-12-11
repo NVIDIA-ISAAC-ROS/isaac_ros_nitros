@@ -37,6 +37,7 @@ namespace nitros
 {
 
 constexpr uint64_t kDefaultCUDAMemoryPoolSize = 2048ULL * 1024 * 1024;
+constexpr char kDisableCUDAMemPoolEnv[] = "DISABLE_NITROS_CUDA_MEM_POOL";
 
 gxf_context_t NitrosContext::main_context_ = nullptr;
 gxf_context_t NitrosContext::shared_context_ = nullptr;
@@ -76,6 +77,19 @@ std::vector<char *> ToCStringArray(const std::vector<std::string> & strings)
   return cstrings;
 }
 
+bool IsCUDAMemPoolDisabledFromEnv(const char * env_name)
+{
+  const char * disable_cuda_mem_pool_env = std::getenv(env_name);
+  bool disable_cuda_mem_pool = false;
+  if (disable_cuda_mem_pool_env != nullptr) {
+    auto disable_cuda_mem_pool_str = std::string(disable_cuda_mem_pool_env);
+    if (disable_cuda_mem_pool_str == "1" || disable_cuda_mem_pool_str == "true") {
+      disable_cuda_mem_pool = true;
+    }
+  }
+  return disable_cuda_mem_pool;
+}
+
 NitrosContext::NitrosContext()
 {
   // Mutex: shared_context_mutex_
@@ -95,6 +109,16 @@ NitrosContext::NitrosContext()
         get_logger(),
         "[NitrosContext] GxfGetSharedContext Error: %s", GxfResultStr(code));
       return;
+    }
+    if (!IsCUDAMemPoolDisabledFromEnv(kDisableCUDAMemPoolEnv)) {
+      RCLCPP_DEBUG(get_logger(), "[NitrosContext] CUDA Memory Pool is enabled");
+      code = setCUDAMemoryPoolSize(kDefaultCUDAMemoryPoolSize);
+      if (code != GXF_SUCCESS) {
+        RCLCPP_ERROR(
+          get_logger(),
+          "[NitrosContext] setCUDAMemoryPoolSize Error: %s", GxfResultStr(code));
+        return;
+      }
     }
   }
 
@@ -168,14 +192,6 @@ gxf_result_t NitrosContext::getComponentPointer(
     RCLCPP_ERROR(
       get_logger(),
       "[NitrosContext] GxfComponentPointer Error: %s", GxfResultStr(code));
-    return code;
-  }
-
-  code = setCUDAMemoryPoolSize(kDefaultCUDAMemoryPoolSize);
-  if (code != GXF_SUCCESS) {
-    RCLCPP_ERROR(
-      get_logger(),
-      "[NitrosContext] setCUDAMemoryPoolSize Error: %s", GxfResultStr(code));
     return code;
   }
 

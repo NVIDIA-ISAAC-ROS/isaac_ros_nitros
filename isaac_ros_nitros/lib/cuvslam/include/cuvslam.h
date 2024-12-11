@@ -1,19 +1,13 @@
-// SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
-// Copyright (c) 2023-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-// http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-//
-// SPDX-License-Identifier: Apache-2.0
+/**
+ * @file cuvslam.h
+
+ * @copyright Copyright (c) 2023, NVIDIA CORPORATION.  All rights reserved.\n\n
+ * NVIDIA CORPORATION and its licensors retain all intellectual property
+ * and proprietary rights in and to this software, related documentation
+ * and any modifications thereto.  Any use, reproduction, disclosure or
+ * distribution of this software and related documentation without an express
+ * license agreement from NVIDIA CORPORATION is strictly prohibited.
+ */
 
 #pragma once
 
@@ -49,7 +43,7 @@ extern "C" {
 #define CUVSLAM_API_VERSION_MAJOR 12
 
 /// Minor version
-#define CUVSLAM_API_VERSION_MINOR 2
+#define CUVSLAM_API_VERSION_MINOR 6
 
 /**
  * @name Error codes
@@ -233,6 +227,26 @@ struct CUVSLAM_CameraRig {
 };
 
 /**
+* Localization settings
+*/
+struct CUVSLAM_LocalizationSettings {
+    float horizontal_search_radius; ///< horizontal search radius in meters
+    float vertical_search_radius;   ///< vertical search radius in meters
+
+    float horizontal_step;          ///< horizontal step in meters
+    float vertical_step;            ///< vertical step in meters
+    float angular_step_rads;          ///< angular step around vertical axis in radians
+};
+
+ /**
+ * List of cameras available for SLAM
+ */
+ struct CUVSLAM_SlamCameras {
+    uint32_t num;                        ///< number of filled elements in camera list
+    int32_t* camera_list;               ///< cameras
+ };
+
+/**
  * Configuration parameters that affect the whole tracking session
  */
 struct CUVSLAM_Configuration {
@@ -289,6 +303,9 @@ struct CUVSLAM_Configuration {
      * sync mode (if true -> same thread with visual odometry). Default: slam_sync_mode = 0
      */
     int32_t slam_sync_mode;
+
+    // List of cameras available for SLAM
+    struct CUVSLAM_SlamCameras slam_cameras;
 
     /**
      * Enable reading internal data from SLAM
@@ -353,12 +370,25 @@ struct CUVSLAM_Configuration {
      */
     int32_t slam_max_map_size;
 
+    /** Minimum time interval between loop closure events.
+     * 1000 is suitable for real-time mapping.
+     * Requirements:
+     *      enable_localization_n_mapping = true
+     * Default is 0
+     */
+    uint64_t slam_throttling_time_ms;
+
     /**
      * Multicamera mode: moderate (0), performance (1) or precision (2).
      * Multicamera odometry settings will be adjusted depending on a chosen strategy.
      * Default is moderate (0).
      */
     int32_t multicam_mode;
+
+    /**
+     * Localization Settings
+     */
+    struct CUVSLAM_LocalizationSettings localization_settings;
 };
 
 /**
@@ -381,7 +411,7 @@ struct CUVSLAM_Image {
     int32_t height;        ///< image height must match what was provided in CUVSLAM_Camera
     int32_t camera_index;  ///< index of the camera in the rig
     int32_t pitch;         ///< bytes per image row including padding for GPU memory images
-    enum CUVSLAM_ImageEncoding image_encoding; ///< 
+    enum CUVSLAM_ImageEncoding image_encoding; ///< grayscale (8 bit) and RGB (8 bit) are supported now
 };
 
 /**
@@ -559,6 +589,22 @@ struct CUVSLAM_PoseStamped {
     struct CUVSLAM_Pose pose;   ///<
 };
 
+/** Pose graph nodes */
+struct CUVSLAM_PoseGraphNodeVector
+{
+    uint32_t num;                       ///< number of filled elements in array
+    uint32_t max;                       ///< size of pre-allocated array
+    struct CUVSLAM_PoseStamped *nodes;  ///< nodes array
+};
+
+/** Pose graph edges */
+struct CUVSLAM_PoseGraphEdgeVector
+{
+    uint32_t num;                       ///< number of filled elements in array
+    uint32_t max;                       ///< size of pre-allocated array
+    struct CUVSLAM_PoseGraphEdge* edges;///< edges array
+};
+
 /**
  * Asynchronous response for CUVSLAM_SaveToSlamDb()
  * @param[in] response_context - context
@@ -613,6 +659,12 @@ void CUVSLAM_WarmUpGPU();
  */
 CUVSLAM_API
 void CUVSLAM_InitDefaultConfiguration(struct CUVSLAM_Configuration *cfg);
+
+/**
+ * Get the default configuration
+ */
+CUVSLAM_API
+struct CUVSLAM_Configuration CUVSLAM_GetDefaultConfiguration();
 
 /**
  * Use this to initialize cuVSLAM
@@ -742,7 +794,7 @@ CUVSLAM_Status CUVSLAM_SetSlamPose(CUVSLAM_TrackerHandle tracker, const struct C
  *      enable_localization_n_mapping = true
 */
 CUVSLAM_API
-uint32_t CUVSLAM_GetAllSLAMPoses(CUVSLAM_TrackerHandle tracker, uint32_t max_poses_stamped_count,
+uint32_t CUVSLAM_GetAllSlamPoses(CUVSLAM_TrackerHandle tracker, uint32_t max_poses_stamped_count,
                                  struct CUVSLAM_PoseStamped *poses_stamped);
 
 /**
@@ -781,7 +833,7 @@ CUVSLAM_Status CUVSLAM_SaveToSlamDb(CUVSLAM_TrackerHandle tracker, const char *f
  */
 CUVSLAM_API
 CUVSLAM_Status CUVSLAM_LocalizeInExistDb(CUVSLAM_TrackerHandle tracker, const char *folder_name,
-                                         const struct CUVSLAM_Pose *guess_pose, float radius CUVSLAM_DEFAULT(0),
+                                         const struct CUVSLAM_Pose *guess_pose,
                                          const struct CUVSLAM_Image *images CUVSLAM_DEFAULT(nullptr),
                                          size_t images_size CUVSLAM_DEFAULT(2),
                                          CUVSLAM_LocalizeInExistDbResponse response CUVSLAM_DEFAULT(nullptr),
@@ -814,6 +866,21 @@ CUVSLAM_Status CUVSLAM_GetLastLandmarks(CUVSLAM_TrackerHandle tracker, struct CU
  */
 CUVSLAM_API
 CUVSLAM_Status CUVSLAM_GetLastGravity(CUVSLAM_TrackerHandle tracker, struct CUVSLAM_Gravity *gravity);
+
+/**
+ * Get pose graph.
+ * [DEPRECATED] use CUVSLAM_StartReadingPoseGraph/CUVSLAM_FinishReadingPoseGraph instead.
+ * This function should not be used except on recordings after the replay.
+ * It additionally returns timestamps for graph nodes. 
+ * @param[in]  tracker   tracker handle
+ * @param[out] nodes pose graph nodes array
+ * @param[out] edges pose graph edges array
+ * @return result status (error code)
+ */
+CUVSLAM_API
+CUVSLAM_Status CUVSLAM_GetPoseGraph(CUVSLAM_TrackerHandle tracker,
+                                    struct CUVSLAM_PoseGraphNodeVector *nodes,
+                                    struct CUVSLAM_PoseGraphEdgeVector *edges);
 
 /**
  * Get slam metrics

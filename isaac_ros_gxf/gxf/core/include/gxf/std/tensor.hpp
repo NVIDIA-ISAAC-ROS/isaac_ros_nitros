@@ -16,6 +16,8 @@
 // SPDX-License-Identifier: Apache-2.0
 #pragma once
 
+#include <cuda_fp16.h>
+
 #include <array>
 #include <cstdint>
 #include <memory>
@@ -50,6 +52,7 @@ enum class PrimitiveType : int32_t {
   kFloat64,
   kComplex64,
   kComplex128,
+  kFloat16,
 };
 
 // Returns the size of each element of specific PrimitiveType as number of bytes.
@@ -73,6 +76,7 @@ GXF_PRIMITIVE_TYPE_TRAITS(int32_t, kInt32);
 GXF_PRIMITIVE_TYPE_TRAITS(uint32_t, kUnsigned32);
 GXF_PRIMITIVE_TYPE_TRAITS(int64_t, kInt64);
 GXF_PRIMITIVE_TYPE_TRAITS(uint64_t, kUnsigned64);
+GXF_PRIMITIVE_TYPE_TRAITS(__half, kFloat16);
 GXF_PRIMITIVE_TYPE_TRAITS(float, kFloat32);
 GXF_PRIMITIVE_TYPE_TRAITS(double, kFloat64);
 GXF_PRIMITIVE_TYPE_TRAITS(complex64, kComplex64);

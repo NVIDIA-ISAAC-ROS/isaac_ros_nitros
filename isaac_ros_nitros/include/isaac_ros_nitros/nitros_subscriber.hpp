@@ -52,7 +52,7 @@ public:
     const gxf::optimizer::ComponentInfo & gxf_component_info,
     const std::vector<std::string> & supported_data_formats,
     const NitrosPublisherSubscriberConfig & config,
-    const NitrosStatisticsConfig & statistics_config,
+    const NitrosDiagnosticsConfig & diagnostics_config,
     const bool use_callback_group = false);
 
   NitrosSubscriber(
@@ -70,7 +70,7 @@ public:
     std::shared_ptr<NitrosTypeManager> nitros_type_manager,
     const std::vector<std::string> & supported_data_formats,
     const NitrosPublisherSubscriberConfig & config,
-    const NitrosStatisticsConfig & statistics_config);
+    const NitrosDiagnosticsConfig & diagnostics_config);
 
   // Getter for the negotiated_sub_
   std::shared_ptr<negotiated::NegotiatedSubscription> getNegotiatedSubscriber();
@@ -93,6 +93,12 @@ public:
 
   // Set the gxf_receiver_ptr_ pointing to a receiver component in the running graph
   void setReceiverPointer(void * gxf_receiver_ptr);
+
+  // Set the frame drop policy for the underlying GXF receiver
+  void setReceiverPolicy(const size_t policy);
+
+  // Set the capacity for the underlying GXF receiver
+  void setReceiverCapacity(const size_t capacity);
 
   // Push an entity into the corresponding receiver in the underlying graph
   bool pushEntity(const int64_t eid, bool should_block = false);

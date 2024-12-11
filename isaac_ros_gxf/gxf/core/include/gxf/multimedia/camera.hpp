@@ -121,7 +121,7 @@ struct CameraModelBase {
   // Distortion type of the camera.
   DistortionType distortion_type;
   // Distortion coefficients of the camera.
-  T distortion_coefficients[kMaxDistortionCoefficients];
+  std::array<T, kMaxDistortionCoefficients> distortion_coefficients;
 };
 
 using CameraModel = CameraModelBase<float>;

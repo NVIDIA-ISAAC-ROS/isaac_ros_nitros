@@ -17,13 +17,64 @@
 #ifndef NVIDIA_GXF_STD_ALLOCATOR_HPP
 #define NVIDIA_GXF_STD_ALLOCATOR_HPP
 
+#include <string>
+
 #include "common/byte.hpp"
 #include "gxf/core/component.hpp"
 
 namespace nvidia {
 namespace gxf {
 
-enum struct MemoryStorageType { kHost = 0, kDevice = 1, kSystem = 2 };
+enum struct MemoryStorageType {
+  kHost = 0,    // Host Pinned Memory
+  kDevice = 1,  // Cuda Device Memory
+  kSystem = 2   // Heap Memory
+};
+
+// Custom parameter parser for MemoryStorageType
+template <>
+struct ParameterParser<MemoryStorageType> {
+  static Expected<MemoryStorageType> Parse(gxf_context_t context, gxf_uid_t component_uid,
+                                       const char* key, const YAML::Node& node,
+                                       const std::string& prefix) {
+    const std::string value = node.as<std::string>();
+    if (strcmp(value.c_str(), "Host") == 0) {
+      return MemoryStorageType::kHost;
+    }
+    if (strcmp(value.c_str(), "Device") == 0) {
+      return MemoryStorageType::kDevice;
+    }
+    if (strcmp(value.c_str(), "System") == 0) {
+      return MemoryStorageType::kSystem;
+    }
+    return Unexpected{GXF_ARGUMENT_OUT_OF_RANGE};
+  }
+};
+
+// Custom parameter parser for MemoryStorageType
+template<>
+struct ParameterWrapper<MemoryStorageType> {
+  static Expected<YAML::Node> Wrap(gxf_context_t context, const MemoryStorageType& value) {
+    YAML::Node node(YAML::NodeType::Scalar);
+    switch (value) {
+      case MemoryStorageType::kHost: {
+        node = std::string("Host");
+        break;
+      }
+      case MemoryStorageType::kDevice: {
+        node = std::string("Device");
+        break;
+      }
+      case MemoryStorageType::kSystem: {
+        node = std::string("System");
+        break;
+      }
+      default:
+        return Unexpected{GXF_PARAMETER_OUT_OF_RANGE};
+    }
+    return node;
+  }
+};
 
 // Lifecycle stages of an allocator
 enum struct AllocatorStage : uint8_t {

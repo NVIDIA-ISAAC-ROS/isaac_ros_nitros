@@ -18,6 +18,7 @@
 #include "detection2_d_array_message.hpp"
 
 #include <utility>
+#include <vector>
 
 namespace nvidia
 {

@@ -28,6 +28,11 @@
 #include "isaac_ros_nitros/types/nitros_format_agent.hpp"
 #include "isaac_ros_nitros/types/nitros_type_base.hpp"
 
+#include "gxf/core/gxf.h"
+#include "gxf/core/entity.hpp"
+#include "gxf/multimedia/camera.hpp"
+#include "gxf/std/timestamp.hpp"
+
 #include "rclcpp/type_adapter.hpp"
 #include "sensor_msgs/msg/camera_info.hpp"
 
@@ -62,6 +67,11 @@ NITROS_TYPE_EXTENSION_FACTORY_BEGIN()
 NITROS_TYPE_EXTENSION_ADD("isaac_ros_gxf", "gxf/lib/multimedia/libgxf_multimedia.so")
 NITROS_TYPE_EXTENSION_FACTORY_END()
 NITROS_TYPE_FACTORY_END()
+
+// Helper for convert_to_custom, resusable in other nodes
+void copy_ros_to_gxf_camera_info(
+  sensor_msgs::msg::CameraInfo source,
+  nvidia::gxf::Expected<nvidia::gxf::Entity> & destination);
 
 }  // namespace nitros
 }  // namespace isaac_ros

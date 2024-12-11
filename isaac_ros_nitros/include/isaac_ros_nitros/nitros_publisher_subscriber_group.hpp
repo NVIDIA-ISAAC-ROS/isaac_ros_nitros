@@ -53,7 +53,7 @@ public:
     const gxf::optimizer::GraphIOGroupSupportedDataTypesInfo & gxf_io_supported_data_formats_info,
     const NitrosPublisherSubscriberConfigMap & nitros_pub_sub_configs,
     const std::shared_ptr<std::map<ComponentKey, std::string>> frame_id_map_ptr,
-    const NitrosStatisticsConfig & statistics_config);
+    const NitrosDiagnosticsConfig & diagnostics_config);
 
   // Find the corresponding Nitros publisher of the given component
   std::shared_ptr<NitrosPublisher> findNitrosPublisher(
@@ -172,8 +172,8 @@ private:
   // Frame ID map
   std::shared_ptr<std::map<ComponentKey, std::string>> frame_id_map_ptr_;
 
-  // Configurations for a Nitros statistics
-  NitrosStatisticsConfig statistics_config_;
+  // Configurations for a Nitros diagnostics
+  NitrosDiagnosticsConfig diagnostics_config_;
 };
 
 

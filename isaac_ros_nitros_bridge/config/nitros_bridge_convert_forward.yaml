@@ -1,0 +1,9 @@
+topics:
+  -
+    topic: /r2b/ros1_input_bridge_image  # Topic name for ros1 bridge
+    type: isaac_ros_nitros_bridge_interfaces/msg/NitrosBridgeImage # Type type for ros1 bridge
+    queue_size: 10 
+  -
+    topic: /r2b/ros1_output_bridge_image # Topic name for ros1 bridge
+    type: isaac_ros_nitros_bridge_interfaces/msg/NitrosBridgeImage # Type type for ros1 bridge
+    queue_size: 10 

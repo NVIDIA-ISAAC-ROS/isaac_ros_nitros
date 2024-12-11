@@ -121,7 +121,7 @@ class PeriodicSchedulingTerm : public SchedulingTerm {
   Parameter<std::string> recess_period_;
   Parameter<PeriodicSchedulingPolicy> policy_;
 
-  int64_t recess_period_ns_;
+  int64_t recess_period_ns_ = 0;
   Expected<int64_t> next_target_ = Unexpected{GXF_UNINITIALIZED_VALUE};
 };
 
