@@ -105,6 +105,10 @@ class NitrosCameraDropNodeMode0Test(IsaacROSBaseTest):
 
             # Publish TOTAL_COUNT number of messages
             counter = 0
+            # This test requires deterministic communication between the test node
+            # and the NitrosCameraDropNode. A 1-second delay ensures the NitrosCameraDropNode
+            # has fully started, preventing message drops/flaky tests.
+            time.sleep(1.0)
             while counter < TOTAL_COUNT:
                 header = self.node.get_clock().now().to_msg()
                 image_msg.header.stamp = header

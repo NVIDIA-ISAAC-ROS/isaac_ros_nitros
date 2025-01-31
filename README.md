@@ -6,7 +6,7 @@ NVIDIA Isaac Transport for ROS package for hardware-acceleration friendly moveme
 
 ## Overview
 
-[Isaac ROS NITROS](https://github.com/NVIDIA-ISAAC-ROS/isaac_ros_nitros) contains NVIDIA’s implementation
+Isaac ROS NITROS contains NVIDIA’s implementation
 of type adaptation and negotiation in ROS 2. To learn more about NITROS, see [here](https://nvidia-isaac-ros.github.io/concepts/nitros/index.html).
 
 Isaac ROS NITROS is composed of a number of individual packages, each with either a functional or structural purpose:
