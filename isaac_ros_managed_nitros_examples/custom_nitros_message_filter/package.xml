@@ -21,7 +21,7 @@
 <?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
   <name>custom_nitros_message_filter</name>
-  <version>3.2.4</version>
+  <version>3.2.5</version>
   <description>Synchronization of Camera Info and Custom NITROS Image using ROS 2 message_filters</description>
 
   <maintainer email="isaac-ros-maintainers@nvidia.com">Isaac ROS Maintainers</maintainer>
