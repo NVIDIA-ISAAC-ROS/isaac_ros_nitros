@@ -1,0 +1,273 @@
+isaac_ros_nitros:
+  docker_images: []
+  exclude_patterns: []
+  packages:
+    custom_nitros_dnn_image_encoder:
+      exclude: []
+      relative_path_from_module: isaac_ros_managed_nitros_examples
+      release_debian: true
+      release_source: true
+    custom_nitros_image:
+      exclude: []
+      relative_path_from_module: isaac_ros_managed_nitros_examples
+      release_debian: true
+      release_source: true
+    custom_nitros_message_filter:
+      exclude: []
+      relative_path_from_module: isaac_ros_managed_nitros_examples
+      release_debian: true
+      release_source: true
+    custom_nitros_message_filter_interfaces:
+      exclude: []
+      relative_path_from_module: isaac_ros_managed_nitros_examples
+      release_debian: true
+      release_source: true
+    custom_nitros_string:
+      exclude: []
+      relative_path_from_module: isaac_ros_managed_nitros_examples
+      release_debian: true
+      release_source: true
+    gxf_isaac_argus:
+      exclude: []
+      relative_path_from_module: isaac_ros_gxf_extensions
+      release_debian: true
+      release_source: true
+    gxf_isaac_atlas:
+      exclude: []
+      relative_path_from_module: isaac_ros_gxf_extensions
+      release_debian: true
+      release_source: true
+    gxf_isaac_cuda:
+      exclude: []
+      relative_path_from_module: isaac_ros_gxf_extensions
+      release_debian: true
+      release_source: true
+    gxf_isaac_flatscan_localization:
+      exclude: []
+      relative_path_from_module: isaac_ros_gxf_extensions
+      release_debian: true
+      release_source: true
+    gxf_isaac_gems:
+      exclude: []
+      relative_path_from_module: isaac_ros_gxf_extensions
+      release_debian: true
+      release_source: true
+    gxf_isaac_gxf_helpers:
+      exclude: []
+      relative_path_from_module: isaac_ros_gxf_extensions
+      release_debian: true
+      release_source: true
+    gxf_isaac_hesai:
+      exclude: []
+      relative_path_from_module: isaac_ros_gxf_extensions
+      release_debian: true
+      release_source: true
+    gxf_isaac_localization:
+      exclude: []
+      relative_path_from_module: isaac_ros_gxf_extensions
+      release_debian: true
+      release_source: true
+    gxf_isaac_message_compositor:
+      exclude: []
+      relative_path_from_module: isaac_ros_gxf_extensions
+      release_debian: true
+      release_source: true
+    gxf_isaac_messages:
+      exclude: []
+      relative_path_from_module: isaac_ros_gxf_extensions
+      release_debian: true
+      release_source: true
+    gxf_isaac_messages_throttler:
+      exclude: []
+      relative_path_from_module: isaac_ros_gxf_extensions
+      release_debian: true
+      release_source: true
+    gxf_isaac_optimizer:
+      exclude: []
+      relative_path_from_module: isaac_ros_gxf_extensions
+      release_debian: true
+      release_source: true
+    gxf_isaac_point_cloud:
+      exclude: []
+      relative_path_from_module: isaac_ros_gxf_extensions
+      release_debian: true
+      release_source: true
+    gxf_isaac_range_scan_processing:
+      exclude: []
+      relative_path_from_module: isaac_ros_gxf_extensions
+      release_debian: true
+      release_source: true
+    gxf_isaac_ros_cuda:
+      exclude: []
+      relative_path_from_module: isaac_ros_gxf_extensions
+      release_debian: true
+      release_source: true
+    gxf_isaac_ros_messages:
+      exclude: []
+      relative_path_from_module: isaac_ros_gxf_extensions
+      release_debian: true
+      release_source: true
+    gxf_isaac_segway:
+      exclude: []
+      relative_path_from_module: isaac_ros_gxf_extensions
+      release_debian: true
+      release_source: true
+    gxf_isaac_sight:
+      exclude: []
+      relative_path_from_module: isaac_ros_gxf_extensions
+      release_debian: true
+      release_source: true
+    gxf_isaac_timestamp_correlator:
+      exclude: []
+      relative_path_from_module: isaac_ros_gxf_extensions
+      release_debian: true
+      release_source: true
+    gxf_isaac_utils:
+      exclude: []
+      relative_path_from_module: isaac_ros_gxf_extensions
+      release_debian: true
+      release_source: true
+    isaac_ros_gxf:
+      exclude: []
+      relative_path_from_module: .
+      release_debian: true
+      release_source: true
+    isaac_ros_managed_nitros:
+      exclude: []
+      relative_path_from_module: .
+      release_debian: true
+      release_source: true
+    isaac_ros_nitros:
+      exclude: []
+      relative_path_from_module: .
+      release_debian: true
+      release_source: true
+    isaac_ros_nitros_battery_state_type:
+      exclude: []
+      relative_path_from_module: isaac_ros_nitros_type
+      release_debian: true
+      release_source: true
+    isaac_ros_nitros_bridge_ros1:
+      exclude: []
+      relative_path_from_module: isaac_ros_nitros_bridge/ros1
+      release_debian: false
+      release_source: true
+    isaac_ros_nitros_bridge_ros2:
+      exclude: []
+      relative_path_from_module: isaac_ros_nitros_bridge
+      release_debian: true
+      release_source: true
+    isaac_ros_nitros_camera_info_type:
+      exclude: []
+      relative_path_from_module: isaac_ros_nitros_type
+      release_debian: true
+      release_source: true
+    isaac_ros_nitros_compressed_image_type:
+      exclude: []
+      relative_path_from_module: isaac_ros_nitros_type
+      release_debian: true
+      release_source: true
+    isaac_ros_nitros_compressed_video_type:
+      exclude: []
+      relative_path_from_module: isaac_ros_nitros_type
+      release_debian: true
+      release_source: true
+    isaac_ros_nitros_correlated_timestamp_type:
+      exclude: []
+      relative_path_from_module: isaac_ros_nitros_type
+      release_debian: true
+      release_source: true
+    isaac_ros_nitros_detection2_d_array_type:
+      exclude: []
+      relative_path_from_module: isaac_ros_nitros_type
+      release_debian: true
+      release_source: true
+    isaac_ros_nitros_detection3_d_array_type:
+      exclude: []
+      relative_path_from_module: isaac_ros_nitros_type
+      release_debian: true
+      release_source: true
+    isaac_ros_nitros_disparity_image_type:
+      exclude: []
+      relative_path_from_module: isaac_ros_nitros_type
+      release_debian: true
+      release_source: true
+    isaac_ros_nitros_encoder_ticks_type:
+      exclude: []
+      relative_path_from_module: isaac_ros_nitros_type
+      release_debian: true
+      release_source: true
+    isaac_ros_nitros_flat_scan_type:
+      exclude: []
+      relative_path_from_module: isaac_ros_nitros_type
+      release_debian: true
+      release_source: true
+    isaac_ros_nitros_image_type:
+      exclude: []
+      relative_path_from_module: isaac_ros_nitros_type
+      release_debian: true
+      release_source: true
+    isaac_ros_nitros_imu_type:
+      exclude: []
+      relative_path_from_module: isaac_ros_nitros_type
+      release_debian: true
+      release_source: true
+    isaac_ros_nitros_occupancy_grid_type:
+      exclude: []
+      relative_path_from_module: isaac_ros_nitros_type
+      release_debian: true
+      release_source: true
+    isaac_ros_nitros_odometry_type:
+      exclude: []
+      relative_path_from_module: isaac_ros_nitros_type
+      release_debian: true
+      release_source: true
+    isaac_ros_nitros_point_cloud_type:
+      exclude: []
+      relative_path_from_module: isaac_ros_nitros_type
+      release_debian: true
+      release_source: true
+    isaac_ros_nitros_pose_array_type:
+      exclude: []
+      relative_path_from_module: isaac_ros_nitros_type
+      release_debian: true
+      release_source: true
+    isaac_ros_nitros_pose_cov_stamped_type:
+      exclude: []
+      relative_path_from_module: isaac_ros_nitros_type
+      release_debian: true
+      release_source: true
+    isaac_ros_nitros_std_msg_type:
+      exclude: []
+      relative_path_from_module: isaac_ros_nitros_type
+      release_debian: true
+      release_source: true
+    isaac_ros_nitros_tensor_list_type:
+      exclude: []
+      relative_path_from_module: isaac_ros_nitros_type
+      release_debian: true
+      release_source: true
+    isaac_ros_nitros_topic_tools:
+      exclude: []
+      relative_path_from_module: .
+      release_debian: true
+      release_source: true
+    isaac_ros_nitros_twist_type:
+      exclude: []
+      relative_path_from_module: isaac_ros_nitros_type
+      release_debian: true
+      release_source: true
+    isaac_ros_pynitros:
+      exclude: []
+      relative_path_from_module: .
+      release_debian: true
+      release_source: true
+    isaac_ros_ros1_forward:
+      exclude: []
+      relative_path_from_module: isaac_ros_nitros_bridge/ros1
+      release_debian: false
+      release_source: true
+  relative_path_from_root: ros_ws/src
+  release_organization: NVIDIA-ISAAC-ROS
+  release_type: managed
+  symlink_submodules: {}
