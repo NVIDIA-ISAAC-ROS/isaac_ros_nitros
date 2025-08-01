@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
-// Copyright (c) 2021-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+// Copyright (c) 2021-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -31,7 +31,33 @@ inline char* TypenameAsStringImpl(const char* begin, char* output, int32_t max_l
 #endif
 
 namespace nvidia {
+namespace helper {
+/**
+ * Returns the pretty function name. It includes the complete function name along with the namespace
+ * for template parameters.
+ * Compiler using gcc-13 or later strips the namespace of the template parameter if
+ * PRETTY_FUNCTION is called in the same namespace as that of the namespace of template parameter.
+ * Compiler does not strip the namespace if the function that calls the PRETTY_FUNCTION macro is
+ * called in a different namespace.
+ *
+ * @return the pretty function name as a const char*
+ */
+  template <typename>
+  const char* PrettyFunctionName() {
+    return __PRETTY_FUNCTION__;
+  }
 
+/**
+ * Returns the sizeof the pretty function name.
+ */
+  template <typename>
+  constexpr int32_t PrettyFunctionSize() {
+    return sizeof(__PRETTY_FUNCTION__);
+  }
+}  // namespace helper
+}  // namespace nvidia
+
+namespace nvidia {
 // Gives a string representation of the name of a C++ type.
 //
 // The function will compute the typename during the first invocation and store it in heap memory.
@@ -46,16 +72,18 @@ namespace nvidia {
 //
 // Note: Only "simple" class types in global namespace or a "normal" namespaces are guaranteed to
 // work. Templates, lambdas and anonymous namespaces are not guaranteed to work as expected.
-template <typename>
+template <typename T>
 const char* TypenameAsString() {
   // Ideally the typename string would be computed at compile time, however this does not seem to
   // be possible. Thus the typename string is computed the first time this function is evaluated
   // and cached for future function evaluations.
-  constexpr int32_t kMaxNameLength = sizeof(__PRETTY_FUNCTION__);  // Use upper bound to be safe.
+  const char* template_name = nvidia::helper::PrettyFunctionName<T>();
+  // Use upper bound to be safe.
+  constexpr int32_t kMaxNameLength = nvidia::helper::PrettyFunctionSize<T>();
   static char s_name[kMaxNameLength] = {0};  // Initialize with 0 to get a null-terminated string.
   static char* result = s_name;
   if (s_name[0] == 0 && result != nullptr) {  // Check for first invocation of this function.
-    result = TypenameAsStringImpl(__PRETTY_FUNCTION__, s_name, kMaxNameLength);
+    result = TypenameAsStringImpl(template_name, s_name, kMaxNameLength);
   }
   return result;
 }
