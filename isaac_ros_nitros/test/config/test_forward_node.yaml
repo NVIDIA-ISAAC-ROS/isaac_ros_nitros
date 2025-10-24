@@ -53,6 +53,7 @@ components:
     clock: clock
     stop_on_deadlock: false
     worker_thread_number: 2
+    worker_thread_name_id: "test_forward_node"
 - type: nvidia::gxf::JobStatistics
   parameters:
     clock: clock

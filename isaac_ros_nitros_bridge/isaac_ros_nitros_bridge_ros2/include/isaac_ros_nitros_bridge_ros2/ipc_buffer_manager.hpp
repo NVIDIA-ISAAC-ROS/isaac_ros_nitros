@@ -80,7 +80,8 @@ struct HostIPCBuffer
       shm_ptr_ = std::make_shared<boost::interprocess::mapped_region>(
         *shm_object_, boost::interprocess::read_write);
       refcount_ = static_cast<int *>(shm_ptr_->get_address());
-      uid_ = static_cast<boost::uuids::uuid *>(shm_ptr_->get_address() + sizeof(int));
+      uid_ = reinterpret_cast<boost::uuids::uuid *>(
+        static_cast<char *>(shm_ptr_->get_address()) + sizeof(int));
 
       // Initialize refcount and UID
       *refcount_ = 0;
@@ -94,7 +95,8 @@ struct HostIPCBuffer
         shm_ptr_ = std::make_shared<boost::interprocess::mapped_region>(
           *shm_object_, boost::interprocess::read_write);
         refcount_ = static_cast<int *>(shm_ptr_->get_address());
-        uid_ = static_cast<boost::uuids::uuid *>(shm_ptr_->get_address() + sizeof(int));
+        uid_ = reinterpret_cast<boost::uuids::uuid *>(
+          static_cast<char *>(shm_ptr_->get_address()) + sizeof(int));
       } catch (const boost::interprocess::interprocess_exception & ex) {
         RCLCPP_ERROR(
           rclcpp::get_logger("SharedMem"), "Failed to open shared memory object %s",
@@ -257,8 +259,9 @@ public:
   ~IPCBufferManager()
   {
     for (size_t i = 0; i < buffer_count_; i++) {
-      cuMemRelease(device_ipc_buffers_[i]->generic_allocation_handle);
       cuMemUnmap(device_ipc_buffers_[i]->d_ptr, alloc_size_);
+      cuMemAddressFree(device_ipc_buffers_[i]->d_ptr, alloc_size_);
+      cuMemRelease(device_ipc_buffers_[i]->generic_allocation_handle);
       std::string shm_name =
         std::to_string(device_ipc_buffers_[i]->pid) + std::to_string(device_ipc_buffers_[i]->fd);
       boost::interprocess::named_mutex::remove(shm_name.c_str());

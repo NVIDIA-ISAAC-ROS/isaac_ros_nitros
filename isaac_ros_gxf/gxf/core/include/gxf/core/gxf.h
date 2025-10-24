@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
-// Copyright (c) 2021-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+// Copyright (c) 2021-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -180,7 +180,7 @@ typedef void* gxf_context_t;
 #define kNullContext nullptr
 
 /// @brief GXF Core Version
-#define kGxfCoreVersion "4.1.0"
+#define kGxfCoreVersion "5.1.0"
 
 /// @brief Creates a new GXF context
 ///

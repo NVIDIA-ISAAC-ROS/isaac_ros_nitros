@@ -37,10 +37,26 @@ namespace
 {
 constexpr uint64_t kNanosecondsInSeconds = 1e9;
 
+nvidia::gxf::Expected<void> ReleaseImageCallback(
+  std::function<void()> release_callback,
+  void * ptr)
+{
+  if (release_callback) {
+    release_callback();
+  } else {
+    cudaFree(ptr);
+  }
+  RCLCPP_DEBUG(
+    rclcpp::get_logger("NitrosImageBuilder"),
+    "[ReleaseImageCallback] Released the cuda memory [%p]", ptr);
+  return nvidia::gxf::Success;
+}
+
 template<VideoFormat T>
 void create_image(
   const uint32_t width, const uint32_t height,
-  nvidia::gxf::Expected<nvidia::gxf::Entity> & msg_entity, void * data, const std::string & name)
+  nvidia::gxf::Expected<nvidia::gxf::Entity> & msg_entity, void * data, const std::string & name,
+  std::function<void()> release_callback)
 {
   if (width % 2 != 0 || height % 2 != 0) {
     RCLCPP_ERROR(
@@ -62,16 +78,9 @@ void create_image(
 
   nvidia::gxf::VideoBufferInfo buffer_info{width, height, T, color_planes, surface_layout};
 
-
   gxf_image.value()->wrapMemory(
     buffer_info, size, storage_type, data,
-    [](void * ptr) {
-      RCLCPP_DEBUG(
-        rclcpp::get_logger("NitrosImageBuilder"),
-        "[create_image] Freed the cuda memory [%p]", ptr);
-      cudaFree(ptr);
-      return nvidia::gxf::Success;
-    });
+    std::bind(&ReleaseImageCallback, release_callback, std::placeholders::_1));
 }
 }  // namespace
 
@@ -200,6 +209,12 @@ NitrosImageBuilder & NitrosImageBuilder::WithGpuData(void * data)
   return *this;
 }
 
+NitrosImageBuilder & NitrosImageBuilder::WithReleaseCallback(std::function<void()> release_callback)
+{
+  release_callback_ = release_callback;
+  return *this;
+}
+
 NitrosImage NitrosImageBuilder::Build()
 {
   // Validate all data is present before building the NitrosImage
@@ -246,77 +261,77 @@ NitrosImage NitrosImageBuilder::Build()
   switch (color_fmt->second) {
     case VideoFormat::GXF_VIDEO_FORMAT_RGB:
       create_image<VideoFormat::GXF_VIDEO_FORMAT_RGB>(
-        width_, height_, message, data_, nitros_image_.frame_id);
+        width_, height_, message, data_, nitros_image_.frame_id, release_callback_);
       break;
 
     case VideoFormat::GXF_VIDEO_FORMAT_RGBA:
       create_image<VideoFormat::GXF_VIDEO_FORMAT_RGBA>(
-        width_, height_, message, data_, nitros_image_.frame_id);
+        width_, height_, message, data_, nitros_image_.frame_id, release_callback_);
       break;
 
     case VideoFormat::GXF_VIDEO_FORMAT_RGB16:
       create_image<VideoFormat::GXF_VIDEO_FORMAT_RGB16>(
-        width_, height_, message, data_, nitros_image_.frame_id);
+        width_, height_, message, data_, nitros_image_.frame_id, release_callback_);
       break;
 
     case VideoFormat::GXF_VIDEO_FORMAT_BGR:
       create_image<VideoFormat::GXF_VIDEO_FORMAT_BGR>(
-        width_, height_, message, data_, nitros_image_.frame_id);
+        width_, height_, message, data_, nitros_image_.frame_id, release_callback_);
       break;
 
     case VideoFormat::GXF_VIDEO_FORMAT_BGRA:
       create_image<VideoFormat::GXF_VIDEO_FORMAT_BGRA>(
-        width_, height_, message, data_, nitros_image_.frame_id);
+        width_, height_, message, data_, nitros_image_.frame_id, release_callback_);
       break;
 
     case VideoFormat::GXF_VIDEO_FORMAT_BGR16:
       create_image<VideoFormat::GXF_VIDEO_FORMAT_BGR16>(
-        width_, height_, message, data_, nitros_image_.frame_id);
+        width_, height_, message, data_, nitros_image_.frame_id, release_callback_);
       break;
 
     case VideoFormat::GXF_VIDEO_FORMAT_GRAY:
       create_image<VideoFormat::GXF_VIDEO_FORMAT_GRAY>(
-        width_, height_, message, data_, nitros_image_.frame_id);
+        width_, height_, message, data_, nitros_image_.frame_id, release_callback_);
       break;
 
     case VideoFormat::GXF_VIDEO_FORMAT_GRAY16:
       create_image<VideoFormat::GXF_VIDEO_FORMAT_GRAY16>(
-        width_, height_, message, data_, nitros_image_.frame_id);
+        width_, height_, message, data_, nitros_image_.frame_id, release_callback_);
       break;
 
     case VideoFormat::GXF_VIDEO_FORMAT_GRAY32:
       create_image<VideoFormat::GXF_VIDEO_FORMAT_GRAY32>(
-        width_, height_, message, data_, nitros_image_.frame_id);
+        width_, height_, message, data_, nitros_image_.frame_id, release_callback_);
       break;
 
     case VideoFormat::GXF_VIDEO_FORMAT_NV24:
       create_image<VideoFormat::GXF_VIDEO_FORMAT_NV24>(
-        width_, height_, message, data_, nitros_image_.frame_id);
+        width_, height_, message, data_, nitros_image_.frame_id, release_callback_);
       break;
 
     case VideoFormat::GXF_VIDEO_FORMAT_NV24_ER:
       create_image<VideoFormat::GXF_VIDEO_FORMAT_NV24_ER>(
-        width_, height_, message, data_, nitros_image_.frame_id);
+        width_, height_, message, data_, nitros_image_.frame_id, release_callback_);
       break;
 
     case VideoFormat::GXF_VIDEO_FORMAT_NV12:
       create_image<VideoFormat::GXF_VIDEO_FORMAT_NV12>(
-        width_, height_, message, data_, nitros_image_.frame_id);
+        width_, height_, message, data_, nitros_image_.frame_id, release_callback_);
       break;
 
     case VideoFormat::GXF_VIDEO_FORMAT_NV12_ER:
       create_image<VideoFormat::GXF_VIDEO_FORMAT_NV12_ER>(
-        width_, height_, message, data_, nitros_image_.frame_id);
+        width_, height_, message, data_, nitros_image_.frame_id, release_callback_);
       break;
 
     case VideoFormat::GXF_VIDEO_FORMAT_RGB32:
       create_image<VideoFormat::GXF_VIDEO_FORMAT_RGB32>(
-        width_, height_, message, data_, nitros_image_.frame_id);
+        width_, height_, message, data_, nitros_image_.frame_id, release_callback_);
       break;
 
     case VideoFormat::GXF_VIDEO_FORMAT_RGBD32:
       create_image<VideoFormat::GXF_VIDEO_FORMAT_RGBD32>(
-        width_, height_, message, data_, nitros_image_.frame_id);
+        width_, height_, message, data_, nitros_image_.frame_id, release_callback_);
       break;
 
     default:

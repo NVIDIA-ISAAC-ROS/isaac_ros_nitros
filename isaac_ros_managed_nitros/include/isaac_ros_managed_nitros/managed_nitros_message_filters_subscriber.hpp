@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
-// Copyright (c) 2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+// Copyright (c) 2024-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -119,7 +119,8 @@ public:
     NodePtr node, const std::string & topic,
     const rmw_qos_profile_t qos = rmw_qos_profile_default) override
   {
-    subscribe(node.get(), topic, qos, rclcpp::SubscriptionOptions());
+    // Use 4-parameter shared pointer overload
+    subscribe(node, topic, qos, rclcpp::SubscriptionOptions());
   }
 
   /**
@@ -136,6 +137,7 @@ public:
     NodeType * node, const std::string & topic,
     const rmw_qos_profile_t qos = rmw_qos_profile_default) override
   {
+    // Use 4-parameter raw pointer overload
     subscribe(node, topic, qos, rclcpp::SubscriptionOptions());
   }
 
@@ -155,7 +157,52 @@ public:
     const rmw_qos_profile_t qos,
     rclcpp::SubscriptionOptions options) override
   {
-    subscribe(node.get(), topic, qos, options);
+    // Use 5-parameter shared pointer overload
+    subscribe(node, topic, qos, options, "");
+  }
+
+  /**
+   * \brief Subscribe to a topic.
+   *
+   * If this Subscriber is already subscribed to a topic, this function will first unsubscribe.
+   *
+   * \param node The rclcpp::Node to use to subscribe.
+   * \param topic The topic to subscribe to.
+   * \param qos The rmw qos profile to use to subscribe.
+   * \param options The subscription options to use to subscribe.
+   */
+  void subscribe(
+    NodeType * node,
+    const std::string & topic,
+    const rmw_qos_profile_t qos,
+    rclcpp::SubscriptionOptions options) override
+  {
+    // Use 5-parameter raw pointer overload
+    subscribe(node, topic, qos, options, "");
+  }
+
+  /**
+   * \brief Subscribe to a topic.
+   *
+   * If this Subscriber is already subscribed to a topic, this function will first unsubscribe.
+   *
+   * \param node The rclcpp::Node::SharedPtr to use to subscribe.
+   * \param topic The topic to subscribe to.
+   * \param qos The rmw qos profile to use to subscribe
+   * \param options The subscription options to use to subscribe.
+   * \param compatible_data_format The NITROS compatible data format to use to subscribe.
+   * \param diagnostics_config The NITROS diagnostics config to use to subscribe.
+   */
+  void subscribe(
+    NodePtr node,
+    const std::string & topic,
+    const rmw_qos_profile_t qos,
+    rclcpp::SubscriptionOptions options,
+    const std::string & compatible_data_format,
+    const NitrosDiagnosticsConfig & diagnostics_config = {})
+  {
+    // Use raw pointer implementation, then reset the node pointer member variables
+    subscribe(node.get(), topic, qos, options, compatible_data_format, diagnostics_config);
     node_raw_ = nullptr;
     node_shared_ = node;
   }
@@ -169,14 +216,15 @@ public:
    * \param topic The topic to subscribe to.
    * \param qos The rmw qos profile to use to subscribe
    * \param options The subscription options to use to subscribe.
+   * \param compatible_data_format The NITROS compatible data format to use to subscribe.
+   * \param diagnostics_config The NITROS diagnostics config to use to subscribe.
    */
-  // TODO(wjwwood): deprecate in favor of API's that use `rclcpp::QoS` instead.
   void subscribe(
     NodeType * node,
     const std::string & topic,
     const rmw_qos_profile_t qos,
     rclcpp::SubscriptionOptions options,
-    const std::string & compatible_data_format = "",
+    const std::string & compatible_data_format,
     const NitrosDiagnosticsConfig & diagnostics_config = {})
   {
     unsubscribe();
@@ -187,12 +235,14 @@ public:
       rclcpp_qos.get_rmw_qos_profile() = qos;
       qos_ = qos;
       options_ = options;
+      compatible_data_format_ = compatible_data_format !=
+        "" ? compatible_data_format : MessageType::GetDefaultCompatibleFormat();
+      diagnostics_config_ = diagnostics_config;
 
       sub_ = std::make_shared<ManagedNitrosSubscriber<NitrosTypeViewT>>(
         node,
         topic,
-        compatible_data_format !=
-        "" ? compatible_data_format : MessageType::GetDefaultCompatibleFormat(),
+        compatible_data_format_,
         [this](const NitrosTypeViewT & nitrosViewMsg) {
           this->cb(EventType(std::make_shared<const MessageType>(nitrosViewMsg.GetMessage())));
         },
@@ -211,9 +261,10 @@ public:
   {
     if (!topic_.empty()) {
       if (node_raw_ != nullptr) {
-        subscribe(node_raw_, topic_, qos_, options_);
+        subscribe(node_raw_, topic_, qos_, options_, compatible_data_format_, diagnostics_config_);
       } else if (node_shared_ != nullptr) {
-        subscribe(node_shared_, topic_, qos_, options_);
+        subscribe(node_shared_, topic_, qos_, options_, compatible_data_format_,
+                  diagnostics_config_);
       }
     }
   }
@@ -270,6 +321,8 @@ private:
   std::string topic_;
   rmw_qos_profile_t qos_;
   rclcpp::SubscriptionOptions options_;
+  std::string compatible_data_format_;
+  NitrosDiagnosticsConfig diagnostics_config_;
 };
 
 }  // namespace message_filters

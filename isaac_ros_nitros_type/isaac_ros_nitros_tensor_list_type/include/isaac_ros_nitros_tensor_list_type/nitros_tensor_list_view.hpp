@@ -57,6 +57,7 @@ public:
   inline uint32_t GetRank() const {return tensor_.rank();}
   inline uint64_t GetBytesPerElement() const {return tensor_.bytes_per_element();}
   inline uint64_t GetElementCount() const {return tensor_.element_count();}
+  inline size_t GetDimension(size_t index) const {return tensor_.shape().dimension(index);}
   inline size_t GetTensorSize() const {return tensor_.size();}
   inline NitrosTensorShape GetShape() const {return NitrosTensorShape(tensor_.shape());}
   inline PrimitiveType GetElementType() const {return tensor_.element_type();}

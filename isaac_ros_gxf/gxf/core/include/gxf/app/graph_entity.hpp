@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
-// Copyright (c) 2023-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+// Copyright (c) 2023-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -84,9 +84,11 @@ class GraphEntity {
    * @return Handle<T> Handle to newly created component. Null handle if component was not created.
    */
   template <typename T, typename... Args>
-  Handle<T> add(const char* name = nullptr, Args... args) {
+  Handle<T> add(const char* name = nullptr, Args && ... args) {
     std::vector<Arg> arg_list;
-    if constexpr (sizeof...(args) > 0) { arg_list = parseArgsOfType<Arg>(args...); }
+    if constexpr (sizeof...(args) > 0) {
+      arg_list = parseArgsOfType<Arg>(std::forward<Args>(args)...);
+    }
     return add<T>(name, std::move(arg_list));
   }
 

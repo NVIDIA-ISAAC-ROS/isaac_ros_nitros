@@ -18,7 +18,8 @@
 import os
 import uuid
 
-from cuda import cuda, cudart
+import cuda.bindings.driver as driver
+import cuda.bindings.runtime as runtime
 from isaac_ros_nitros_bridge_interfaces.msg import NitrosBridgeImage
 import numpy as np
 from sensor_msgs.msg import Image
@@ -84,7 +85,7 @@ class PyNitrosImageBuilder(PyNitrosTypeBuilder):
 
         # Synchronize to user Event
         if event:
-            err, = cudart.cudaEventSynchronize(self.event)
+            err, = runtime.cudaEventSynchronize(self.event)
             super().ASSERT_CUDA_SUCCESS(err)
 
         # Create Nitros Bridge Image
@@ -117,9 +118,9 @@ class PyNitrosImageBuilder(PyNitrosTypeBuilder):
             image_msg_raw.is_bigendian = 0
             image_msg_raw.step = image_step
             # Assign to the private data field to reduce overhead of msg data assignment
-            image_msg_raw._data = np.zeros((image_height, image_width, 3), dtype=np.uint8)
-            err, = cudart.cudaMemcpy(image_msg_raw.data, image_data, image_size,
-                                     cudart.cudaMemcpyKind.cudaMemcpyDeviceToHost)
+            image_msg_raw._data = np.empty(image_size, dtype=np.uint8)
+            err, = runtime.cudaMemcpy(image_msg_raw.data, image_data, image_size,
+                                      runtime.cudaMemcpyKind.cudaMemcpyDeviceToHost)
             super().ASSERT_CUDA_SUCCESS(err)
 
         # Return Nitros Bridge Image
@@ -140,11 +141,11 @@ class PyNitrosImageBuilder(PyNitrosTypeBuilder):
             (cuda_memblock_refcount, new_cuda_memblock_uuid))
         cuda_memblock_cpu_mem.lock.release()
 
-        err, = cuda.cuMemcpyDtoDAsync(cuda.CUdeviceptr(
+        err, = driver.cuMemcpyDtoDAsync(driver.CUdeviceptr(
             cuda_memblock_virtual_ptr), image_tensor_ptr, self.buffer_size, self._stream)
         super().ASSERT_CUDA_SUCCESS(err)
 
-        err, = cudart.cudaEventRecord(cuda_event, self._stream)
+        err, = runtime.cudaEventRecord(cuda_event, self._stream)
         super().ASSERT_CUDA_SUCCESS(err)
 
         return (cuda_memblock_fd, new_cuda_memblock_uuid, cuda_event_handle)

@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
-// Copyright (c) 2021-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+// Copyright (c) 2021-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -46,7 +46,7 @@ class FileStream : public Endpoint {
   static constexpr const char* kBinaryFileExtension = ".gxf_entities";
 
   FileStream(std::string input_file, std::string output_file)
-    : input_file_path_{std::move(input_file)}, output_file_path_{output_file} {}
+    : input_file_path_{std::move(input_file)}, output_file_path_{std::move(output_file)} {}
   FileStream() = default;
   ~FileStream() = default;
   FileStream(const FileStream& other) = delete;

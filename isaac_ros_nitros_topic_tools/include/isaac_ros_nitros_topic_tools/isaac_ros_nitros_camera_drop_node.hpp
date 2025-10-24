@@ -164,6 +164,16 @@ private:
   int y_;                                 // Drop X out of Y messages
   int count_;                             // Count of messages
   std::vector<bool> dropping_order_arr_;  // Dropping order array
+
+  // Latency optimization parameters
+  double max_latency_threshold_;          // Maximum allowed latency in seconds
+  bool enforce_max_latency_;             // Enforce max latency
+  /**
+   * @brief Check if the synchronized messages are recent enough to publish.
+   * @param message_timestamp The timestamp of the synchronized message set.
+   * @return True if messages are recent enough to publish; false otherwise.
+   */
+  bool is_message_recent_enough(const rclcpp::Time & message_timestamp);
 };
 
 }  // namespace nitros

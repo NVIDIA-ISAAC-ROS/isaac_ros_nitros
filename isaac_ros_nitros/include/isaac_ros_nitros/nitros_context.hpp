@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
-// Copyright (c) 2022-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+// Copyright (c) 2022-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -23,7 +23,10 @@
 #include <string>
 #include <vector>
 
+#include "cuda_runtime.h" // NOLINT - include .h without directory
+
 #include "gxf/core/gxf.h"
+#include "gxf/cuda/cuda_stream_pool.hpp"
 
 #include "rclcpp/rclcpp.hpp"
 #include "std_msgs/msg/header.hpp"
@@ -101,6 +104,11 @@ public:
   // Activate and asynchronously run the loaded graph
   gxf_result_t runGraphAsync();
 
+  // Initialize CUDA Stream Pool, this will intialize and allocate all available CUDA streams
+  // from the pool. This is used to avoid the overhead of creating a new CUDA stream for each
+  // type adaptation.
+  gxf_result_t initCudaStreamPool();
+
   // Terminate the running graph(s)
   gxf_result_t destroy();
 
@@ -108,6 +116,10 @@ public:
   gxf_result_t getEntityTimestamp(
     const gxf_uid_t eid,
     std_msgs::msg::Header & ros_header);
+
+  // Get CUDA stream from the stream pool of the graph, this is used by the type adaptation of
+  // Nitros graph
+  cudaStream_t getCudaStreamFromNitrosGraph();
 
   // Set GXF log level for the context
   void setExtensionLogSeverity(gxf_severity_t severity_level);
@@ -314,6 +326,11 @@ private:
 
   // Extension log severity level
   static gxf_severity_t extension_log_severity_;
+
+  // Stores pool of streams type adaptation can use, streams are allocated randomly from the pool
+  std::vector<cudaStream_t> cuda_streams_;
+  // Whether the CUDA stream pool has been initialized
+  bool is_cuda_stream_initialized_ = false;
 };
 
 }  // namespace nitros

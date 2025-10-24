@@ -58,6 +58,15 @@ NitrosCameraDropNode::NitrosCameraDropNode(const rclcpp::NodeOptions & options)
   }
   count_ = 0;
 
+  // Latency optimization parameters
+  max_latency_threshold_ = declare_parameter<double>("max_latency_threshold", 0.1);
+  enforce_max_latency_ = declare_parameter<bool>("enforce_max_latency", false);
+  if (max_latency_threshold_ <= 0.0) {
+    RCLCPP_FATAL(get_logger(),
+      "Parameter 'max_latency_threshold' must be > 0 (got %.3f)", max_latency_threshold_);
+    throw std::invalid_argument("max_latency_threshold <= 0");
+  }
+
   // Create an array that represents the dropping pattern
   // The array contains even spread of 0s.
   dropping_order_arr_ = create_evenly_spread_array(y_, x_);
@@ -136,6 +145,22 @@ std::vector<bool> NitrosCameraDropNode::create_evenly_spread_array(int array_siz
   return dropping_order_arr;
 }
 
+bool NitrosCameraDropNode::is_message_recent_enough(const rclcpp::Time & message_timestamp)
+{
+  if (!enforce_max_latency_) {
+    return true;
+  }
+  rclcpp::Time current_time = this->now();
+  double latency = (current_time - message_timestamp).seconds();
+
+  // Check if message is too old
+  if (latency > max_latency_threshold_) {
+    RCLCPP_WARN(get_logger(), "Synced messages have a latency %.3f seconds", latency);
+    return false;
+  }
+  return true;
+}
+
 bool NitrosCameraDropNode::tick_dropper()
 {
   bool publish = dropping_order_arr_[count_];
@@ -150,7 +175,11 @@ void NitrosCameraDropNode::sync_callback_mode_0(
   const nvidia::isaac_ros::nitros::NitrosImage::ConstSharedPtr & image_ptr,
   const sensor_msgs::msg::CameraInfo::ConstSharedPtr & camera_info_ptr)
 {
-  if (tick_dropper()) {
+  // Get the message timestamp (use camera_info timestamp as reference)
+  rclcpp::Time message_timestamp = camera_info_ptr->header.stamp;
+
+  // Check if message is recent enough and should be published
+  if (tick_dropper() && is_message_recent_enough(message_timestamp)) {
     image_pub_1_->publish(*image_ptr);
     camera_info_pub_1_->publish(*camera_info_ptr);
   }
@@ -162,7 +191,11 @@ void NitrosCameraDropNode::sync_callback_mode_1(
   const nvidia::isaac_ros::nitros::NitrosImage::ConstSharedPtr & image_2_ptr,
   const sensor_msgs::msg::CameraInfo::ConstSharedPtr & camera_info_2_ptr)
 {
-  if (tick_dropper()) {
+  // Get the message timestamp (use first camera_info timestamp as reference)
+  rclcpp::Time message_timestamp = camera_info_1_ptr->header.stamp;
+
+  // Check if message is recent enough and should be published
+  if (tick_dropper() && is_message_recent_enough(message_timestamp)) {
     image_pub_1_->publish(*image_1_ptr);
     camera_info_pub_1_->publish(*camera_info_1_ptr);
     image_pub_2_->publish(*image_2_ptr);
@@ -175,7 +208,11 @@ void NitrosCameraDropNode::sync_callback_mode_2(
   const sensor_msgs::msg::CameraInfo::ConstSharedPtr & camera_info_ptr,
   const nvidia::isaac_ros::nitros::NitrosImage::ConstSharedPtr & depth_ptr)
 {
-  if (tick_dropper()) {
+  // Get the message timestamp (use camera_info timestamp as reference)
+  rclcpp::Time message_timestamp = camera_info_ptr->header.stamp;
+
+  // Check if message is recent enough and should be published
+  if (tick_dropper() && is_message_recent_enough(message_timestamp)) {
     image_pub_1_->publish(*image_ptr);
     camera_info_pub_1_->publish(*camera_info_ptr);
     depth_pub_->publish(*depth_ptr);

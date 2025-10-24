@@ -2,7 +2,7 @@
 
 NVIDIA Isaac Transport for ROS package for hardware-acceleration friendly movement of messages.
 
-<div align="center"><a class="reference internal image-reference" href="https://media.githubusercontent.com/media/NVIDIA-ISAAC-ROS/.github/main/resources/isaac_ros_docs/repositories_and_packages/isaac_ros_nitros/image5-1.gif/"><img alt="image" src="https://media.githubusercontent.com/media/NVIDIA-ISAAC-ROS/.github/main/resources/isaac_ros_docs/repositories_and_packages/isaac_ros_nitros/image5-1.gif/" width="600px"/></a></div>
+<div align="center"><a class="reference internal image-reference" href="https://media.githubusercontent.com/media/NVIDIA-ISAAC-ROS/.github/release-4.0/resources/isaac_ros_docs/repositories_and_packages/isaac_ros_nitros/image5-1.gif/"><img alt="image" src="https://media.githubusercontent.com/media/NVIDIA-ISAAC-ROS/.github/release-4.0/resources/isaac_ros_docs/repositories_and_packages/isaac_ros_nitros/image5-1.gif/" width="600px"/></a></div>
 
 ## Overview
 
@@ -21,6 +21,9 @@ Isaac ROS NITROS is composed of a number of individual packages, each with eithe
 
 `isaac_ros_nitros`:
 : This package contains the base `NitrosNode` class and associated core utilities that serve as the foundation for all NITROS-based ROS nodes.
+
+`isaac_ros_nitros_bridge`:
+: This folder contains the implementation of the NITROS Bridge for inter-process communication.
 
 `isaac_ros_nitros_interfaces`:
 : This package contains the definitions of the custom ROS 2 interfaces that facilitate type negotiation between NITROS nodes.
@@ -56,11 +59,8 @@ Please visit the [Isaac ROS Documentation](https://nvidia-isaac-ros.github.io/re
   * [Try Another Example](https://nvidia-isaac-ros.github.io/repositories_and_packages/isaac_ros_nitros/isaac_ros_nitros_bridge/index.html#try-another-example)
   * [Troubleshooting](https://nvidia-isaac-ros.github.io/repositories_and_packages/isaac_ros_nitros/isaac_ros_nitros_bridge/index.html#troubleshooting)
   * [Updates](https://nvidia-isaac-ros.github.io/repositories_and_packages/isaac_ros_nitros/isaac_ros_nitros_bridge/index.html#updates)
-* [`isaac_ros_nitros_bridge_ros1`](https://nvidia-isaac-ros.github.io/repositories_and_packages/isaac_ros_nitros/isaac_ros_nitros_bridge/isaac_ros_nitros_bridge_ros1/index.html)
-  * [API](https://nvidia-isaac-ros.github.io/repositories_and_packages/isaac_ros_nitros/isaac_ros_nitros_bridge/isaac_ros_nitros_bridge_ros1/index.html#api)
 * [`isaac_ros_nitros_bridge_ros2`](https://nvidia-isaac-ros.github.io/repositories_and_packages/isaac_ros_nitros/isaac_ros_nitros_bridge/isaac_ros_nitros_bridge_ros2/index.html)
   * [API](https://nvidia-isaac-ros.github.io/repositories_and_packages/isaac_ros_nitros/isaac_ros_nitros_bridge/isaac_ros_nitros_bridge_ros2/index.html#api)
-* [`isaac_ros_nitros_interfaces`](https://nvidia-isaac-ros.github.io/repositories_and_packages/isaac_ros_nitros/isaac_ros_nitros_interfaces/index.html)
 * [`isaac_ros_nitros_topic_tools`](https://nvidia-isaac-ros.github.io/repositories_and_packages/isaac_ros_nitros/isaac_ros_nitros_topic_tools/index.html)
   * [NitrosCameraDrop Node](https://nvidia-isaac-ros.github.io/repositories_and_packages/isaac_ros_nitros/isaac_ros_nitros_topic_tools/index.html#nitroscameradrop-node)
 * [`isaac_ros_nitros_type`](https://nvidia-isaac-ros.github.io/repositories_and_packages/isaac_ros_nitros/isaac_ros_nitros_type/index.html)
@@ -72,4 +72,4 @@ Please visit the [Isaac ROS Documentation](https://nvidia-isaac-ros.github.io/re
 
 ## Latest
 
-Update 2024-12-10: Update to be compatible with JetPack 6.1
+Update 2025-10-24: Add support for CUDA streams in type adaptation

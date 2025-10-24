@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
-// Copyright (c) 2021-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+// Copyright (c) 2021-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -17,11 +17,13 @@
 #ifndef NVIDIA_GXF_CUDA_CUDA_STREAM_HPP_
 #define NVIDIA_GXF_CUDA_CUDA_STREAM_HPP_
 
+#include "cuda.h"
 #include <cuda_runtime.h>
 
 #include <functional>
 #include <mutex>
 #include <queue>
+#include <string>
 #include <vector>
 
 #include "gxf/core/component.hpp"
@@ -33,8 +35,10 @@
 namespace nvidia {
 namespace gxf {
 
-// Holds and provides access to cudaStream_t. CudaStream is allocated and
-// recycled by CudaStreamPool
+/**
+ * @brief Holds and provides access to cudaStream_t. CudaStream is allocated and
+ * recycled by CudaStreamPool
+ */
 class CudaStream {
  public:
   CudaStream() = default;
@@ -70,7 +74,8 @@ class CudaStream {
  private:
   friend class CudaStreamPool;
   // Initialize new cuda stream if was not set by external
-  Expected<void> initialize(uint32_t flags = 0, int dev_id = -1, int32_t priority = 0);
+  Expected<void> initialize(const std::string& nvtxIdentifier, uint32_t flags = 0, int dev_id = -1,
+                            int32_t priority = 0, CUgreenCtx green_ctx = nullptr);
   Expected<void> deinitialize();
 
   Expected<void> prepareResourceInternal(int dev_id);
@@ -80,6 +85,8 @@ class CudaStream {
 
   Expected<void> resetEventsInternal(std::queue<CudaEvent::EventPtr>& q);
 
+  gxf_result_t loadDriverFunctions();
+
   mutable std::shared_timed_mutex mutex_;
   int dev_id_ = 0;
   cudaStream_t stream_ = 0;
@@ -88,6 +95,9 @@ class CudaStream {
   std::queue<CudaEvent::EventPtr> recorded_event_queue_;
   // event is defined for for synchronization of stream
   CudaEvent::EventPtr sync_event_;
+
+  // Function to create green context stream
+  CUresult (*fnCuGreenCtxStreamCreate)(CUstream*, CUgreenCtx, unsigned int, int32_t) = nullptr;
 };
 
 }  // namespace gxf

@@ -32,7 +32,8 @@ def launch_setup(context):
              '/image:=/r2b/ros2_input_image'],
         output='screen')
 
-    ros2_converter = ComposableNode(
+    # Follow the POL test: two containers connected via a bridge image topic
+    ros2_converter_1 = ComposableNode(
         name='ros2_converter',
         namespace='r2b',
         package='isaac_ros_nitros_bridge_ros2',
@@ -41,20 +42,41 @@ def launch_setup(context):
             'num_blocks': 40
         }],
         remappings=[
-            ('ros2_output_bridge_image', 'ros1_input_bridge_image'),
-            ('ros2_input_bridge_image', 'ros1_output_bridge_image')
+            ('ros2_output_bridge_image', 'ros2_converter_output')
         ])
 
-    container = ComposableNodeContainer(
-        name='ros2_converter_container',
+    ros2_converter_2 = ComposableNode(
+        name='ros2_converter',
+        namespace='r2b',
+        package='isaac_ros_nitros_bridge_ros2',
+        plugin='nvidia::isaac_ros::nitros_bridge::ImageConverterNode',
+        parameters=[{
+            'num_blocks': 40
+        }],
+        remappings=[
+            ('ros2_input_bridge_image', 'ros2_converter_output')
+        ])
+
+    ros2_converter_1_container = ComposableNodeContainer(
+        name='ros2_converter_1_container',
         namespace='r2b',
         package='rclcpp_components',
         executable='component_container_mt',
-        composable_node_descriptions=[ros2_converter],
+        composable_node_descriptions=[ros2_converter_1],
         output='screen',
         arguments=['--ros-args', '--log-level', 'info']
     )
-    return [rosbag_play, container]
+
+    ros2_converter_2_container = ComposableNodeContainer(
+        name='ros2_converter_2_container',
+        namespace='r2b',
+        package='rclcpp_components',
+        executable='component_container_mt',
+        composable_node_descriptions=[ros2_converter_2],
+        output='screen',
+        arguments=['--ros-args', '--log-level', 'info']
+    )
+    return [rosbag_play, ros2_converter_1_container, ros2_converter_2_container]
 
 
 def generate_launch_description():

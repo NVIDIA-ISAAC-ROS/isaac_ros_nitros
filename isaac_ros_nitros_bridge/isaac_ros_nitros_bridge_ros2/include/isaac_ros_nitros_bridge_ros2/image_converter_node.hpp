@@ -20,10 +20,12 @@
 
 #include <map>
 #include <memory>
+#include <string>
 #include <vector>
 
 #include "rclcpp/rclcpp.hpp"
 
+#include "isaac_ros_common/qos.hpp"
 #include "isaac_ros_managed_nitros/managed_nitros_publisher.hpp"
 #include "isaac_ros_managed_nitros/managed_nitros_subscriber.hpp"
 
@@ -63,13 +65,17 @@ private:
   // Publisher for output bridge messages
   rclcpp::Publisher<isaac_ros_nitros_bridge_interfaces::msg::NitrosBridgeImage>::SharedPtr
     bridge_image_pub_;
-
   // Subscription to input NitrosImage messages
   std::shared_ptr<nvidia::isaac_ros::nitros::ManagedNitrosSubscriber<
       nvidia::isaac_ros::nitros::NitrosImageView>> nitros_sub_;
   // Subscription to input bridge messages
   rclcpp::Subscription<isaac_ros_nitros_bridge_interfaces::msg::NitrosBridgeImage>::SharedPtr
     bridge_image_sub_;
+
+  // Type of NITROS image to publish
+  std::string pub_nitros_image_type_;
+  // Type of NITROS image to subscribe
+  std::string sub_nitros_image_type_;
 
   // Number of blocks of the device memory pool
   int64_t num_blocks_;
@@ -89,6 +95,12 @@ private:
   cudaIpcEventHandle_t ipc_event_handle_;
   // CUDA event export from IPC event to synchronize the upstream
   cudaEvent_t event_;
+  // QoS for NITROS bridge publishers and subscribers
+  rclcpp::QoS bridge_pub_qos_;
+  rclcpp::QoS bridge_sub_qos_;
+  // QoS for NITROS publishers and subscribers
+  rclcpp::QoS nitros_pub_qos_;
+  rclcpp::QoS nitros_sub_qos_;
 };
 
 }  // namespace nitros_bridge

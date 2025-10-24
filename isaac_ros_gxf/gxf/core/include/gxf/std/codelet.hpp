@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
-// Copyright (c) 2021-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+// Copyright (c) 2021-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -86,9 +86,9 @@ class Codelet : public Component {
   // The timestamp of the previous execution. Equal to 'execution_timestamp' during 'start'.
   int64_t previous_execution_timestamp_{0};
   // The timestamp of the current execution in nanoseconds.
-  int64_t execution_timestamp_;
+  int64_t execution_timestamp_{0};
   // Same as execution_timestamp_ but in seconds and as a floating point.
-  double execution_time_;
+  double execution_time_{0.0};
   // The difference between the current and the previous execution time in seconds.
   double delta_time_{0.0};
 };

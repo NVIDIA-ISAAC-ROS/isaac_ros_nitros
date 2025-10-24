@@ -44,6 +44,8 @@ public:
 
   NitrosTensorBuilder & WithEvent(cudaEvent_t event);
 
+  NitrosTensorBuilder & WithReleaseCallback(std::function<void()> release_callback);
+
   NitrosTensor Build();
 
 private:
@@ -56,6 +58,8 @@ private:
   void * data_{};
 
   cudaEvent_t event_{};
+
+  std::function<void()> release_callback_{nullptr};
 };
 
 

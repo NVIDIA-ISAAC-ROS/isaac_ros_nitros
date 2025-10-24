@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
-// Copyright (c) 2021-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+// Copyright (c) 2021-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -402,6 +402,7 @@ class Entity {
     if (code != GXF_SUCCESS) {
       return Unexpected{code};
     }
+    /* coverity[stack_use_local_overflow] */
     FixedVector<UntypedHandle, N> components;
     for (size_t i = 0; i < num_cids; i++) {
       const auto result = UntypedHandle::Create(c_context, cids[i])
@@ -433,6 +434,7 @@ class Entity {
     if (code != GXF_SUCCESS) {
       return Unexpected{code};
     }
+    /* coverity[stack_use_local_overflow] */
     FixedVector<Handle<T>, N> components;
     for (int offset = 0; static_cast<size_t>(offset) < N; offset++) {
       gxf_uid_t cid;
@@ -457,11 +459,11 @@ class Entity {
    * components are returned.
    *
    * @tparam N Capacity of the FixedVector
-   * @return Expected<FixedVector<UntypedHandle, N>> A fixed-size vector of untyped handles of all
+   * @return Expected<FixedVector<UntypedHandle>> A fixed-size vector of untyped handles of all
    * the components allocated on heap
    */
   template <size_t N = kMaxComponents>
-  Expected<FixedVector<UntypedHandle, N>> findAllHeap() const {
+  Expected<FixedVector<UntypedHandle>> findAllHeap() const {
     const gxf_context_t c_context = context();
     const gxf_uid_t c_eid = eid();
     gxf_uid_t cids[N];

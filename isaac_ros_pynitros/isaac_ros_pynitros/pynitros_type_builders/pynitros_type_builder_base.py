@@ -21,7 +21,8 @@ import os
 import time
 import uuid
 
-from cuda import cuda, cudart
+import cuda.bindings.driver as driver
+import cuda.bindings.runtime as runtime
 from isaac_ros_pynitros.utils.cpu_shared_mem import CPUSharedMem
 import rclpy
 
@@ -50,11 +51,11 @@ class PyNitrosTypeBuilder():
         self.num_buffer = num_buffer
         self.timeout = timeout
 
-        err, = cuda.cuInit(0)
+        err, = driver.cuInit(0)
         self.ASSERT_CUDA_SUCCESS(err)
 
         # Create CUDA Stream
-        err, self._stream = cudart.cudaStreamCreate()
+        err, self._stream = runtime.cudaStreamCreate()
         self.ASSERT_CUDA_SUCCESS(err)
 
         # Maps CUDA Memblocks to their respective shared CPU memory
@@ -98,11 +99,11 @@ class PyNitrosTypeBuilder():
             self._cuda_memblock_start_time[cuda_memblock_fd] = 0
 
             # Setup event, record stream, and perform copy
-            err, event = cudart.cudaEventCreateWithFlags(
-                cudart.cudaEventInterprocess | cudart.cudaEventDisableTiming)
+            err, event = runtime.cudaEventCreateWithFlags(
+                runtime.cudaEventInterprocess | runtime.cudaEventDisableTiming)
             self.ASSERT_CUDA_SUCCESS(err)
 
-            err, event_handle = cudart.cudaIpcGetEventHandle(event)
+            err, event_handle = runtime.cudaIpcGetEventHandle(event)
             self.ASSERT_CUDA_SUCCESS(err)
             self._cuda_memblock_event[cuda_memblock_fd] = (event, event_handle)
 
@@ -151,48 +152,48 @@ class PyNitrosTypeBuilder():
     def _create_cuda_memblock(self):
         """Create an IPC CUDA memory pool with the given buffer size and number of buffers."""
         # Allocate GPU Space -> CUmemGenericAllocationHandle
-        allocProp = cuda.CUmemAllocationProp()
-        allocProp.type = cuda.CUmemAllocationType.CU_MEM_ALLOCATION_TYPE_PINNED
-        allocProp.location.type = cuda.CUmemLocationType.CU_MEM_LOCATION_TYPE_DEVICE
+        allocProp = driver.CUmemAllocationProp()
+        allocProp.type = driver.CUmemAllocationType.CU_MEM_ALLOCATION_TYPE_PINNED
+        allocProp.location.type = driver.CUmemLocationType.CU_MEM_LOCATION_TYPE_DEVICE
         allocProp.requestedHandleTypes = \
-            cuda.CUmemAllocationHandleType.CU_MEM_HANDLE_TYPE_POSIX_FILE_DESCRIPTOR
+            driver.CUmemAllocationHandleType.CU_MEM_HANDLE_TYPE_POSIX_FILE_DESCRIPTOR
         allocProp.location.id = 0
 
         # Get granularity
-        err, granularity = cuda.cuMemGetAllocationGranularity(
-            allocProp, cuda.CUmemAllocationGranularity_flags.CU_MEM_ALLOC_GRANULARITY_MINIMUM)
+        err, granularity = driver.cuMemGetAllocationGranularity(
+            allocProp, driver.CUmemAllocationGranularity_flags.CU_MEM_ALLOC_GRANULARITY_MINIMUM)
         self.ASSERT_CUDA_SUCCESS(err)
 
         # Call cuMemCreate with the address of allocProp
         rounded_data_size = self._round_up(self.buffer_size, granularity)
 
-        err, handle = cuda.cuMemCreate(rounded_data_size, allocProp, 0)
+        err, handle = driver.cuMemCreate(rounded_data_size, allocProp, 0)
         self.ASSERT_CUDA_SUCCESS(err)
 
         # Reserve Virtual Address Range
-        err, memblock_virtual_ptr = cuda.cuMemAddressReserve(
+        err, memblock_virtual_ptr = driver.cuMemAddressReserve(
             rounded_data_size, 0, 0, 0)
         self.ASSERT_CUDA_SUCCESS(err)
 
         # Map Handle to Virtual Address Range, Set RW Access
-        err, = cuda.cuMemMap(memblock_virtual_ptr,
-                             rounded_data_size, 0, handle, 0)
+        err, = driver.cuMemMap(memblock_virtual_ptr,
+                               rounded_data_size, 0, handle, 0)
         self.ASSERT_CUDA_SUCCESS(err)
 
         self._cuda_memblock_info.append(
             (handle, memblock_virtual_ptr, rounded_data_size))
 
-        accessDesc = cuda.CUmemAccessDesc()
+        accessDesc = driver.CUmemAccessDesc()
         accessDesc.location = allocProp.location
-        accessDesc.flags = cuda.CUmemAccess_flags.CU_MEM_ACCESS_FLAGS_PROT_READWRITE
+        accessDesc.flags = driver.CUmemAccess_flags.CU_MEM_ACCESS_FLAGS_PROT_READWRITE
 
-        err, = cuda.cuMemSetAccess(
+        err, = driver.cuMemSetAccess(
             memblock_virtual_ptr, rounded_data_size, [accessDesc], 1)
         self.ASSERT_CUDA_SUCCESS(err)
 
         # Export Shareable Handle
-        err, memblock_fd = cuda.cuMemExportToShareableHandle(
-            handle, cuda.CUmemAllocationHandleType.CU_MEM_HANDLE_TYPE_POSIX_FILE_DESCRIPTOR, 0)
+        err, memblock_fd = driver.cuMemExportToShareableHandle(
+            handle, driver.CUmemAllocationHandleType.CU_MEM_HANDLE_TYPE_POSIX_FILE_DESCRIPTOR, 0)
         self.ASSERT_CUDA_SUCCESS(err)
 
         return (memblock_fd, memblock_virtual_ptr)
@@ -204,11 +205,11 @@ class PyNitrosTypeBuilder():
 
     def ASSERT_CUDA_SUCCESS(self, err):
         """Assert if the CUDA operation is successful."""
-        if isinstance(err, cuda.CUresult):
-            if err != cuda.CUresult.CUDA_SUCCESS:
+        if isinstance(err, driver.CUresult):
+            if err != driver.CUresult.CUDA_SUCCESS:
                 raise RuntimeError(
-                    f'[Cuda Error: {err}], {cuda.cuGetErrorString(err)}')
-        elif isinstance(err, cudart.cudaError_t):
+                    f'[Cuda Error: {err}], {driver.cuGetErrorString(err)}')
+        elif isinstance(err, runtime.cudaError_t):
             if (err != 0):
                 raise RuntimeError(f'CudaRT Error: {err}')
         else:
@@ -220,19 +221,19 @@ class PyNitrosTypeBuilder():
             cpu_memblock.close()
 
         for cuda_event, _ in self._cuda_memblock_event.values():
-            err, = cudart.cudaEventDestroy(cuda_event)
+            err, = runtime.cudaEventDestroy(cuda_event)
             self.ASSERT_CUDA_SUCCESS(err)
 
-        err, = cuda.cuStreamDestroy(self._stream)
+        err, = driver.cuStreamDestroy(self._stream)
         self.ASSERT_CUDA_SUCCESS(err)
 
         # Free shared cuda memblocks
         for cuda_memblock_handle, cuda_memblock_virtual_ptr, data_size in self._cuda_memblock_info:
-            err, = cuda.cuMemUnmap(cuda_memblock_virtual_ptr, data_size)
+            err, = driver.cuMemUnmap(cuda_memblock_virtual_ptr, data_size)
             self.ASSERT_CUDA_SUCCESS(err)
 
-            err, = cuda.cuMemAddressFree(cuda_memblock_virtual_ptr, data_size)
+            err, = driver.cuMemAddressFree(cuda_memblock_virtual_ptr, data_size)
             self.ASSERT_CUDA_SUCCESS(err)
 
-            err, = cuda.cuMemRelease(cuda_memblock_handle)
+            err, = driver.cuMemRelease(cuda_memblock_handle)
             self.ASSERT_CUDA_SUCCESS(err)

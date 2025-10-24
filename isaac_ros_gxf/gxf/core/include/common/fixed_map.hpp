@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
-// Copyright (c) 2023-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+// Copyright (c) 2023-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -63,11 +63,16 @@ class FixedMap {
   using Expected = Expected<U, Error>;
 
   template <typename TContainer, typename TValue>
-  class Iterator : public std::iterator<std::bidirectional_iterator_tag, TValue> {
+  class Iterator {
    public:
     static_assert(IsSame_v<RemoveConst_t<TContainer>, FixedMap>);
 
-    using typename std::iterator<std::bidirectional_iterator_tag, TValue>::difference_type;
+    // iterator traits
+    using iterator_category = std::bidirectional_iterator_tag;
+    using value_type = TValue;
+    using difference_type = std::ptrdiff_t;
+    using pointer = TValue*;
+    using reference = TValue&;
 
     constexpr Iterator() : container_{nullptr}, index_{-1} {}
     constexpr Iterator(TContainer& container, size_t start) : container_{&container}, index_{0} {
@@ -188,13 +193,17 @@ class FixedMap {
   };
 
   template <typename TIterator>
-  class ReverseIterator
-      : public std::iterator<std::bidirectional_iterator_tag, typename TIterator::value_type> {
+  class ReverseIterator {
    public:
     static_assert(IsSame_v<TIterator, iterator> || IsSame_v<TIterator, const_iterator>);
 
-    using difference_type = typename TIterator::difference_type;
     using TValue = typename TIterator::value_type;
+    // iterator traits
+    using iterator_category = std::bidirectional_iterator_tag;
+    using value_type = TValue;
+    using difference_type = std::ptrdiff_t;
+    using pointer = TValue*;
+    using reference = TValue&;
 
     constexpr explicit ReverseIterator() : iter_{} {}
     constexpr explicit ReverseIterator(TIterator iter) : iter_{iter} {}

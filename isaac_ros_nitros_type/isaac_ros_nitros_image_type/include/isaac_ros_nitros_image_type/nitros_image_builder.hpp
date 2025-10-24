@@ -51,6 +51,8 @@ public:
   // This has to be GPU buffer
   NitrosImageBuilder & WithGpuData(void * data);
 
+  NitrosImageBuilder & WithReleaseCallback(std::function<void()> release_callback);
+
   NitrosImage Build();
 
 private:
@@ -61,6 +63,7 @@ private:
   uint32_t width_{0};
   void * data_{nullptr};
   cudaEvent_t event_{};
+  std::function<void()> release_callback_{nullptr};
 };
 
 }  // namespace nitros

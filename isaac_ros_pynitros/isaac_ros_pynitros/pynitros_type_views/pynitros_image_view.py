@@ -1,5 +1,5 @@
 # SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
-# Copyright (c) 2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# Copyright (c) 2024-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -15,7 +15,8 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
-from cuda import cudart
+from cuda.bindings import runtime as runtime
+
 import torch
 
 from .pynitros_type_view_base import PyNitrosTypeViewBase
@@ -61,11 +62,10 @@ class PyNitrosImageView(PyNitrosTypeViewBase):
 
     def _from_raw_msg(self):
         image_size = len(self.raw_msg.data)
-        err, device_ptr = cudart.cudaMalloc(image_size)
+        err, device_ptr = runtime.cudaMalloc(image_size)
         self.ASSERT_CUDA_SUCCESS(err)
-
-        err, = cudart.cudaMemcpy(device_ptr, self.raw_msg.data, image_size,
-                                 cudart.cudaMemcpyKind.cudaMemcpyHostToDevice)
+        err, = runtime.cudaMemcpy(device_ptr, self.raw_msg.data, image_size,
+                                  runtime.cudaMemcpyKind.cudaMemcpyHostToDevice)
         self.ASSERT_CUDA_SUCCESS(err)
         return device_ptr
 

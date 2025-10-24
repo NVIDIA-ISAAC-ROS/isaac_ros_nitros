@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
-// Copyright (c) 2023-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+// Copyright (c) 2023-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -21,6 +21,8 @@
 
 #include "isaac_ros_nitros_image_type/nitros_image_view.hpp"
 
+#include "isaac_ros_common/cuda_stream.hpp"
+
 namespace custom_nitros_image
 {
 
@@ -31,7 +33,13 @@ GpuImageViewerNode::GpuImageViewerNode(const rclcpp::NodeOptions options)
       this, "gpu_image", nvidia::isaac_ros::nitros::nitros_image_rgb8_t::supported_type_name,
       std::bind(&GpuImageViewerNode::InputCallback, this,
       std::placeholders::_1))},
-  pub_{create_publisher<sensor_msgs::msg::Image>("image_output", 10)} {}
+  pub_{create_publisher<sensor_msgs::msg::Image>("image_output", 10)}
+{
+  CHECK_CUDA_ERROR(
+    ::nvidia::isaac_ros::common::initNamedCudaStream(
+      cuda_stream_, "isaac_ros_gpu_image_viewer_node"),
+    "Error initializing CUDA stream");
+}
 
 GpuImageViewerNode::~GpuImageViewerNode() = default;
 
@@ -53,8 +61,12 @@ void GpuImageViewerNode::InputCallback(const nvidia::isaac_ros::nitros::NitrosIm
   img_msg.step = view.GetSizeInBytes() / view.GetHeight();
 
   img_msg.data.resize(view.GetSizeInBytes());
-  cudaMemcpy(img_msg.data.data(), view.GetGpuData(), view.GetSizeInBytes(), cudaMemcpyDefault);
-
+  CHECK_CUDA_ERROR(
+    cudaMemcpyAsync(
+      img_msg.data.data(), view.GetGpuData(), view.GetSizeInBytes(),
+      cudaMemcpyDefault, cuda_stream_),
+    "Error copying data to ROS message");
+  CHECK_CUDA_ERROR(cudaStreamSynchronize(cuda_stream_), "Error synchronizing CUDA stream");
   pub_->publish(std::move(img_msg));
 }
 

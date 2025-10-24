@@ -27,22 +27,25 @@ install(PROGRAMS scripts/diagnostic_viewer.py DESTINATION lib/${PROJECT_NAME})
 find_package(ament_cmake_auto REQUIRED)
 ament_auto_find_build_dependencies()
 
+# Ensure CUDA imported targets (e.g., CUDA::nvtx3 / CUDA::nvToolsExt) are available
+find_package(CUDAToolkit REQUIRED)
+
 # NVTX
 option(USE_NVTX "Enable NVTX markers for improved profiling (if available)" ON)
 if(USE_NVTX)
     add_definitions(-DUSE_NVTX)
     link_directories("${CUDA_TOOLKIT_ROOT_DIR}/lib64")
-    link_libraries("nvToolsExt")
+    link_libraries("CUDA::nvtx3")
 endif()
 
 # cuVSLAM and cuApriltags (register paths and install)
 
 # Determine the architecture
 if(CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64")
-    set(CUVSLAM_LIB_PATH "lib/cuvslam/lib_aarch64_jetpack61")
+    set(CUVSLAM_LIB_PATH "lib/cuvslam/lib_aarch64_jetpack70")
     set(CUAPRILTAGS_LIB_PATH "lib/cuapriltags/lib_aarch64_jetpack61")
 elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64")
-    set(CUVSLAM_LIB_PATH "lib/cuvslam/lib_x86_64_cuda_12_6")
+    set(CUVSLAM_LIB_PATH "lib/cuvslam/lib_x86_64_cuda_13_0")
     set(CUAPRILTAGS_LIB_PATH "lib/cuapriltags/lib_x86_64_cuda_12_6")
 else()
     message(FATAL_ERROR "Unsupported architecture: ${CMAKE_SYSTEM_PROCESSOR}")

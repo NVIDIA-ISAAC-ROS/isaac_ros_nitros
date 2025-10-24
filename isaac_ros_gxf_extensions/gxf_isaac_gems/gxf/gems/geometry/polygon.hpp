@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
-// Copyright (c) 2018-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+// Copyright (c) 2018-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -19,6 +19,7 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <random>
 #include <type_traits>
 #include <utility>
 #include <vector>
@@ -170,7 +171,9 @@ struct Polygon2 {
       indices[idx] = idx;
     }
     // Random order to improve performance
-    std::random_shuffle(indices.begin(), indices.end());
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    std::shuffle(indices.begin(), indices.end(),  gen);
     // Compute the center when the number of vertices is less or equal to 3
     auto trivialCenter = [&](const std::vector<size_t>& indices) -> Circle<K> {
       switch (indices.size()) {

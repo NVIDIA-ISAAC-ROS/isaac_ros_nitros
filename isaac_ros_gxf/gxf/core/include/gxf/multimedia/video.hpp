@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
-// Copyright (c) 2021-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+// Copyright (c) 2021-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -829,8 +829,8 @@ class VideoBuffer {
     VideoFormatSize<C> color_format;
     uint64_t size = color_format.size(width, height, stride_align);
     auto color_planes = color_format.getDefaultColorPlanes(width, height, stride_align);
-    VideoBufferInfo buffer_info{width, height, video_type.value, color_planes, layout};
-    return resizeCustom(buffer_info, size, storage_type, allocator);
+    VideoBufferInfo buffer_info{width, height, video_type.value, std::move(color_planes), layout};
+    return resizeCustom(std::move(buffer_info), size, storage_type, allocator);
   }
 
   // Type of the callback function to release memory passed to the VideoFrame using the
@@ -995,8 +995,8 @@ Expected<void> VideoBuffer::createFromTensor(Handle<Tensor>& tensor,
   }
 
   // Set buffer info
-  VideoBufferInfo buffer_info{width, height, video_type.value, color_planes, layout};
-  buffer_info_ = buffer_info;
+  VideoBufferInfo buffer_info{width, height, video_type.value, std::move(color_planes), layout};
+  buffer_info_ = std::move(buffer_info);
 
   // Move memory buffer
   memory_buffer_ = tensor->move_buffer();

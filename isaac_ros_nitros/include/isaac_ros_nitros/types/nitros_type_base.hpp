@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
-// Copyright (c) 2022-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+// Copyright (c) 2022-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -24,6 +24,8 @@
 #include <utility>
 #include <vector>
 
+#include "cuda_runtime.h"  // NOLINT - include .h without directory
+
 #include "isaac_ros_nitros/types/type_utility.hpp"
 
 
@@ -44,7 +46,8 @@ struct NitrosTypeBase
     const int64_t handle,
     const std::string data_format_name,
     const std::string compatible_data_format_name,
-    const std::string frame_id);
+    const std::string frame_id,
+    const cudaStream_t cuda_stream);
 
   // Copy constructor
   NitrosTypeBase(const NitrosTypeBase & other);
@@ -56,6 +59,7 @@ struct NitrosTypeBase
   std::string data_format_name;
   std::string compatible_data_format_name;
   std::string frame_id;
+  cudaStream_t cuda_stream;
 };
 
 /* *INDENT-OFF* */

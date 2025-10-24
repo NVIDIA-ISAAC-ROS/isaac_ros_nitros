@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
-// Copyright (c) 2023-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+// Copyright (c) 2023-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -34,6 +34,8 @@
 #include <cvcuda/OpConvertTo.hpp>
 #include <cvcuda/OpNormalize.hpp>
 #include <cvcuda/OpReformat.hpp>
+
+#include "cuda_runtime.h"  // NOLINT - include .h without directory
 
 namespace custom_nitros_dnn_image_encoder
 {
@@ -97,6 +99,9 @@ private:
   nvcv::Tensor norm_tensor_;
 
   NVCVColorConversionCode color_conversion_code_;
+
+  // CUDA stream to process dynamics detection on
+  cudaStream_t cuda_stream_;
 };
 
 }  // namespace custom_nitros_dnn_image_encoder

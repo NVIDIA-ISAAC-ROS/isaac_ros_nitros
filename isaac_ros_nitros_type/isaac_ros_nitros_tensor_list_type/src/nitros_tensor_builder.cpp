@@ -88,6 +88,28 @@ NitrosTensorBuilder & NitrosTensorBuilder::WithEvent(cudaEvent_t event)
   return *this;
 }
 
+NitrosTensorBuilder & NitrosTensorBuilder::WithReleaseCallback(
+  std::function<void()> release_callback)
+{
+  release_callback_ = release_callback;
+  return *this;
+}
+
+nvidia::gxf::Expected<void> ReleaseTensorCallback(
+  std::function<void()> release_callback,
+  void * ptr)
+{
+  if (release_callback) {
+    release_callback();
+  } else {
+    cudaFree(ptr);
+  }
+  RCLCPP_DEBUG(
+    rclcpp::get_logger("NitrosTensorBuilder"),
+    "[ReleaseTensorCallback] Released the cuda memory [%p]", ptr);
+  return nvidia::gxf::Success;
+}
+
 NitrosTensor NitrosTensorBuilder::Build()
 {
   auto message = nvidia::gxf::Entity::Shared(
@@ -131,7 +153,7 @@ NitrosTensor NitrosTensorBuilder::Build()
     nvidia::gxf::PrimitiveTypeSize(gxf_data_type),
     nvidia::gxf::Unexpected{GXF_UNINITIALIZED_VALUE},
     nvidia::gxf::MemoryStorageType::kDevice, data_,
-    [](void * ptr) {cudaFree(ptr); return nvidia::gxf::Success;});
+    std::bind(&ReleaseTensorCallback, release_callback_, std::placeholders::_1));
 
   RCLCPP_DEBUG(
     rclcpp::get_logger(

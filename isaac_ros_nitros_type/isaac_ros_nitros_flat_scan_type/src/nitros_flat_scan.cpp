@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
-// Copyright (c) 2023-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+// Copyright (c) 2023-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -30,6 +30,7 @@
 #include "extensions/atlas/pose_tree_frame.hpp"
 #pragma GCC diagnostic pop
 
+#include "isaac_ros_common/cuda_stream.hpp"
 #include "isaac_ros_nitros_flat_scan_type/nitros_flat_scan.hpp"
 #include "isaac_ros_nitros/types/type_adapter_nitros_context.hpp"
 
@@ -135,13 +136,13 @@ void rclcpp::TypeAdapter<
       {
         // GPU based tensor
         // Copy beams tensor off device to CPU memory
-        const cudaError_t cuda_error = cudaMemcpy(
+        const cudaError_t cuda_error = cudaMemcpyAsync(
           beams_cpu_pointer.get(), beams_tensor->pointer(),
-          beams_tensor->size(), cudaMemcpyDeviceToHost);
+          beams_tensor->size(), cudaMemcpyDeviceToHost, source.cuda_stream);
         if (cuda_error != cudaSuccess) {
           std::stringstream error_msg;
           error_msg <<
-            "[convert_to_ros_message] cudaMemcpy failed for conversion from "
+            "[convert_to_ros_message] cudaMemcpyAsync failed for conversion from "
             "gxf::Tensor to ROS FlatScan: " <<
             cudaGetErrorName(cuda_error) <<
             " (" << cudaGetErrorString(cuda_error) << ")";
@@ -149,6 +150,8 @@ void rclcpp::TypeAdapter<
             rclcpp::get_logger("NitrosFlatScan"), error_msg.str().c_str());
           throw std::runtime_error(error_msg.str().c_str());
         }
+        cudaError_t cuda_result = cudaStreamSynchronize(source.cuda_stream);
+        CHECK_CUDA_ERROR(cuda_result, "Stream was not able to be synchronized");
         beams_tensor_view =
           ::nvidia::isaac::CreateCpuTensorViewFromData<double, 2>(
           beams_cpu_pointer.get(), beams_tensor_shape.size(),
@@ -296,22 +299,27 @@ void rclcpp::TypeAdapter<
     beams_tensor_view(point_index, kFlatscanAngleIndx) = source.angles[point_index];
     beams_tensor_view(point_index, kFlatscanRangeIndx) = source.ranges[point_index];
   }
+  auto nitros_cuda_stream =
+    nvidia::isaac_ros::nitros::GetTypeAdapterNitrosContext()
+    .getCudaStreamFromNitrosGraph();
   switch (beams_tensor->storage_type()) {
     case nvidia::gxf::MemoryStorageType::kHost:
       {
         // CPU based tensor
         // Copy data from CPU to CPU backed gxf tensor.
-        const cudaError_t cuda_error = cudaMemcpy(
+        const cudaError_t cuda_error = cudaMemcpyAsync(
           beams_tensor->data<double>().value(),
           beams_cpu_pointer.get(),
-          beams_size_bytes, cudaMemcpyHostToHost);
+          beams_size_bytes, cudaMemcpyHostToHost, nitros_cuda_stream);
         if (cuda_error != cudaSuccess) {
           std::stringstream error_msg;
           error_msg <<
-            "[convert_to_custom] cudaMemcpy failed for copying data from "
+            "[convert_to_custom] cudaMemcpyAsync failed for copying data from "
             "CPU to CPU: " <<
             cudaGetErrorName(cuda_error) <<
             " (" << cudaGetErrorString(cuda_error) << ")";
+          cudaError_t cuda_result = cudaStreamSynchronize(nitros_cuda_stream);
+          CHECK_CUDA_ERROR(cuda_result, "Stream was not able to be synchronized");
           RCLCPP_ERROR(
             rclcpp::get_logger("NitrosFlatScan"), error_msg.str().c_str());
           throw std::runtime_error(error_msg.str().c_str());
@@ -322,14 +330,14 @@ void rclcpp::TypeAdapter<
       {
         // GPU based tensor
         // Copy data from CPU to GPU backed gxf tensor.
-        const cudaError_t cuda_error = cudaMemcpy(
+        const cudaError_t cuda_error = cudaMemcpyAsync(
           beams_tensor->data<double>().value(),
           beams_cpu_pointer.get(),
-          beams_size_bytes, cudaMemcpyHostToDevice);
+          beams_size_bytes, cudaMemcpyHostToDevice, nitros_cuda_stream);
         if (cuda_error != cudaSuccess) {
           std::stringstream error_msg;
           error_msg <<
-            "[convert_to_custom] cudaMemcpy failed for copying data from "
+            "[convert_to_custom] cudaMemcpyAsync failed for copying data from "
             "CPU to GPU: " <<
             cudaGetErrorName(cuda_error) <<
             " (" << cudaGetErrorString(cuda_error) << ")";

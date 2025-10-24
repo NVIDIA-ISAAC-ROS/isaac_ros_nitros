@@ -10,6 +10,7 @@
  */
 
 #pragma once
+
 #include "cuvslam.h"
 
 #ifdef __cplusplus
@@ -73,5 +74,5 @@ CUVSLAM_Status CUVSLAM_GroundConstraintGetPoseOnGround(CUVSLAM_GroundConstraintH
                                                        struct CUVSLAM_Pose* pose_on_ground);
 
 #ifdef __cplusplus
-} // extern "C"
+}  // extern "C"
 #endif

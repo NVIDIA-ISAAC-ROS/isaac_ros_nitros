@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
-// Copyright (c) 2021-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+// Copyright (c) 2021-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -31,8 +31,10 @@ namespace gxf {
 
 class CudaStream;
 
-// Holds and provides access to cudaEvent_t. The event could be set via initWithEvent() or
-// via created by init(flags, dev_id).
+/**
+ * @brief Holds and provides access to cudaEvent_t. The event could be set via initWithEvent() or
+ * via created by init(flags, dev_id).
+ */
 class CudaEvent {
  public:
   CudaEvent() = default;

@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
-// Copyright (c) 2022-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+// Copyright (c) 2022-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -37,11 +37,8 @@ struct CorrelatedTimestamps {
                      // different time
   int64_t sys_val;   // System Clock (Sys)
 
-  // Latency of reading the PHC, slightly subtle, as this only applies to PHC2
-  // Basically the simultanous reading of sys<->phc2 within nvpps does not account
-  // The time it takes to read from the PHC, which can be several microseconds.
-  // The value of phc2 published by the correlated_timestamp_driver already accounts for
-  // This value, and phc_latency is provided to expose this value to GXF for sanity checking
+
+  // Deprecated, previously used for sanity checking output from NVPPS, but we no longer use NVPPS
   int64_t phc_latency;
 };
 

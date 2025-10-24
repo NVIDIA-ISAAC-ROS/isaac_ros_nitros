@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
-// Copyright (c) 2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+// Copyright (c) 2024-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -102,7 +102,6 @@ class CudaEventSchedulingTerm : public SchedulingTerm {
  *
  * A component which specifies the availability of data at the receiver based on
  * the cuda buffers present in incoming messages.
- *
  */
 class CudaBufferAvailableSchedulingTerm : public SchedulingTerm {
  public:

@@ -15,16 +15,21 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
+from typing import Union
+
 from isaac_ros_nitros_bridge_interfaces.msg import NitrosBridgeImage
 from isaac_ros_nitros_bridge_interfaces.msg import NitrosBridgeTensorList
 from isaac_ros_tensor_list_interfaces.msg import TensorList
+
+from rclpy.qos import QoSProfile
 from sensor_msgs.msg import Image
 
 
 class PyNitrosPublisher():
     """Publish built messages from PyNITROS Builder."""
 
-    def __init__(self, node, message_type, pub_topic, pub_topic_raw):
+    def __init__(self, node, message_type, pub_topic, pub_topic_raw,
+                 qos_profile: Union[QoSProfile, int] = 10):
         """
         Initialize PyNitrosPublisher.
 
@@ -38,6 +43,8 @@ class PyNitrosPublisher():
             ROS2 topic name of NITROS bridge message.
         pub_topic_raw : str
             ROS2 topic name of raw ROS message.
+        qos_profile : Union[QoSProfile, int]
+            QoS profile to use for the publisher.
 
         """
         self.node = node
@@ -53,9 +60,9 @@ class PyNitrosPublisher():
 
         # Setup both publishers
         self.publisher_ = self.node.create_publisher(
-            self.message_type, self.pub_topic, 10)
+            self.message_type, self.pub_topic, qos_profile)
         self.publisher_raw_ = self.node.create_publisher(
-            self.msg_map[self.message_type], self.pub_topic_raw, 10)
+            self.msg_map[self.message_type], self.pub_topic_raw, qos_profile)
 
     def publish(self, pynitros_built_msg):
         """Publish PyNITROS built messages."""

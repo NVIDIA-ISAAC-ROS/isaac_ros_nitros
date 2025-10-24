@@ -15,11 +15,16 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
-from cuda import cuda, cudart
+from typing import Union
+
+import cuda.bindings.driver as driver
+import cuda.bindings.runtime as runtime
 from isaac_ros_nitros_bridge_interfaces.msg import NitrosBridgeImage, NitrosBridgeTensorList
 from isaac_ros_pynitros.pynitros_type_views.pynitros_image_view import PyNitrosImageView
 from isaac_ros_pynitros.pynitros_type_views.pynitros_tensor_list_view import PyNitrosTensorListView
 from isaac_ros_tensor_list_interfaces.msg import TensorList
+
+from rclpy.qos import QoSProfile
 from sensor_msgs.msg import Image
 
 
@@ -46,7 +51,8 @@ class PyNitrosSubscriber():
     }
 
     def __init__(
-            self, node, message_type, sub_topic_name, enable_ros_subscribe=True):
+            self, node, message_type, sub_topic_name, enable_ros_subscribe=True,
+            qos_profile: Union[QoSProfile, int] = 10):
         """
         Initialize PyNitrosSubscriber.
 
@@ -60,19 +66,22 @@ class PyNitrosSubscriber():
             Topic name of the subscribed message.
         enable_ros_subscribe : bool
             If True, the subscriber will exclusively subscribe to ROS messages.
+        qos_profile : Union[QoSProfile, int]
+            QoS profile to use for the subscriber.
 
         """
         self.node = node
         self.message_type = message_type
         self.sub_topic_name = sub_topic_name
         self.enable_ros_subscribe = enable_ros_subscribe
+        self.qos_profile = qos_profile
 
         self.event = None
         self._cuda_memblock_fd_to_ptr = {}
         self._cuda_memblock_handle = []
 
         # Initialize the CUDA driver API
-        err, = cuda.cuInit(0)
+        err, = driver.cuInit(0)
         self.ASSERT_CUDA_SUCCESS(err)
 
     def create_subscription(self, input_callback):
@@ -87,12 +96,12 @@ class PyNitrosSubscriber():
             self.subscription = self.node.create_subscription(
                 self.BRIDGE_TYPE_TO_RAW_TYPE[self.message_type],
                 namespaced_sub_topic_name,
-                self.listener_callback_ros, 10)
+                self.listener_callback_ros, qos_profile=self.qos_profile)
         else:
             self.subscription = self.node.create_subscription(
                 self.message_type,
                 namespaced_sub_topic_name,
-                self.listener_callback, 10)
+                self.listener_callback, qos_profile=self.qos_profile)
 
         self.input_callback = input_callback
 
@@ -103,15 +112,15 @@ class PyNitrosSubscriber():
 
     def listener_callback(self, nitros_bridge_msg):
         if nitros_bridge_msg.cuda_event_handle and not self.event:
-            self.event_handle = cudart.cudaIpcEventHandle_t()
+            self.event_handle = runtime.cudaIpcEventHandle_t()
             self.event_handle.reserved = nitros_bridge_msg.cuda_event_handle
 
-            err, self.event = cudart.cudaIpcOpenEventHandle(self.event_handle)
+            err, self.event = runtime.cudaIpcOpenEventHandle(self.event_handle)
             self.ASSERT_CUDA_SUCCESS(err)
 
         # Synchronize to upstream Event
         if self.event:
-            err, = cudart.cudaEventSynchronize(self.event)
+            err, = runtime.cudaEventSynchronize(self.event)
             self.ASSERT_CUDA_SUCCESS(err)
 
         sender_pid, memblock_fd = \
@@ -144,11 +153,11 @@ class PyNitrosSubscriber():
         pynitros_view.postprocess()
 
     def ASSERT_CUDA_SUCCESS(self, err):
-        if isinstance(err, cuda.CUresult):
-            if err != cuda.CUresult.CUDA_SUCCESS:
+        if isinstance(err, driver.CUresult):
+            if err != driver.CUresult.CUDA_SUCCESS:
                 raise RuntimeError(
-                    f'[Cuda Error: {err}], {cuda.cuGetErrorString(err)}')
-        elif isinstance(err, cudart.cudaError_t):
+                    f'[Cuda Error: {err}], {driver.cuGetErrorString(err)}')
+        elif isinstance(err, runtime.cudaError_t):
             if (err != 0):
                 raise RuntimeError(f'CudaRT Error: {err}')
         else:
@@ -156,5 +165,5 @@ class PyNitrosSubscriber():
 
     def __del__(self):
         for gpu_handle in self._cuda_memblock_handle:
-            err, = cuda.cuMemRelease(gpu_handle)
+            err, = driver.cuMemRelease(gpu_handle)
             self.ASSERT_CUDA_SUCCESS(err)

@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
-// Copyright (c) 2021-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+// Copyright (c) 2021-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -36,7 +36,6 @@ const std::unordered_map<std::string, uint32_t> g_str_to_vpi_backend({
           {"CUDA", VPI_BACKEND_CUDA},
           {"PVA", VPI_BACKEND_PVA},
           {"VIC", VPI_BACKEND_VIC},
-          {"NVENC", VPI_BACKEND_NVENC},
           {"TEGRA", VPI_BACKEND_TEGRA},
           {"ALL", VPI_BACKEND_ALL},
         });

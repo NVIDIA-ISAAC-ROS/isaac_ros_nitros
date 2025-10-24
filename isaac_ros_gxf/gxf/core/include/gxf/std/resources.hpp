@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
-// Copyright (c) 2022-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+// Copyright (c) 2022-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -19,6 +19,7 @@
 
 #include <map>
 #include <string>
+#include <vector>
 
 #include "gxf/core/component.hpp"
 #include "gxf/core/entity.hpp"
@@ -34,20 +35,33 @@ class ThreadPool : public ResourceBase {
  public:
   struct Thread {
     gxf_uid_t uid;
+    gxf_uid_t cpu_thread_cid;
     // Scalability: std::thread
   };
   gxf_result_t registerInterface(Registrar* registrar) override;
   gxf_result_t initialize() override;
-  Expected<gxf_uid_t> addThread(gxf_uid_t uid);
-  const Expected<Thread> getThread(gxf_uid_t uid) const;
+  Expected<gxf_uid_t> addThread(gxf_uid_t key, gxf_uid_t cpu_thread_cid = kUnspecifiedUid);
+  Expected<gxf_uid_t> addThread(gxf_uid_t key, const std::vector<uint32_t>& pin_cores);
+  const Expected<Thread> getThread(gxf_uid_t key) const;
   const std::map<gxf_uid_t, Thread>& get() const;
   int64_t size() const;
   int64_t priority() const;
 
+  std::vector<uint32_t> coresToPin() const {
+    const auto maybe_pin_cores = pin_cores_.try_get();
+    if (maybe_pin_cores) {
+      return maybe_pin_cores.value();
+    }
+    return {};
+  }
+
  private:
   Parameter<int64_t> initial_size_;
   Parameter<int64_t> priority_;
+  // CPU core IDs to pin the worker threads to (empty means no core pinning)
+  Parameter<std::vector<uint32_t>> pin_cores_;
   std::map<gxf_uid_t, Thread> thread_pool_;
+  static inline gxf_uid_t next_uid_ = 0;
 };
 
 class GPUDevice : public ResourceBase {

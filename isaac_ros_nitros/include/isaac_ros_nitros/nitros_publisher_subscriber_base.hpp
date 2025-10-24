@@ -49,6 +49,7 @@ namespace
 {
 constexpr float const kSecondsToMicroseconds = 1000000;
 constexpr uint64_t const kMicrosecondsToNanoseconds = 1000;
+constexpr uint64_t const kMillisecondsToMicroseconds = 1000;
 const char * const nvidiaID = "nvidia";
 constexpr int64_t const kDropWarnTimeoutSeconds = 5;
 }  // namespace
@@ -243,7 +244,14 @@ public:
         error_msg << supported_data_formats_[i].c_str();
       }
       error_msg << "]";
-      RCLCPP_ERROR(node_.get_logger(), error_msg.str().c_str());
+
+      // Fix format security issue by using static format string
+      RCLCPP_ERROR(
+        node_.get_logger(),
+        "[NitrosPublisherSubscriberBase] Specified compatible format \"%s\" was"
+        " not listed in the supported format list: %s",
+        config_.compatible_data_format.c_str(),
+        error_msg.str().c_str());
       throw std::runtime_error(error_msg.str().c_str());
     }
   }
@@ -421,6 +429,12 @@ public:
       }
     }
 
+    rclcpp::Time time_from_node = node_.get_clock()->now();
+    uint64_t ros_node_system_time_us = time_from_node.nanoseconds() / kMicrosecondsToNanoseconds;
+
+    const uint64_t latency_wrt_current_timestamp_node_ms =
+      (ros_node_system_time_us - current_timestamp_msg_us) / kMillisecondsToMicroseconds;
+
     if (prev_timestamp_msg_us_ != std::numeric_limits<uint64_t>::min()) {
       const int64_t timestamp_diff_msg_us = current_timestamp_msg_us - prev_timestamp_msg_us_;
       updateMsgTimeQueue(timestamp_diff_msg_us);
@@ -441,20 +455,31 @@ public:
       frame_rate_node_ = kSecondsToMicroseconds /
         (static_cast<float>(sum_interarrival_time_node_) /
         interarrival_time_queue_node_.size());
-      mean_abs_jitter_node_ = sum_jitter_node_ / jitter_queue_node_.size();
     } else {
       frame_rate_node_ = 0.0;
+    }
+
+    if (jitter_queue_node_.size() != 0) {
+      mean_abs_jitter_node_ = sum_jitter_node_ / jitter_queue_node_.size();
+    } else {
       mean_abs_jitter_node_ = 0;
     }
+
     if (sum_interarrival_time_msg_ != 0) {
       frame_rate_msg_ = kSecondsToMicroseconds /
         (static_cast<float>(sum_interarrival_time_msg_) /
         interarrival_time_queue_msg_.size());
-      mean_abs_jitter_msg_ = sum_jitter_msg_ / jitter_queue_msg_.size();
     } else {
       frame_rate_msg_ = 0.0;
+    }
+    message_latency_msg_ms_ = latency_wrt_current_timestamp_node_ms;
+
+    if (jitter_queue_msg_.size() != 0) {
+      mean_abs_jitter_msg_ = sum_jitter_msg_ / jitter_queue_msg_.size();
+    } else {
       mean_abs_jitter_msg_ = 0;
     }
+
     // frame dropping warnings
     if (!error_found) {
       status_vec_[0].level = diagnostic_msgs::msg::DiagnosticStatus::OK;
@@ -508,6 +533,10 @@ public:
         diagnostic_msgs::build<diagnostic_msgs::msg::KeyValue>()
         .key("frame_rate_msg")
         .value(std::to_string(frame_rate_msg_)));
+      values.push_back(
+        diagnostic_msgs::build<diagnostic_msgs::msg::KeyValue>()
+        .key("current_delay_from_realtime_ms")
+        .value(std::to_string(message_latency_msg_ms_)));
       values.push_back(
         diagnostic_msgs::build<diagnostic_msgs::msg::KeyValue>()
         .key("frame_rate_node")
@@ -572,6 +601,7 @@ public:
     num_jitter_outliers_node_ = 0;
     num_jitter_outliers_msg_ = 0;
     num_non_increasing_msg_ = 0;
+    message_latency_msg_ms_ = 0;
     outdated_msg_ = true;
 
     diagnostic_publisher_ =
@@ -677,6 +707,7 @@ protected:
   // data tracking variables for diagnostics
   std::string topic_name_;
   double frame_rate_node_, frame_rate_msg_;
+  double message_latency_msg_ms_;
   int32_t mean_abs_jitter_node_, mean_abs_jitter_msg_;
   bool outdated_msg_;
 

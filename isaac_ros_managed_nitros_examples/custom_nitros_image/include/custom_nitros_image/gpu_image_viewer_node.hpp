@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
-// Copyright (c) 2023-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+// Copyright (c) 2023-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -26,6 +26,8 @@
 #include "sensor_msgs/msg/image.hpp"
 #include "isaac_ros_nitros_image_type/nitros_image_view.hpp"
 
+#include "cuda_runtime.h"  // NOLINT - include .h without directory
+
 namespace custom_nitros_image
 {
 
@@ -45,6 +47,9 @@ private:
 
   // Publisher for output Image messages
   rclcpp::Publisher<sensor_msgs::msg::Image>::SharedPtr pub_;
+
+  // CUDA stream to process dynamics detection on
+  cudaStream_t cuda_stream_;
 };
 
 }  // namespace custom_nitros_image

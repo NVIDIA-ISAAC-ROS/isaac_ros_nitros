@@ -25,19 +25,25 @@ endif()
 find_package(ament_cmake_auto REQUIRED)
 ament_auto_find_build_dependencies()
 
+# Ensure CUDA imported targets (e.g., CUDA::nvtx3) are available
+find_package(CUDAToolkit REQUIRED)
+
 # NVTX
 option(USE_NVTX "Enable NVTX markers for improved profiling (if available)" ON)
 if(USE_NVTX)
     add_definitions(-DUSE_NVTX)
     link_directories("${CUDA_TOOLKIT_ROOT_DIR}/lib64")
-    link_libraries("nvToolsExt")
+    link_libraries("CUDA::nvtx3")
 endif()
 
 # Dependencies
 find_package(yaml-cpp)
 
 # NitrosDisparityImage
-ament_auto_add_library(${PROJECT_NAME} SHARED src/nitros_disparity_image.cpp)
+ament_auto_add_library(${PROJECT_NAME} SHARED
+src/nitros_disparity_image.cpp
+src/nitros_disparity_image_builder.cpp
+)
 target_link_libraries(${PROJECT_NAME}
   yaml-cpp
 )

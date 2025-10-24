@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
-// Copyright (c) 2022-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+// Copyright (c) 2022-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -21,6 +21,8 @@
 #include <memory>
 #include <string>
 #include <vector>
+
+#include "cuda_runtime.h"  // NOLINT - include .h without directory
 
 #include "message_compositor/message_relay.hpp"
 
@@ -80,6 +82,9 @@ private:
   NitrosPublisher & nitros_publisher_;
   std::mutex guard_condition_mutex_;
   rclcpp::GuardCondition guard_condition_;
+
+  // A flag for tracking if a trigger to the guard condition has been handled
+  bool is_trigger_pending_ = false;
 };
 
 
@@ -203,6 +208,12 @@ private:
   // NitrosPublisherWaitable waitable_;
   // rcl_guard_condition_t guard_condition_;
   std::shared_ptr<NitrosPublisherWaitable> waitable_;
+
+  // A CUDA stream for each publisher that can add stream handle and event object that can
+  // be used for synchronization and work scheduling for downstream nodes (type adapters)
+  // This should probably be a CUDA stream pool.
+  // Should this be allocated on the heap ?
+  cudaStream_t cuda_stream_ = 0;
 };
 
 }  // namespace nitros
