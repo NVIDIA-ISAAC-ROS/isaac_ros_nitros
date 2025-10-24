@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
-// Copyright (c) 2021-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+// Copyright (c) 2021-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -44,7 +44,7 @@ template <class T> constexpr bool HasSize_v = HasSize<T>::value;
 /// if the iterator reaches the end/beginning of the container. Element access is wrapped in
 /// an `Expected` to prevent dereferencing invalid memory.
 template <typename TContainer, typename TValue = typename TContainer::value_type>
-class RandomAccessIterator : public std::iterator<std::random_access_iterator_tag, TValue> {
+class RandomAccessIterator {
   static_assert(detail::HasData_v<TContainer>, "TContainer must have data()");
   static_assert(detail::HasSize_v<TContainer>, "TContainer must have size()");
   static_assert(IsIntegral_v<decltype(Declval<TContainer>().size())>,
@@ -59,12 +59,25 @@ class RandomAccessIterator : public std::iterator<std::random_access_iterator_ta
   template <typename U>
   using Expected = Expected<U, Error>;
 
-  using typename std::iterator<std::random_access_iterator_tag, TValue>::difference_type;
-
+    // iterator traits
+    using iterator_category = std::random_access_iterator_tag;
+    using value_type = TValue;
+    using difference_type = std::ptrdiff_t;
+    using pointer = TValue*;
+    using reference = TValue&;
   constexpr RandomAccessIterator() : container_{nullptr}, index_{-1} {}
   constexpr RandomAccessIterator(TContainer& container, size_t start)
       : container_{&container}, index_{0} {
     *this += start;
+  }
+
+  template <class OContainer,
+            typename std::enable_if<
+                std::is_same<TContainer, const OContainer>::value &&
+                std::is_same<TValue, const typename OContainer::value_type>::value, int>::type = 0>
+  constexpr RandomAccessIterator(const RandomAccessIterator<OContainer>& other)
+      : container_{other.container_}, index_{0} {
+    *this += other.index_;
   }
 
   constexpr RandomAccessIterator(const RandomAccessIterator& other) = default;
@@ -146,6 +159,7 @@ class RandomAccessIterator : public std::iterator<std::random_access_iterator_ta
   }
 
  private:
+  friend class RandomAccessIterator<const TContainer, const typename TContainer::value_type>;
   /// Container pointer
   TContainer* container_;
   /// Iterator index
@@ -159,8 +173,7 @@ using ConstRandomAccessIterator = RandomAccessIterator<const TContainer,
 
 /// Reverse iterator
 template <typename TIterator>
-class ReverseIterator
-    : public std::iterator<std::random_access_iterator_tag, typename TIterator::value_type> {
+class ReverseIterator {
  public:
   using TValue = typename TIterator::value_type;
   using Error = typename TIterator::Error;
@@ -168,7 +181,12 @@ class ReverseIterator
   template <typename U>
   using Expected = Expected<U, Error>;
 
-  using difference_type = typename TIterator::difference_type;
+  // iterator traits
+  using iterator_category = std::random_access_iterator_tag;
+  using value_type = TValue;
+  using difference_type = std::ptrdiff_t;
+  using pointer = TValue*;
+  using reference = TValue&;
 
   constexpr explicit ReverseIterator() : iter_{} {}
   constexpr explicit ReverseIterator(TIterator iter) : iter_{iter} {}

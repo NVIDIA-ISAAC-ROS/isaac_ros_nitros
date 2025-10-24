@@ -70,18 +70,22 @@ def curses_main(stdscr, node):
 
         MAX_NAME_WIDTH = 100
         FRAME_RATE_WIDTH = 15
+        REALTIME_DELAY_WIDTH = 15
 
-        # Adjust column widths if terminal is too narrow
-        total_width_needed = MAX_NAME_WIDTH + 2 * FRAME_RATE_WIDTH + 2  # +2 for spaces
+        # Adjust column widths if terminal is too narrow, +2 for spaces
+        total_width_needed = MAX_NAME_WIDTH + 2 * FRAME_RATE_WIDTH + 2 * REALTIME_DELAY_WIDTH + 2
         if total_width_needed > width:
             # Reduce the widths proportionally
             scaling_factor = width / total_width_needed
             MAX_NAME_WIDTH = int(MAX_NAME_WIDTH * scaling_factor)
             FRAME_RATE_WIDTH = int(FRAME_RATE_WIDTH * scaling_factor)
+            REALTIME_DELAY_WIDTH = int(REALTIME_DELAY_WIDTH * scaling_factor)
 
-        header = (f"{'Topic Name':<{MAX_NAME_WIDTH}} {'frame_rate_msg':<{FRAME_RATE_WIDTH}}"
-                  f"{'frame_rate_node':<{FRAME_RATE_WIDTH}}")
-        separator = '-' * min(width, MAX_NAME_WIDTH + 2 * FRAME_RATE_WIDTH + 2)
+        header = (f"{'Topic Name':<{MAX_NAME_WIDTH}} {'msg_frame_rate_hz':<{FRAME_RATE_WIDTH}} "
+                  f"{'pub_frame_rate_hz':<{FRAME_RATE_WIDTH}} "
+                  f"{'realtime_delay_ms':<{REALTIME_DELAY_WIDTH}}")
+        separator = '-' * min(
+            width, MAX_NAME_WIDTH + 2 * FRAME_RATE_WIDTH + 2 * REALTIME_DELAY_WIDTH + 2)
 
         try:
             stdscr.addstr(0, 0, header[:width - 1])
@@ -125,12 +129,15 @@ def curses_main(stdscr, node):
             name = status.name
             frame_rate_msg = ''
             frame_rate_node = ''
+            current_delay_from_realtime_ms = ''
             # Extract frame rates from key-value pairs
             for kv in status.values:
                 if kv.key == 'frame_rate_msg':
                     frame_rate_msg = kv.value
                 if kv.key == 'frame_rate_node':
                     frame_rate_node = kv.value
+                if kv.key == 'current_delay_from_realtime_ms':
+                    current_delay_from_realtime_ms = kv.value
 
             # No need to truncate the name since MAX_NAME_WIDTH is large
             name_display = name.ljust(MAX_NAME_WIDTH)
@@ -138,7 +145,10 @@ def curses_main(stdscr, node):
             # Format the data
             frame_rate_msg_display = frame_rate_msg.ljust(FRAME_RATE_WIDTH)
             frame_rate_node_display = frame_rate_node.ljust(FRAME_RATE_WIDTH)
+            current_delay_from_realtime_ms_display = current_delay_from_realtime_ms.ljust(
+                REALTIME_DELAY_WIDTH)
             line = f'{name_display} {frame_rate_msg_display} {frame_rate_node_display}'
+            line += f' {current_delay_from_realtime_ms_display}'
 
             # Truncate the line if necessary
             line = line[:width - 1]  # Reserve last character for cursor

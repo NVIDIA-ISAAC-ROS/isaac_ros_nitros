@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
-// Copyright (c) 2023-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+// Copyright (c) 2023-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -19,6 +19,8 @@
 
 #include "isaac_ros_nitros_tensor_list_type/nitros_tensor_builder.hpp"
 #include "isaac_ros_nitros_tensor_list_type/nitros_tensor_list_builder.hpp"
+
+#include "isaac_ros_common/cuda_stream.hpp"
 
 namespace custom_nitros_dnn_image_encoder
 {
@@ -67,6 +69,10 @@ ImageEncoderNode::ImageEncoderNode(const rclcpp::NodeOptions options)
   image_mean_(declare_parameter<std::vector<double>>("image_mean", {0.0, 0.0, 0.0})),
   image_stddev_(declare_parameter<std::vector<double>>("image_stddev", {1.0, 1.0, 1.0}))
 {
+  CHECK_CUDA_ERROR(
+    ::nvidia::isaac_ros::common::initNamedCudaStream(
+      cuda_stream_, "isaac_ros_dnn_image_encoder_node"),
+    "Error initializing CUDA stream");
   auto iterator = g_str_to_nvcv_image_format.find(input_image_encoding_);
   if (iterator == g_str_to_nvcv_image_format.end()) {
     throw std::runtime_error(
@@ -102,7 +108,13 @@ ImageEncoderNode::ImageEncoderNode(const rclcpp::NodeOptions options)
   input_image_buffer_.strides[2] = input_image_channels_ * input_image_buffer_.strides[3];
   input_image_buffer_.strides[1] = input_image_width_ * input_image_buffer_.strides[2];
   input_image_buffer_.strides[0] = input_image_height_ * input_image_buffer_.strides[1];
-  cudaMalloc(&input_image_buffer_.basePtr, batch_size_ * input_image_buffer_.strides[0]);
+  if (cudaMallocAsync(
+      &input_image_buffer_.basePtr,
+      batch_size_ * input_image_buffer_.strides[0],
+      cuda_stream_) != cudaSuccess)
+  {
+    throw std::runtime_error("Could not allocate input image tensor");
+  }
 
   nvcv::TensorDataStridedCuda in_data(nvcv::TensorShape{reqs.shape, reqs.rank, reqs.layout},
     nvcv::DataType{reqs.dtype}, input_image_buffer_);
@@ -117,7 +129,9 @@ ImageEncoderNode::ImageEncoderNode(const rclcpp::NodeOptions options)
   output_image_buffer_.strides[2] = output_image_width_ * output_image_buffer_.strides[3];
   output_image_buffer_.strides[1] = output_image_height_ * output_image_buffer_.strides[2];
   output_image_buffer_.strides[0] = output_image_channels_ * output_image_buffer_.strides[1];
-  cudaMalloc(&output_image_buffer_.basePtr, batch_size_ * output_image_buffer_.strides[0]);
+  cudaMallocAsync(
+    &output_image_buffer_.basePtr, batch_size_ * output_image_buffer_.strides[0],
+    cuda_stream_);
 
   nvcv::TensorDataStridedCuda out_data(nvcv::TensorShape{reqs.shape, reqs.rank, reqs.layout},
     nvcv::DataType{reqs.dtype}, output_image_buffer_);
@@ -136,13 +150,15 @@ ImageEncoderNode::ImageEncoderNode(const rclcpp::NodeOptions options)
   {
     throw std::runtime_error("Error: Incorrect length of image mean or image std dev vectors.");
   }
-  cudaMemcpy(
+  cudaMemcpyAsync(
     mean_data->basePtr(), image_mean_float.data(),
-    output_image_channels_ * sizeof(float), cudaMemcpyHostToDevice
+    output_image_channels_ * sizeof(float), cudaMemcpyHostToDevice,
+    cuda_stream_
   );
-  cudaMemcpy(
+  cudaMemcpyAsync(
     std_dev_data->basePtr(), image_stddev_float.data(),
-    output_image_channels_ * sizeof(float), cudaMemcpyHostToDevice
+    output_image_channels_ * sizeof(float), cudaMemcpyHostToDevice,
+    cuda_stream_
   );
 
   resized_tensor_ = nvcv::Tensor(
@@ -160,6 +176,11 @@ ImageEncoderNode::ImageEncoderNode(const rclcpp::NodeOptions options)
   norm_tensor_ = nvcv::Tensor(
     batch_size_, {output_image_width_, output_image_height_},
     output_image_format.interleaved_float_format);
+
+  auto cuda_result = cudaStreamSynchronize(cuda_stream_);
+  if (cuda_result != cudaSuccess) {
+    throw std::runtime_error("Error: Unable to synchronize CUDA stream.");
+  }
 }
 
 ImageEncoderNode::~ImageEncoderNode() = default;
@@ -167,11 +188,14 @@ ImageEncoderNode::~ImageEncoderNode() = default;
 void ImageEncoderNode::InputCallback(const sensor_msgs::msg::Image::SharedPtr msg)
 {
   size_t buffer_size{msg->step * msg->height};
-
-  cudaMemcpy(input_image_buffer_.basePtr, msg->data.data(), buffer_size, cudaMemcpyDefault);
+  CHECK_CUDA_ERROR(
+    cudaMemcpyAsync(
+      input_image_buffer_.basePtr, msg->data.data(), buffer_size, cudaMemcpyDefault,
+      cuda_stream_),
+    "Error copying data to input image buffer");
 
   // Resize
-  resize_op_((cudaStream_t) 0, input_image_tensor_, resized_tensor_, NVCV_INTERP_LINEAR);
+  resize_op_(cuda_stream_, input_image_tensor_, resized_tensor_, NVCV_INTERP_LINEAR);
 
   NVCVImageFormat input_image_format = g_str_to_nvcv_image_format[input_image_encoding_];
   NVCVImageFormat output_image_format = g_str_to_nvcv_image_format[output_image_encoding_];
@@ -180,7 +204,7 @@ void ImageEncoderNode::InputCallback(const sensor_msgs::msg::Image::SharedPtr ms
     // cvtColor operation converts the image from input_image_encoding to
     // output_image_encoding
     cvtColor_op_(
-      (cudaStream_t) 0, resized_tensor_,
+      cuda_stream_, resized_tensor_,
       color_converted_tensor_, color_conversion_code_
     );
 
@@ -188,36 +212,43 @@ void ImageEncoderNode::InputCallback(const sensor_msgs::msg::Image::SharedPtr ms
     // Also, it divides each pixel value by 255.0 i.e. scales the pixel values
     // in range [0.0, 1.0]
     convert_op_(
-      (cudaStream_t) 0, color_converted_tensor_,
+      cuda_stream_, color_converted_tensor_,
       float_tensor_, 1.0f / 255.f, 0.0f
     );
   } else {
-    convert_op_((cudaStream_t) 0, resized_tensor_, float_tensor_, 1.0f / 255.f, 0.0f);
+    convert_op_(cuda_stream_, resized_tensor_, float_tensor_, 1.0f / 255.f, 0.0f);
   }
 
   // Normalize
   uint32_t flags = CVCUDA_NORMALIZE_SCALE_IS_STDDEV;
   norm_op_(
-    (cudaStream_t) 0, float_tensor_, mean_tensor_, std_dev_tensor_,
+    cuda_stream_, float_tensor_, mean_tensor_, std_dev_tensor_,
     norm_tensor_, 1.0f, 0.0f, 0.0f, flags
   );
 
   // Convert the data layout from interleaved to planar
-  reformat_op_((cudaStream_t) 0, norm_tensor_, output_image_tensor_);
+  reformat_op_(cuda_stream_, norm_tensor_, output_image_tensor_);
 
   // Create the output buffer and copy the data
   float * output_buffer;
   size_t output_buffer_size{
     output_image_width_ * output_image_height_ * output_image_channels_ * sizeof(float)};
-  cudaMalloc(&output_buffer, output_buffer_size);
+  cudaMallocAsync(&output_buffer, output_buffer_size, cuda_stream_);
 
-  cudaMemcpy(output_buffer, output_image_buffer_.basePtr, output_buffer_size, cudaMemcpyDefault);
+  cudaMemcpyAsync(
+    output_buffer, output_image_buffer_.basePtr, output_buffer_size, cudaMemcpyDefault,
+    cuda_stream_);
 
   // Copy the header information.
   std_msgs::msg::Header header;
   header.stamp.sec = msg->header.stamp.sec;
   header.stamp.nanosec = msg->header.stamp.nanosec;
   header.frame_id = msg->header.frame_id;
+
+  auto cuda_result = cudaStreamSynchronize(cuda_stream_);
+  if (cuda_result != cudaSuccess) {
+    throw std::runtime_error("Error: Unable to synchronize CUDA stream.");
+  }
 
   nvidia::isaac_ros::nitros::NitrosTensorList tensor_list =
     nvidia::isaac_ros::nitros::NitrosTensorListBuilder()

@@ -69,7 +69,8 @@ public:
       // Extension so file list
         {
           {"gxf_isaac_message_compositor", "gxf/lib/libgxf_isaac_message_compositor.so"},
-          {"isaac_ros_nitros_detection3_d_array_type", "gxf/lib/detection3_d/test/libisaac_ros_nitros_detection3_d_array_test_ext.so"}  // NOLINT
+          {"isaac_ros_nitros_detection3_d_array_type",
+            "gxf/lib/detection3_d/test/libisaac_ros_nitros_detection3_d_array_test_ext.so"}
         },
       // Test node package name
       PACKAGE_NAME)

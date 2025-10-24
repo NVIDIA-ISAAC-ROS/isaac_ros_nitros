@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
-// Copyright (c) 2022-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+// Copyright (c) 2022-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -28,6 +28,7 @@
 #include "isaac_ros_nitros/nitros_context.hpp"
 #include "rclcpp/rclcpp.hpp"
 
+#include "isaac_ros_common/cuda_stream.hpp"
 
 namespace nvidia
 {
@@ -37,6 +38,7 @@ namespace nitros
 {
 
 constexpr uint64_t kDefaultCUDAMemoryPoolSize = 2048ULL * 1024 * 1024;
+constexpr uint32_t kNumCudaStreams = 3;
 constexpr char kDisableCUDAMemPoolEnv[] = "DISABLE_NITROS_CUDA_MEM_POOL";
 
 gxf_context_t NitrosContext::main_context_ = nullptr;
@@ -140,6 +142,8 @@ NitrosContext::NitrosContext()
       return;
     }
   }
+
+  is_cuda_stream_initialized_ = false;
   // End Mutex: shared_context_mutex_
 }
 
@@ -156,6 +160,57 @@ void NitrosContext::setNode(const rclcpp::Node * node)
 gxf_context_t NitrosContext::getContext()
 {
   return context_;
+}
+
+gxf_result_t NitrosContext::initCudaStreamPool()
+{
+  const std::lock_guard<std::mutex> lock(NitrosContext::shared_context_mutex_);
+  if (is_cuda_stream_initialized_) {
+    return GXF_SUCCESS;
+  }
+  // Initialise CUDA stream pool from the graph configuration
+  char kEntityName[] = "cuda_stream_pool";
+  char kComponentName[] = "stream";
+  char kComponentTypeName[] = "nvidia::gxf::CudaStreamPool";
+  gxf_uid_t cid;
+  gxf_result_t code = getCid(kEntityName, kComponentName, kComponentTypeName, cid);
+
+  if (code != GXF_SUCCESS) {
+    RCLCPP_ERROR(
+      get_logger(), "[NitrosContext] CUDA Stream Pool Error: %s", GxfResultStr(code));
+    throw std::runtime_error("CUDA Stream Pool Initialisation failure");
+  }
+
+  gxf::Handle<gxf::CudaStreamPool> cuda_stream_pool_ =
+    UNWRAP_OR_RETURN(gxf::Handle<gxf::CudaStreamPool>::Create(context_, cid));
+
+  // Allocate all available CUDA streams from the pool.
+  cuda_streams_.clear();
+  for (size_t i = 0; i < kNumCudaStreams; i++) {
+    gxf::Handle<gxf::CudaStream> stream_handle =
+      UNWRAP_OR_RETURN(cuda_stream_pool_.get()->allocateStream());
+
+    cudaStream_t maybe_raw_stream =
+      UNWRAP_OR_RETURN(stream_handle->stream());
+    cuda_streams_.push_back(maybe_raw_stream);
+  }
+
+  if (cuda_streams_.empty()) {
+    throw std::runtime_error("[NitrosContext] No CUDA streams could be allocated from the pool");
+  }
+
+  for (size_t i = 0; i < kNumCudaStreams; i++) {
+    ::nvidia::isaac_ros::common::nameExistingCudaStream(
+      cuda_streams_[i],
+      "nitros_type_adaptation_ros_to_custom_" + std::to_string(i));
+  }
+
+  RCLCPP_INFO(
+    get_logger(),
+    "[NitrosContext] Successfully allocated %zu CUDA streams",
+    cuda_streams_.size());
+  is_cuda_stream_initialized_ = true;
+  return GXF_SUCCESS;
 }
 
 gxf_result_t NitrosContext::getComponentPointer(
@@ -212,6 +267,17 @@ gxf_result_t NitrosContext::getCid(
   gxf_uid_t & cid)
 {
   return getCid(entity_name, "", component_type, cid);
+}
+
+// Get CUDA stream from the underlying CUDA stream pool variable in the graph
+cudaStream_t NitrosContext::getCudaStreamFromNitrosGraph()
+{
+  if (cuda_streams_.empty()) {
+    throw std::runtime_error("[NitrosContext] No CUDA streams available");
+  }
+  size_t index = std::rand() % cuda_streams_.size();
+  cudaStream_t stream = cuda_streams_[index];
+  return stream;
 }
 
 gxf_result_t NitrosContext::getCid(

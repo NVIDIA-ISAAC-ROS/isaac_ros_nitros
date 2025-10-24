@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
-// Copyright (c) 2021-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+// Copyright (c) 2021-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -23,15 +23,17 @@
 namespace nvidia {
 namespace gxf {
 
-// The Structure indicates cuda stream component ID.
-// Message entity carrying CudaStreamId indicates that Tensors will be or
-// has been processed by corresponding cuda stream. The handle could
-// be deduced by Handle<CudaStream>::Create(context, stream_cid).
+/**
+ * @brief The Structure indicates cuda stream component ID.
+ *
+ * Message entity carrying CudaStreamId indicates that Tensors will be or
+ * has been processed by corresponding cuda stream. The handle could
+ * be deduced by Handle<CudaStream>::Create(context, stream_cid).
+ */
 struct CudaStreamId {
   // component id of CudaStream
   gxf_uid_t stream_cid;
 };
-
 
 }  // namespace gxf
 }  // namespace nvidia

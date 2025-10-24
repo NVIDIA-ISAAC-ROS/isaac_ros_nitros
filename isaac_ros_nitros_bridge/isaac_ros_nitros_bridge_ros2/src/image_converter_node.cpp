@@ -35,32 +35,45 @@ namespace nitros_bridge
 
 ImageConverterNode::ImageConverterNode(const rclcpp::NodeOptions options)
 : rclcpp::Node("image_converter_node", options),
-  nitros_pub_{std::make_shared<nvidia::isaac_ros::nitros::ManagedNitrosPublisher<
-        nvidia::isaac_ros::nitros::NitrosImage>>(
-      this, "ros2_output_image",
-      nvidia::isaac_ros::nitros::nitros_image_rgb8_t::supported_type_name)},
-  bridge_image_pub_{create_publisher<isaac_ros_nitros_bridge_interfaces::msg::NitrosBridgeImage>(
-      "ros2_output_bridge_image", 10)},
-  nitros_sub_{std::make_shared<nvidia::isaac_ros::nitros::ManagedNitrosSubscriber<
-        nvidia::isaac_ros::nitros::NitrosImageView>>(
-      this, "ros2_input_image", nvidia::isaac_ros::nitros::nitros_image_rgb8_t::supported_type_name,
-      std::bind(&ImageConverterNode::ROSToBridgeCallback, this,
-      std::placeholders::_1))},
-  bridge_image_sub_{create_subscription<isaac_ros_nitros_bridge_interfaces::msg::NitrosBridgeImage>(
-      "ros2_input_bridge_image", 10, std::bind(&ImageConverterNode::BridgeToROSCallback, this,
-      std::placeholders::_1))},
+  pub_nitros_image_type_(
+    declare_parameter<std::string>("pub_nitros_image_type", "nitros_image_rgb8")),
+  sub_nitros_image_type_(
+    declare_parameter<std::string>("sub_nitros_image_type", "nitros_image_rgb8")),
   num_blocks_(declare_parameter<int64_t>("num_blocks", 40)),
-  timeout_(declare_parameter<int64_t>("timeout", 500))
+  // Timeout in microseconds: duration to wait after refcount reaches 0 before recycling the buffer
+  timeout_(declare_parameter<int64_t>("timeout", 500)),
+  bridge_pub_qos_{::isaac_ros::common::AddQosParameter(*this, "DEFAULT", "bridge_pub_qos")},
+  bridge_sub_qos_{::isaac_ros::common::AddQosParameter(*this, "DEFAULT", "bridge_sub_qos")},
+  nitros_pub_qos_{::isaac_ros::common::AddQosParameter(*this, "DEFAULT", "nitros_pub_qos")},
+  nitros_sub_qos_{::isaac_ros::common::AddQosParameter(*this, "DEFAULT", "nitros_sub_qos")}
 {
   cudaSetDevice(0);
   cuDevicePrimaryCtxRetain(&ctx_, 0);
 
   cudaEventCreateWithFlags(&event_, cudaEventInterprocess | cudaEventDisableTiming);
   cudaIpcGetEventHandle(reinterpret_cast<cudaIpcEventHandle_t *>(&ipc_event_handle_), event_);
+
+  bridge_image_pub_ = create_publisher<isaac_ros_nitros_bridge_interfaces::msg::NitrosBridgeImage>(
+    "ros2_output_bridge_image", bridge_pub_qos_);
+
+  bridge_image_sub_ = create_subscription<
+    isaac_ros_nitros_bridge_interfaces::msg::NitrosBridgeImage>(
+    "ros2_input_bridge_image", bridge_sub_qos_,
+    std::bind(&ImageConverterNode::BridgeToROSCallback, this, std::placeholders::_1));
+
+  nitros_pub_ = std::make_shared<nvidia::isaac_ros::nitros::ManagedNitrosPublisher<
+        nvidia::isaac_ros::nitros::NitrosImage>>(
+    this, "ros2_output_image", pub_nitros_image_type_,
+    nvidia::isaac_ros::nitros::NitrosDiagnosticsConfig{}, nitros_pub_qos_);
+
+  nitros_sub_ = std::make_shared<nvidia::isaac_ros::nitros::ManagedNitrosSubscriber<
+        nvidia::isaac_ros::nitros::NitrosImageView>>(
+    this, "ros2_input_image", sub_nitros_image_type_,
+    std::bind(&ImageConverterNode::ROSToBridgeCallback, this, std::placeholders::_1),
+    nvidia::isaac_ros::nitros::NitrosDiagnosticsConfig{}, nitros_sub_qos_);
 }
 
 ImageConverterNode::~ImageConverterNode() = default;
-
 
 void ImageConverterNode::BridgeToROSCallback(
   const isaac_ros_nitros_bridge_interfaces::msg::NitrosBridgeImage::SharedPtr msg)
@@ -191,20 +204,23 @@ void ImageConverterNode::BridgeToROSCallback(
     handle_ptr_map_[msg->data.data()[1]] = gpu_buffer;
   }
 
+  auto host_ipc_buffer_ptr = host_ipc_buffer_;
   nvidia::isaac_ros::nitros::NitrosImage nitros_image =
     nvidia::isaac_ros::nitros::NitrosImageBuilder()
     .WithHeader(msg->header)
-    .WithEncoding(img_encodings::RGB8)
+    .WithEncoding(msg->encoding)
     .WithDimensions(msg->height, msg->width)
     .WithGpuData(reinterpret_cast<void *>(gpu_buffer))
+    .WithReleaseCallback(
+    [host_ipc_buffer_ptr]() {
+      if (host_ipc_buffer_ptr) {
+        host_ipc_buffer_ptr->refcount_dec();
+      }
+    })
     .Build();
 
   nitros_pub_->publish(nitros_image);
 
-  // Update refcount if it exists
-  if (!msg_uid.empty()) {
-    host_ipc_buffer_->refcount_dec();
-  }
   RCLCPP_DEBUG(this->get_logger(), "NITROS Image is Published from NITROS Bridge.");
 }
 

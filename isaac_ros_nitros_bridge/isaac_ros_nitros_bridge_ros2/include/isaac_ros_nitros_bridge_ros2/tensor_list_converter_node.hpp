@@ -24,6 +24,7 @@
 
 #include "rclcpp/rclcpp.hpp"
 
+#include "isaac_ros_common/qos.hpp"
 #include "isaac_ros_managed_nitros/managed_nitros_publisher.hpp"
 #include "isaac_ros_managed_nitros/managed_nitros_subscriber.hpp"
 
@@ -91,6 +92,12 @@ private:
   cudaIpcEventHandle_t ipc_event_handle_;
   // CUDA event export from IPC event to synchronize the upstream
   cudaEvent_t event_;
+  // QoS for NITROS publishers and subscribers
+  rclcpp::QoS nitros_pub_qos_;
+  rclcpp::QoS nitros_sub_qos_;
+  // QoS for NITROS bridge publishers and subscribers
+  rclcpp::QoS bridge_pub_qos_;
+  rclcpp::QoS bridge_sub_qos_;
 };
 
 }  // namespace nitros_bridge

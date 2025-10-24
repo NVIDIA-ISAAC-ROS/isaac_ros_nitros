@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
-// Copyright (c) 2023-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+// Copyright (c) 2023-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -22,6 +22,8 @@
 #include "isaac_ros_nitros_image_type/nitros_image_builder.hpp"
 #include "sensor_msgs/image_encodings.hpp"
 
+#include "isaac_ros_common/cuda_stream.hpp"
+
 namespace custom_nitros_image
 {
 
@@ -33,7 +35,13 @@ GpuImageBuilderNode::GpuImageBuilderNode(const rclcpp::NodeOptions options)
   nitros_pub_{std::make_shared<nvidia::isaac_ros::nitros::ManagedNitrosPublisher<
         nvidia::isaac_ros::nitros::NitrosImage>>(
       this, "gpu_image",
-      nvidia::isaac_ros::nitros::nitros_image_rgb8_t::supported_type_name)} {}
+      nvidia::isaac_ros::nitros::nitros_image_rgb8_t::supported_type_name)}
+{
+  CHECK_CUDA_ERROR(
+    ::nvidia::isaac_ros::common::initNamedCudaStream(
+      cuda_stream_, "isaac_ros_gpu_image_builder_node"),
+    "Error initializing CUDA stream");
+}
 
 GpuImageBuilderNode::~GpuImageBuilderNode() = default;
 
@@ -44,16 +52,24 @@ void GpuImageBuilderNode::InputCallback(const sensor_msgs::msg::Image::SharedPtr
 
   // Allocate CUDA buffer to store image
   void * buffer;
-  cudaMalloc(&buffer, buffer_size);
+  CHECK_CUDA_ERROR(
+    cudaMallocAsync(&buffer, buffer_size, cuda_stream_),
+    "Error allocating CUDA buffer");
 
   // Copy data bytes to CUDA buffer
-  cudaMemcpy(buffer, msg->data.data(), buffer_size, cudaMemcpyDefault);
+  CHECK_CUDA_ERROR(
+    cudaMemcpyAsync(
+      buffer, msg->data.data(), buffer_size, cudaMemcpyDefault,
+      cuda_stream_),
+    "Error copying data to CUDA buffer");
 
   // Adding header data
   std_msgs::msg::Header header;
   header.stamp.sec = 123456;
   header.stamp.nanosec = 789101112;
   header.frame_id = "cuda_image";
+
+  CHECK_CUDA_ERROR(cudaStreamSynchronize(cuda_stream_), "Error synchronizing CUDA stream");
 
   // Create NitrosImage wrapping CUDA buffer
   nvidia::isaac_ros::nitros::NitrosImage nitros_image =

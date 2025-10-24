@@ -353,7 +353,10 @@ void NitrosPublisherSubscriberGroup::createNitrosSubscribers()
       RCLCPP_ERROR(
         node_.get_logger(),
         "[NitrosPublisherSubscriberGroup] Topic name was not specified for a "
-        "GXF graph IO");
+        "GXF graph IO. Component type: %s | Component Name: %s | Entity Name: %s",
+        ingress_comp_info.component_type_name.c_str(),
+        ingress_comp_info.component_name.c_str(),
+        ingress_comp_info.entity_name.c_str());
     }
 
     std::vector<std::string> supported_data_formats =
@@ -387,7 +390,10 @@ void NitrosPublisherSubscriberGroup::createNitrosPublishers()
       RCLCPP_ERROR(
         node_.get_logger(),
         "[NitrosPublisherSubscriberGroup] Topic name was not specified for a "
-        "GXF graph IO");
+        "GXF graph IO. Component type: %s | Component Name: %s | Entity Name: %s",
+        egress_comp_info.component_type_name.c_str(),
+        egress_comp_info.component_name.c_str(),
+        egress_comp_info.entity_name.c_str());
     }
 
     std::vector<std::string> supported_data_formats =

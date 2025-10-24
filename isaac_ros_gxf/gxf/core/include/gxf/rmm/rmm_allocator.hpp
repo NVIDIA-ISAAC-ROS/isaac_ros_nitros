@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
-// Copyright (c) 2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+// Copyright (c) 2024-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -21,6 +21,7 @@
 #include <cuda_runtime_api.h>
 
 #include <memory>
+#include <shared_mutex>  // NOLINT
 #include <string>
 #include <unordered_map>
 #include <utility>
@@ -65,18 +66,18 @@ class RMMAllocator : public CudaAllocator {
   Resource<Handle<GPUDevice>> gpu_device_;
 
   AllocatorStage stage_{AllocatorStage::kUninitialized};
-  std::mutex mutex_;
   cudaStream_t stream_ = {};
   size_t device_max_memory_pool_size_;
   size_t host_max_memory_pool_size_;
 
   // Create a CUDA memory resource
-  std::unique_ptr<rmm::mr::cuda_memory_resource> device_mr;
-  std::unique_ptr<rmm::mr::pool_memory_resource<rmm::mr::cuda_memory_resource>> pool_mr_device;
-  std::unique_ptr<rmm::mr::pinned_memory_resource> pinned_mr;
-  std::unique_ptr<rmm::mr::pool_memory_resource<rmm::mr::pinned_memory_resource>> pool_mr_host;
+  std::unique_ptr<rmm::mr::cuda_memory_resource> device_mr_;
+  std::unique_ptr<rmm::mr::pool_memory_resource<rmm::mr::cuda_memory_resource>> pool_mr_device_;
+  std::unique_ptr<rmm::mr::pinned_memory_resource> pinned_mr_;
+  std::unique_ptr<rmm::mr::pool_memory_resource<rmm::mr::pinned_memory_resource>> pool_mr_host_;
 
-  std::unordered_map<void*, std::pair<std::size_t, MemoryStorageType>> pool_map = {};
+  mutable std::shared_mutex shared_mutex_;
+  std::unordered_map<void*, std::pair<std::size_t, MemoryStorageType>> pool_map_ = {};
 };
 
 }  // namespace gxf

@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
-// Copyright (c) 2022-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+// Copyright (c) 2022-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -15,6 +15,11 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
+#include <stdexcept>
+#include <sstream>
+#include <cstdio>
+
+#include "isaac_ros_common/cuda_stream.hpp"
 #include "gxf/std/timestamp.hpp"
 
 #include "isaac_ros_nitros/nitros_publisher.hpp"
@@ -47,6 +52,7 @@ void NitrosPublisherWaitable::trigger()
   nvtxRangePushWrapper(nvtx_tag_name.str().c_str(), CLR_BLUE);
 
   std::lock_guard<std::mutex> lock(guard_condition_mutex_);
+  is_trigger_pending_ = true;
   guard_condition_.trigger();
 
   nvtxRangePopWrapper();
@@ -92,6 +98,7 @@ void NitrosPublisherWaitable::execute(std::shared_ptr<void> & data)
   nvtxRangePushWrapper(nvtx_tag_name.str().c_str(), CLR_BLUE);
 
   nitros_publisher_.extractMessagesFromGXF();
+  is_trigger_pending_ = false;
 
   nvtxRangePopWrapper();
 }
@@ -99,7 +106,12 @@ void NitrosPublisherWaitable::execute(std::shared_ptr<void> & data)
 void NitrosPublisherWaitable::add_to_wait_set(rcl_wait_set_t * wait_set)
 {
   std::lock_guard<std::mutex> lock(guard_condition_mutex_);
-  guard_condition_.add_to_wait_set(wait_set);
+
+  if (is_trigger_pending_) {
+    guard_condition_.trigger();
+  }
+
+  guard_condition_.add_to_wait_set(*wait_set);
 }
 
 NitrosPublisher::NitrosPublisher(
@@ -151,6 +163,13 @@ NitrosPublisher::NitrosPublisher(
       data_format,
       weight);
   }
+
+  // Initialize the cuda stream and event with priority 0, assumes only 1 cuda device on hand with
+  // dev id 0, Might want to make this more flexible in the future
+  CHECK_CUDA_ERROR(
+    ::nvidia::isaac_ros::common::initNamedCudaStream(
+      cuda_stream_, "nitros_type_adaptation_custom_to_ros"),
+    "Error initializing CUDA stream");
 }
 
 NitrosPublisher::NitrosPublisher(
@@ -382,7 +401,8 @@ void NitrosPublisher::extractMessagesFromGXF()
     if (msg_eids.size() > 0) {
       RCLCPP_DEBUG(
         node_.get_logger(),
-        "[NitrosPublisher] Obtained %ld messages from the message relay", msg_eids.size());
+        "[NitrosPublisher] Obtained %ld messages from the message relay for topic_name=\"%s\"",
+        msg_eids.size(), config_.topic_name.c_str());
     }
     for (const auto msg_eid : msg_eids) {
       publish(msg_eid);
@@ -412,9 +432,21 @@ void NitrosPublisher::publish(const int64_t handle)
     }
   }
 
+  std::shared_ptr<cudaEvent_t> event_ = std::shared_ptr<cudaEvent_t>(
+    new cudaEvent_t,
+    [](cudaEvent_t * p) {
+      if (p) {
+        cudaEventDestroy(*p);
+        delete p;
+      }
+    }
+  );
+  cudaError_t event_result = cudaEventCreate(event_.get());
+  CHECK_CUDA_ERROR(event_result, "Failure creating CUDA event");
+
   NitrosTypeBase nitros_msg {
     handle, negotiated_data_format_,
-    config_.compatible_data_format, frame_id};
+    config_.compatible_data_format, frame_id, cuda_stream_};
 
   publish(nitros_msg);
 }

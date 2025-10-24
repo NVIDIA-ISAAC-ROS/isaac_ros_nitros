@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
-// Copyright (c) 2021-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+// Copyright (c) 2021-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -61,6 +61,8 @@ class TimedJobList {
   void notifyDone(JobT job);
   // This is a blocking call which will wait for an job.
   void waitForJob(JobT&);
+  // Removes a job from the queue if present. Returns true if the job was found and removed.
+  bool remove(JobT job);
   // Sets the job list to a running state
   void start() { is_running_.store(true); }
   // Sets the job list to a stopped state and wakes all waiting threads to flush.
@@ -185,6 +187,63 @@ template <typename JobT>
 void TimedJobList<JobT>::notifyDone(JobT job) {
   std::unique_lock<std::mutex> lock(queue_cv_mutex_);
   wakeOne();
+}
+
+// Removes a job from the pending list or priority queue and from the items_ tracking set.
+// Since std::priority_queue doesn't support direct element removal, this method rebuilds
+// the queue excluding the target job when necessary. Returns true if the job was found
+// and successfully removed, false if the job wasn't present in any container.
+template <typename JobT>
+bool TimedJobList<JobT>::remove(JobT job) {
+  std::unique_lock<std::mutex> lock(queue_cv_mutex_);
+
+  // Check if the job exists in our tracking set
+  auto it = items_.find(job);
+  if (it == items_.end()) {
+    return false;  // Job not found
+  }
+
+  // Remove from items_
+  items_.erase(it);
+
+  // Check if job is in pending list and remove if found
+  for (auto pending_it = pending_.begin(); pending_it != pending_.end(); ++pending_it) {
+    if (pending_it->job == job) {
+      pending_.erase(pending_it);
+      return true;
+    }
+  }
+
+  // If not in pending, it might be in the queue
+  // Since std::priority_queue doesn't allow direct removal, we need to:
+  // 1. Create a new queue
+  // 2. Pop all elements from the old queue
+  // 3. Push all elements except the one we want to remove into the new queue
+  // 4. Swap the queues
+
+  std::priority_queue<Item, std::vector<Item>, ItemPriorityCmp> new_queue;
+  bool found = false;
+
+  while (!queue_.empty()) {
+    Item item = queue_.top();
+    queue_.pop();
+
+    if (item.job != job) {
+      // Keep this item
+      new_queue.push(item);
+    } else {
+      // Found the job to remove
+      found = true;
+    }
+  }
+
+  // Replace the old queue with the new one
+  queue_.swap(new_queue);
+
+  // Wake waiting threads to recalculate wait times
+  wakeOne();
+
+  return found;
 }
 
 template <typename JobT>

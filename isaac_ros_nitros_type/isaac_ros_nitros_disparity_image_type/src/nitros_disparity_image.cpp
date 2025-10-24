@@ -113,8 +113,7 @@ void rclcpp::TypeAdapter<nvidia::isaac_ros::nitros::NitrosDisparityImage,
   auto context = nvidia::isaac_ros::nitros::GetTypeAdapterNitrosContext().getContext();
   auto msg_entity = nvidia::gxf::Entity::Shared(context, source.handle);
 
-  auto maybe_disparity_image = nvidia::isaac::GetCameraMessage(
-    msg_entity.value());
+  auto maybe_disparity_image = nvidia::isaac::GetCameraMessage(msg_entity.value());
   if (!maybe_disparity_image) {
     std::stringstream error_msg;
     error_msg <<
@@ -134,7 +133,7 @@ void rclcpp::TypeAdapter<nvidia::isaac_ros::nitros::NitrosDisparityImage,
   if (encoding == std::end(g_gxf_to_ros_video_format)) {
     std::stringstream error_msg;
     error_msg <<
-      "[convert_to_custom] Unsupported encoding from GXF: " <<
+      "[convert_to_ros_message] Unsupported encoding from GXF: " <<
       static_cast<int>(video_buffer_info.color_format);
     RCLCPP_ERROR(rclcpp::get_logger("NitrosDisparityImage"), error_msg.str().c_str());
     throw std::runtime_error(error_msg.str().c_str());
@@ -251,16 +250,23 @@ void rclcpp::TypeAdapter<nvidia::isaac_ros::nitros::NitrosDisparityImage,
   }
   auto allocator_handle = maybe_allocator_handle.value();
 
-  auto maybe_disparity_image = CreateCameraMessage(source, allocator_handle, context);
-  if (!maybe_disparity_image) {
+  if (source.image.width % 2 != 0 || source.image.height % 2 != 0) {
+    RCLCPP_ERROR(
+      rclcpp::get_logger("NitrosDisparityImage"),
+      "[convert_to_custom] Image width/height must be even for creation of gxf::VideoBuffer");
+    throw std::runtime_error("[convert_to_custom] Odd Image width or height.");
+  }
+
+  auto maybe_camera_message = CreateCameraMessage(source, allocator_handle, context);
+  if (!maybe_camera_message) {
     std::string error_msg =
-      "[convert_to_ros_message] Failed to create CameraMessage object";
+      "[convert_to_custom] Failed to create CameraMessage object";
     RCLCPP_ERROR(
       rclcpp::get_logger("NitrosDisparityImage"), error_msg.c_str());
     throw std::runtime_error(error_msg.c_str());
   }
-  auto disparity_image = maybe_disparity_image.value();
 
+  auto disparity_image = maybe_camera_message.value();
   auto video_buffer_info = disparity_image.frame->video_frame_info();
 
   // Copy data from Host to Device
@@ -312,7 +318,6 @@ void rclcpp::TypeAdapter<nvidia::isaac_ros::nitros::NitrosDisparityImage,
     rclcpp::get_logger("NitrosDisparityImage"),
     "[convert_to_custom] Conversion completed (resulting handle=%ld)",
     disparity_image.entity.eid());
-
 
   nvidia::isaac_ros::nitros::nvtxRangePopWrapper();
 }

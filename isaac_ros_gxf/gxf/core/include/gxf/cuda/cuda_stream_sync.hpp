@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
-// Copyright (c) 2021-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+// Copyright (c) 2021-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -28,8 +28,10 @@
 namespace nvidia {
 namespace gxf {
 
-// Get all cuda streams from messages of receiver, synchronize these streams,
-// and forward messages to transmitter.
+/**
+ * @brief Get all cuda streams from messages of receiver, synchronize these streams,
+ * and forward messages to transmitter.
+ */
 class CudaStreamSync  : public Codelet {
  public:
   virtual ~CudaStreamSync() = default;

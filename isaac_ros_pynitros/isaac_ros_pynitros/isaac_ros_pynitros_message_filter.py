@@ -15,7 +15,8 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
-from cuda import cuda, cudart
+import cuda.bindings.driver as driver
+import cuda.bindings.runtime as runtime
 from isaac_ros_pynitros.isaac_ros_pynitros_subscriber import PyNitrosSubscriber
 from isaac_ros_pynitros.pynitros_type_views.pynitros_type_view_base import PyNitrosTypeViewBase
 
@@ -52,9 +53,11 @@ class PyNitrosMessageFilter():
             if (isinstance(sub, PyNitrosSubscriber)):
                 if (sub.enable_ros_subscribe):
                     raw_msg_type = PyNitrosSubscriber.BRIDGE_TYPE_TO_RAW_TYPE[sub.message_type]
-                    rclpy_subs.append(Subscriber(self.node, raw_msg_type, sub.sub_topic_name))
+                    rclpy_subs.append(Subscriber(self.node, raw_msg_type, sub.sub_topic_name,
+                                                 qos_profile=sub.qos_profile))
                 else:
-                    rclpy_subs.append(Subscriber(self.node, sub.message_type, sub.sub_topic_name))
+                    rclpy_subs.append(Subscriber(self.node, sub.message_type, sub.sub_topic_name,
+                                                 qos_profile=sub.qos_profile))
             else:
                 rclpy_subs.append(sub)
 
@@ -82,22 +85,22 @@ class PyNitrosMessageFilter():
                 bridge_message_type = cur_subscriber.message_type
                 if (cur_subscriber.enable_ros_subscribe):
                     pynitros_view = PyNitrosSubscriber.BRIDGE_TYPE_TO_PYNITROS_VIEW[
-                                                        bridge_message_type](cur_message)
+                        bridge_message_type](cur_message)
                 else:
                     if cur_message.cuda_event_handle:
                         event_handle_tuple = tuple(cur_message.cuda_event_handle)
                         if event_handle_tuple not in self._event_handle_to_event:
                             # Save event handle to local map
-                            event_handle = cudart.cudaIpcEventHandle_t()
+                            event_handle = runtime.cudaIpcEventHandle_t()
                             event_handle.reserved = cur_message.cuda_event_handle
 
-                            err, cuda_event = cudart.cudaIpcOpenEventHandle(event_handle)
+                            err, cuda_event = runtime.cudaIpcOpenEventHandle(event_handle)
                             self._event_handle_to_event[event_handle_tuple] = cuda_event
                             self.ASSERT_CUDA_SUCCESS(err)
                         else:
                             cuda_event = self._event_handle_to_event[event_handle_tuple]
                         # Synchronize to upstream Event
-                        err, = cudart.cudaEventSynchronize(cuda_event)
+                        err, = runtime.cudaEventSynchronize(cuda_event)
                         self.ASSERT_CUDA_SUCCESS(err)
 
                     # Create PyNITROS view
@@ -107,7 +110,7 @@ class PyNitrosMessageFilter():
                     if (sender_pid, memblock_fd) not in self._cuda_memblock_fd_to_ptr:
                         try:
                             pynitros_view = PyNitrosSubscriber.BRIDGE_TYPE_TO_PYNITROS_VIEW[
-                                                                bridge_message_type](cur_message)
+                                bridge_message_type](cur_message)
                         except ValueError:
                             self.node.get_logger().warn(
                                 'Failed to create PyNITROS view from bridge msg')
@@ -121,7 +124,7 @@ class PyNitrosMessageFilter():
                         gpu_ptr = self._cuda_memblock_fd_to_ptr[(sender_pid, memblock_fd)]
                         try:
                             pynitros_view = PyNitrosSubscriber.BRIDGE_TYPE_TO_PYNITROS_VIEW[
-                                            bridge_message_type](cur_message, gpu_ptr)
+                                bridge_message_type](cur_message, gpu_ptr)
                         except ValueError:
                             self.node.get_logger().warn(
                                 'Failed to create PyNITROS view from bridge msg')
@@ -137,11 +140,11 @@ class PyNitrosMessageFilter():
                 pynitros_view.postprocess()
 
     def ASSERT_CUDA_SUCCESS(self, err):
-        if isinstance(err, cuda.CUresult):
-            if err != cuda.CUresult.CUDA_SUCCESS:
+        if isinstance(err, driver.CUresult):
+            if err != driver.CUresult.CUDA_SUCCESS:
                 raise RuntimeError(
-                    f'[Cuda Error: {err}], {cuda.cuGetErrorString(err)}')
-        elif isinstance(err, cudart.cudaError_t):
+                    f'[Cuda Error: {err}], {driver.cuGetErrorString(err)}')
+        elif isinstance(err, runtime.cudaError_t):
             if (err != 0):
                 raise RuntimeError(f'CudaRT Error: {err}')
         else:
@@ -149,5 +152,5 @@ class PyNitrosMessageFilter():
 
     def __del__(self):
         for gpu_handle in self._cuda_memblock_handle:
-            err, = cuda.cuMemRelease(gpu_handle)
+            err, = driver.cuMemRelease(gpu_handle)
             self.ASSERT_CUDA_SUCCESS(err)

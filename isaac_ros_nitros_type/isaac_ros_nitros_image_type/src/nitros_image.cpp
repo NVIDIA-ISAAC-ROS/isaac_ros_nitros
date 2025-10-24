@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
-// Copyright (c) 2022-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+// Copyright (c) 2022-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -39,6 +39,8 @@
 #include "isaac_ros_nitros/utils/vpi_utilities.hpp"
 #include "vpi/Image.h"
 #include "vpi/algo/ConvertImageFormat.h"
+
+#include "isaac_ros_common/cuda_stream.hpp"
 
 constexpr char kEntityName[] = "memory_pool";
 constexpr char kComponentName[] = "unbounded_allocator";
@@ -188,7 +190,7 @@ VPIStatus CreateVPIImageWrapper(
   img_data.buffer.pitch.numPlanes = image_info.color_planes.size();
   auto data_ptr_offset = 0;
   for (size_t i = 0; i < image_info.color_planes.size(); ++i) {
-    img_data.buffer.pitch.planes[i].data = video_buff->pointer() + data_ptr_offset;
+    img_data.buffer.pitch.planes[i].pBase = video_buff->pointer() + data_ptr_offset;
     img_data.buffer.pitch.planes[i].height = image_info.color_planes[i].height;
     img_data.buffer.pitch.planes[i].width = image_info.color_planes[i].width;
     img_data.buffer.pitch.planes[i].pixelType = vpi_format.pixel_type[i];
@@ -274,7 +276,7 @@ void rclcpp::TypeAdapter<nitros::NitrosImage, sensor_msgs::msg::Image>::convert_
     CHECK_VPI_STATUS(vpiImageUnlock(output));
 
     destination.encoding = img_encodings::RGB8;
-    src_ptr = output_data.buffer.pitch.planes[0].data;
+    src_ptr = output_data.buffer.pitch.planes[0].pBase;
     src_pitch = get_step_size(output_data);
     step_size = get_step_size(output_data);
 
@@ -296,15 +298,16 @@ void rclcpp::TypeAdapter<nitros::NitrosImage, sensor_msgs::msg::Image>::convert_
   destination.data.resize(destination.step * destination.height);
 
   // Copy data from Device to Host
-  const cudaError_t cuda_error = cudaMemcpy2D(
+  const cudaError_t cuda_error = cudaMemcpy2DAsync(
     destination.data.data(),
     destination.step,
     src_ptr,
     src_pitch,
     destination.step,
     destination.height,
-    cudaMemcpyDeviceToHost);
-
+    cudaMemcpyDeviceToHost,
+    source.cuda_stream
+  );
   if (cuda_error != cudaSuccess) {
     std::stringstream error_msg;
     error_msg <<
@@ -316,6 +319,10 @@ void rclcpp::TypeAdapter<nitros::NitrosImage, sensor_msgs::msg::Image>::convert_
       rclcpp::get_logger("NitrosImage"), error_msg.str().c_str());
     throw std::runtime_error(error_msg.str().c_str());
   }
+
+  // since this is meant to be synced right away, we should sync the stream
+  cudaError_t cuda_result = cudaStreamSynchronize(source.cuda_stream);
+  CHECK_CUDA_ERROR(cuda_result, "Stream was not able to be synchronized");
 
   vpiImageDestroy(input);
   vpiImageDestroy(output);
@@ -403,17 +410,20 @@ void rclcpp::TypeAdapter<nitros::NitrosImage, sensor_msgs::msg::Image>::convert_
   allocate_video_buffer(source, gxf_video_buffer.value(), allocator_handle);
 
   auto video_buffer_info = gxf_video_buffer.value()->video_frame_info();
-
+  auto nitros_cuda_stream =
+    nvidia::isaac_ros::nitros::GetTypeAdapterNitrosContext()
+    .getCudaStreamFromNitrosGraph();
   // Copy data from Host to Device
   auto width = get_step_size(video_buffer_info);
-  const cudaError_t cuda_error = cudaMemcpy2D(
+  const cudaError_t cuda_error = cudaMemcpy2DAsync(
     gxf_video_buffer.value()->pointer(),
     video_buffer_info.color_planes[0].stride,
     source.data.data(),
     source.step,
     width,
     video_buffer_info.height,
-    cudaMemcpyHostToDevice);
+    cudaMemcpyHostToDevice,
+    nitros_cuda_stream);
 
   if (cuda_error != cudaSuccess) {
     std::stringstream error_msg;
@@ -426,7 +436,8 @@ void rclcpp::TypeAdapter<nitros::NitrosImage, sensor_msgs::msg::Image>::convert_
       rclcpp::get_logger("NitrosImage"), error_msg.str().c_str());
     throw std::runtime_error(error_msg.str().c_str());
   }
-
+  cudaError_t cuda_result = cudaStreamSynchronize(nitros_cuda_stream);
+  CHECK_CUDA_ERROR(cuda_result, "Stream was not able to be synchronized");
   // Add timestamp to the message
   uint64_t input_timestamp =
     source.header.stamp.sec * static_cast<uint64_t>(1e9) +

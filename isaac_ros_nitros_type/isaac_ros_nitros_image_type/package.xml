@@ -13,7 +13,7 @@ license agreement from NVIDIA CORPORATION is strictly prohibited.
 <?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
   <name>isaac_ros_nitros_image_type</name>
-  <version>3.2.5</version>
+  <version>4.0.0</version>
   <description>Isaac ROS Nitros Image Type</description>
 
   <maintainer email="isaac-ros-maintainers@nvidia.com">Isaac ROS Maintainers</maintainer>
@@ -29,6 +29,8 @@ license agreement from NVIDIA CORPORATION is strictly prohibited.
   <depend>sensor_msgs</depend>
   <depend>isaac_ros_nitros</depend>
   <depend>isaac_ros_common</depend>
+
+  <build_depend>ament_index_cpp</build_depend>
 
   <test_depend>ament_lint_auto</test_depend>
   <test_depend>ament_lint_common</test_depend>

@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
-// Copyright (c) 2022-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+// Copyright (c) 2022-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -30,6 +30,7 @@
 #include "gxf/std/timestamp.hpp"
 #pragma GCC diagnostic pop
 
+#include "isaac_ros_common/cuda_stream.hpp"
 #include "isaac_ros_nitros_tensor_list_type/nitros_tensor_list.hpp"
 #include "isaac_ros_nitros/types/type_adapter_nitros_context.hpp"
 
@@ -81,14 +82,16 @@ void rclcpp::TypeAdapter<
     switch (gxf_tensor->storage_type()) {
       case nvidia::gxf::MemoryStorageType::kHost:
         {
+          // This is using non pinned memory, so not need for synchronization inside the same
+          // stream
           std::memcpy(ros_tensor.data.data(), gxf_tensor->pointer(), gxf_tensor->size());
         }
         break;
       case nvidia::gxf::MemoryStorageType::kDevice:
         {
-          cudaError_t cuda_error = cudaMemcpy(
+          cudaError_t cuda_error = cudaMemcpyAsync(
             ros_tensor.data.data(), gxf_tensor->pointer(),
-            gxf_tensor->size(), cudaMemcpyDeviceToHost);
+            gxf_tensor->size(), cudaMemcpyDeviceToHost, source.cuda_stream);
           if (cuda_error != cudaSuccess) {
             std::stringstream error_msg;
             error_msg <<
@@ -100,6 +103,8 @@ void rclcpp::TypeAdapter<
               rclcpp::get_logger("NitrosTensorList"), error_msg.str().c_str());
             throw std::runtime_error(error_msg.str().c_str());
           }
+          cudaError_t cuda_result = cudaStreamSynchronize(source.cuda_stream);
+          CHECK_CUDA_ERROR(cuda_result, "Stream was not able to be synchronized");
         }
         break;
       default:
@@ -230,7 +235,7 @@ void rclcpp::TypeAdapter<
           nvidia::gxf::Shape(dims, ros_tensor.shape.rank), storage_type, allocator_handle);
         break;
       case nvidia::gxf::PrimitiveType::kInt64:
-        result = gxf_tensor.value()->reshape<int32_t>(
+        result = gxf_tensor.value()->reshape<int64_t>(
           nvidia::gxf::Shape(dims, ros_tensor.shape.rank), storage_type, allocator_handle);
         break;
       case nvidia::gxf::PrimitiveType::kFloat32:
@@ -259,11 +264,15 @@ void rclcpp::TypeAdapter<
     }
 
     const cudaMemcpyKind operation = cudaMemcpyHostToDevice;
-    const cudaError_t cuda_error = cudaMemcpy(
+    auto nitros_cuda_stream =
+      nvidia::isaac_ros::nitros::GetTypeAdapterNitrosContext()
+      .getCudaStreamFromNitrosGraph();
+    const cudaError_t cuda_error = cudaMemcpyAsync(
       gxf_tensor.value()->pointer(),
       ros_tensor.data.data(),
       gxf_tensor.value()->size(),
-      operation);
+      operation,
+      nitros_cuda_stream);
 
     if (cuda_error != cudaSuccess) {
       std::stringstream error_msg;
@@ -276,6 +285,8 @@ void rclcpp::TypeAdapter<
         rclcpp::get_logger("NitrosTensorList"), error_msg.str().c_str());
       throw std::runtime_error(error_msg.str().c_str());
     }
+    cudaError_t cuda_result = cudaStreamSynchronize(nitros_cuda_stream);
+    CHECK_CUDA_ERROR(cuda_result, "Stream was not able to be synchronized");
   }
 
   // Add timestamp to the message

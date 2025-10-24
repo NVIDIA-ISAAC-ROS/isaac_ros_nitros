@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
-// Copyright (c) 2021-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+// Copyright (c) 2021-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -26,6 +26,7 @@
 #include <memory>
 #include <mutex>
 #include <set>
+#include <string>
 #include <thread>
 #include <unordered_map>
 #include <utility>
@@ -115,6 +116,7 @@ class MultiThreadScheduler : public Scheduler {
   Parameter<int64_t> worker_thread_number_;
   Parameter<bool> thread_pool_allocation_auto_;
   Parameter<bool> strict_job_thread_pinning_;
+  Parameter<std::string> worker_thread_name_id_;
 
   EntityExecutor* executor_ = nullptr;
 

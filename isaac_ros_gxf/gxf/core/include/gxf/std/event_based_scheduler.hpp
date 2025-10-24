@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
-// Copyright (c) 2023-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+// Copyright (c) 2023-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -33,11 +33,14 @@
 #include <utility>
 #include <vector>
 
+#include "cuda.h"
+
 #include "common/fixed_map.hpp"
 #include "gxf/core/entity.hpp"
 #include "gxf/core/handle.hpp"
 #include "gxf/std/clock.hpp"
 #include "gxf/std/cpu_thread.hpp"
+#include "gxf/std/cuda_green_context_pool.hpp"
 #include "gxf/std/gems/event_list/unique_event_list.hpp"
 #include "gxf/std/gems/staging_queue/staging_queue.hpp"
 #include "gxf/std/gems/timed_job_list/timed_job_list.hpp"
@@ -47,7 +50,6 @@
 
 namespace nvidia {
 namespace gxf {
-
 
 // Forward declarations
 class EntityExecutor;
@@ -90,6 +92,8 @@ class EventBasedScheduler : public Scheduler {
       thread_id_ = kDefaultThreadPoolThreadId;
       unschedule_ = false;
       is_present_in_ready_queue_ = false;
+      cuda_context_ = nullptr;
+      cuda_green_context_pool_ = nullptr;
     }
 
     void updateCondition() {
@@ -122,6 +126,8 @@ class EventBasedScheduler : public Scheduler {
     bool unschedule_;
     std::shared_timed_mutex ready_queue_sync_mutex_;
     bool is_present_in_ready_queue_;
+    CUcontext cuda_context_ = nullptr;
+    CudaGreenContextPool* cuda_green_context_pool_ = nullptr;
   };
 
   std::unordered_map<gxf_uid_t, std::shared_ptr<ScheduleEntity>> entities_;
@@ -152,7 +158,8 @@ class EventBasedScheduler : public Scheduler {
   // Entrance for async event handler thread
   void asyncEventThreadEntrance();
   // Entrance for worker threads
-  void workerThreadEntrance(ThreadPool* pool, int64_t thread_number);
+  void workerThreadEntrance(ThreadPool* pool, int64_t thread_number,
+                            gxf_uid_t cpu_thread_cid = kUnspecifiedUid);
 
   // Checks if need to stop due to no active entities or expiration
   bool checkEndingCriteria(int64_t timestamp);
@@ -169,11 +176,19 @@ class EventBasedScheduler : public Scheduler {
 
   // returns the current state of the scheduler as string
   const char* schedulerStateString();
-  // cache thread info for pinned job into resources_
-  void prepareResourceMapStrict(std::shared_ptr<ScheduleEntity> e);
+  // cache thread info for pinned job into resources_ and set cuda context if provided
+  gxf_result_t prepareResourceMapStrict(std::shared_ptr<ScheduleEntity> e);
   // index of the ready queue in the ready_wait_time_jobs_ vector where entity is supposed to go
 
   uint64_t getReadyCount();
+
+  // Helper functions for configuring worker threads
+  gxf_result_t configureThread(gxf_uid_t thread_uid, gxf_uid_t cpu_thread_cid);
+  gxf_result_t setCPUAffinity(const std::vector<uint32_t>& cpu_cores);
+  bool isRealtimeCPUThread(gxf_uid_t cpu_thread_cid);
+
+  // Load CUDA Driver API functions through runtime API
+  gxf_result_t loadDriverFunctions();
 
   // Parameters
   Parameter<Handle<Clock>> clock_;
@@ -182,10 +197,14 @@ class EventBasedScheduler : public Scheduler {
   Parameter<int64_t> stop_on_deadlock_timeout_;
   Parameter<int64_t> worker_thread_number_;
   Parameter<bool> thread_pool_allocation_auto_;
+  Parameter<std::string> worker_thread_name_id_;
+  // CPU core IDs to pin the worker threads to (empty means no core pinning)
+  Parameter<std::vector<uint32_t>> pin_cores_;
 
   EntityExecutor* executor_ = nullptr;
 
-  ThreadPool default_thread_pool_;
+  Entity default_thread_pool_entity_;
+  ThreadPool* default_thread_pool_;
 
   // thread pool set including default pool and added pools
   std::set<ThreadPool*> thread_pool_set_;
@@ -259,6 +278,15 @@ class EventBasedScheduler : public Scheduler {
   // maintain last no stop timestamp, and check if need to update should_stop
   gxf_result_t stop_on_deadlock_timeout(const int64_t timeout,
     const int64_t now, bool& should_stop);
+
+  // Deadlock detection grace period end timestamp
+  int64_t grace_end_timestamp_ = 0;
+  // Armed flag to require two consecutive deadlock checks before exiting
+  bool deadlock_armed_ = false;
+
+  // CUDA Driver API
+  CUresult (*fnCuCtxPushCurrent)(CUcontext) = nullptr;
+  CUresult (*fnCuCtxPopCurrent)(CUcontext*) = nullptr;
 };
 
 }  // namespace gxf

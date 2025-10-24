@@ -19,7 +19,8 @@ import math
 import os
 import uuid
 
-from cuda import cuda, cudart
+import cuda.bindings.driver as driver
+import cuda.bindings.runtime as runtime
 
 from isaac_ros_nitros_bridge_interfaces.msg import NitrosBridgeTensorList
 from isaac_ros_pynitros.utils.tensor_data_type import TensorDataTypeUtils
@@ -93,7 +94,7 @@ class PyNitrosTensorListBuilder(PyNitrosTypeBuilder):
 
         # Synchronize to upstream Event
         if event:
-            err, = cudart.cudaEventSynchronize(self.event)
+            err, = runtime.cudaEventSynchronize(self.event)
             super().ASSERT_CUDA_SUCCESS(err)
 
         # Set the data field
@@ -111,9 +112,9 @@ class PyNitrosTensorListBuilder(PyNitrosTypeBuilder):
                 raw_tensor.data_type = tensor.data_type
                 raw_tensor.strides = tensor.strides
                 # Assign to the private data field to reduce overhead of msg data assignment
-                raw_tensor._data = np.empty(tensor_size, dtype=np.uint8).tobytes()
-                err, = cudart.cudaMemcpy(raw_tensor.data, tensor_gpu_ptr, tensor_size,
-                                         cudart.cudaMemcpyKind.cudaMemcpyDeviceToHost)
+                raw_tensor._data = np.empty(tensor_size, dtype=np.uint8)
+                err, = runtime.cudaMemcpy(raw_tensor.data, tensor_gpu_ptr, tensor_size,
+                                          runtime.cudaMemcpyKind.cudaMemcpyDeviceToHost)
                 super().ASSERT_CUDA_SUCCESS(err)
                 tensor_list_msg_raw.tensors.append(raw_tensor)
             index += 1
@@ -189,14 +190,14 @@ class PyNitrosTensorListBuilder(PyNitrosTypeBuilder):
         # Copy tensors back-to-back into cuda mem space
         offset = 0
         for cur_tensor_ptr, cur_tensor_size in tensor_ptrs_sizes:
-            cur_gpu_ptr = cuda.CUdeviceptr(cuda_memblock_virtual_ptr + offset)
-            err, = cuda.cuMemcpyDtoDAsync(
+            cur_gpu_ptr = driver.CUdeviceptr(cuda_memblock_virtual_ptr + offset)
+            err, = driver.cuMemcpyDtoDAsync(
                 cur_gpu_ptr, cur_tensor_ptr, cur_tensor_size, self._stream)
             super().ASSERT_CUDA_SUCCESS(err)
 
             offset += cur_tensor_size
 
-        err, = cudart.cudaEventRecord(cuda_event, self._stream)
+        err, = runtime.cudaEventRecord(cuda_event, self._stream)
         super().ASSERT_CUDA_SUCCESS(err)
 
         return (cuda_memblock_fd, new_cuda_memblock_uuid, cuda_event_handle)

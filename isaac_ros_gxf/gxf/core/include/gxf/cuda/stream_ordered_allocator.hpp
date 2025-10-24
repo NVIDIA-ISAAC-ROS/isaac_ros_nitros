@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
-// Copyright (c) 2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+// Copyright (c) 2024-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -20,6 +20,7 @@
 #include <cuda_runtime.h>
 #include <cuda_runtime_api.h>
 
+#include <shared_mutex>
 #include <string>
 #include <unordered_map>
 
@@ -32,8 +33,13 @@
 namespace nvidia {
 namespace gxf {
 
-// An allocator which uses cudaMalloc/cudaMallocHost dynamically without a pool.
-// Does not provide bounded execution times.
+/**
+ * @brief An allocator which allocates and frees device memory using a CUDA memory pool.
+ *
+ * It uses CUDA's Stream Ordered Memory Allocator (cudaMallocFromPoolAsync/cudaFreeAsync).
+ * For synchronous allocate and free, it uses its own internally created CUDA stream.
+ * For asynchronous allocate and free, the user provided stream is used.
+ */
 class StreamOrderedAllocator : public CudaAllocator {
  public:
   StreamOrderedAllocator() = default;
@@ -58,10 +64,10 @@ class StreamOrderedAllocator : public CudaAllocator {
   Parameter<std::string> device_memory_initial_size_;
   Parameter<std::string> device_memory_max_size_;
 
+  mutable std::shared_mutex shared_mutex_;
   std::unordered_map<void*, size_t> pool_map_;
 
   AllocatorStage stage_{AllocatorStage::kUninitialized};
-  std::mutex mutex_;
   cudaStream_t stream_;
   cudaMemPool_t memory_pool_;
   cudaMemPoolProps pool_props_ = {};

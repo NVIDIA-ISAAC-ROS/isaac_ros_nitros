@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
-// Copyright (c) 2021-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+// Copyright (c) 2021-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -43,13 +43,18 @@ template <typename T>
 struct ParameterParser<T> {
   static Expected<T> Parse(gxf_context_t context, gxf_uid_t component_uid, const char* key,
                            const YAML::Node& node, const std::string& prefix) {
-    try {
-      return node.as<T>();
-    } catch (...) {
-      std::stringstream ss;
-      ss << node;
-      GXF_LOG_ERROR("Could not parse parameter '%s' from '%s'", key, ss.str().c_str());
-      return Unexpected{GXF_PARAMETER_PARSER_ERROR};
+    if (!strcmp(key, "int8") || !strcmp(key, "vector_int8") || !strcmp(key, "vector_2d_int8")) {
+      GXF_LOG_WARNING("type %s is not supported", key);
+      return Unexpected{GXF_PARAMETER_INVALID_TYPE};
+    } else {
+      try {
+        return node.as<T>();
+      } catch (...) {
+        std::stringstream ss;
+        ss << node;
+        GXF_LOG_ERROR("Could not parse parameter '%s' from '%s'", key, ss.str().c_str());
+        return Unexpected{GXF_PARAMETER_PARSER_ERROR};
+      }
     }
   }
 };

@@ -19,7 +19,8 @@ import ctypes
 from ctypes import c_long
 import math
 
-from cuda import cuda, cudart
+import cuda.bindings.driver as driver
+import cuda.bindings.runtime as runtime
 from isaac_ros_nitros_bridge_interfaces.msg import NitrosBridgeImage, NitrosBridgeTensorList
 from isaac_ros_pynitros.utils.cpu_shared_mem import CPUSharedMem
 from isaac_ros_tensor_list_interfaces.msg import TensorList
@@ -97,41 +98,41 @@ class PyNitrosTypeViewBase():
         if new_fd == -1:
             raise RuntimeError('pidfd_getfd failed')
 
-        err, self.handle = cuda.cuMemImportFromShareableHandle(
+        err, self.handle = driver.cuMemImportFromShareableHandle(
             new_fd,
-            cuda.CUmemAllocationHandleType.CU_MEM_HANDLE_TYPE_POSIX_FILE_DESCRIPTOR)
+            driver.CUmemAllocationHandleType.CU_MEM_HANDLE_TYPE_POSIX_FILE_DESCRIPTOR)
         self.ASSERT_CUDA_SUCCESS(err)
 
         # Allocate GPU Space -> CUmemGenericAllocationHandle
-        allocProp = cuda.CUmemAllocationProp()
-        allocProp.type = cuda.CUmemAllocationType.CU_MEM_ALLOCATION_TYPE_PINNED
-        allocProp.location.type = cuda.CUmemLocationType.CU_MEM_LOCATION_TYPE_DEVICE
+        allocProp = driver.CUmemAllocationProp()
+        allocProp.type = driver.CUmemAllocationType.CU_MEM_ALLOCATION_TYPE_PINNED
+        allocProp.location.type = driver.CUmemLocationType.CU_MEM_LOCATION_TYPE_DEVICE
         allocProp.requestedHandleTypes = \
-            cuda.CUmemAllocationHandleType.CU_MEM_HANDLE_TYPE_POSIX_FILE_DESCRIPTOR
+            driver.CUmemAllocationHandleType.CU_MEM_HANDLE_TYPE_POSIX_FILE_DESCRIPTOR
         allocProp.location.id = 0
 
         # Get memory alloc granularity
-        err, granularity = cuda.cuMemGetAllocationGranularity(
+        err, granularity = driver.cuMemGetAllocationGranularity(
             allocProp,
-            cuda.CUmemAllocationGranularity_flags.CU_MEM_ALLOC_GRANULARITY_MINIMUM)
+            driver.CUmemAllocationGranularity_flags.CU_MEM_ALLOC_GRANULARITY_MINIMUM)
         self.ASSERT_CUDA_SUCCESS(err)
 
         rounded_data_size = self._round_up(data_size, granularity)
 
         # Handle -> Tensor Reconstruction
-        res, virtual_ptr = cuda.cuMemAddressReserve(
+        res, virtual_ptr = driver.cuMemAddressReserve(
             rounded_data_size, 0, 0, 0)
         self.ASSERT_CUDA_SUCCESS(res)
 
         # Map Handle to Virtual Address Range, Set Access
-        res, = cuda.cuMemMap(virtual_ptr, rounded_data_size, 0, self.handle, 0)
+        res, = driver.cuMemMap(virtual_ptr, rounded_data_size, 0, self.handle, 0)
         self.ASSERT_CUDA_SUCCESS(res)
 
-        accessDesc = cuda.CUmemAccessDesc()
+        accessDesc = driver.CUmemAccessDesc()
         accessDesc.location = allocProp.location
-        accessDesc.flags = cuda.CUmemAccess_flags.CU_MEM_ACCESS_FLAGS_PROT_READWRITE
+        accessDesc.flags = driver.CUmemAccess_flags.CU_MEM_ACCESS_FLAGS_PROT_READWRITE
 
-        res, = cuda.cuMemSetAccess(
+        res, = driver.cuMemSetAccess(
             virtual_ptr, rounded_data_size, [accessDesc], 1)
         self.ASSERT_CUDA_SUCCESS(res)
 
@@ -148,11 +149,11 @@ class PyNitrosTypeViewBase():
         return self.syscall(self.SYS_pidfd_getfd, pidfd, targetfd, flags, 0, 0, 0)
 
     def ASSERT_CUDA_SUCCESS(self, err):
-        if isinstance(err, cuda.CUresult):
-            if err != cuda.CUresult.CUDA_SUCCESS:
+        if isinstance(err, driver.CUresult):
+            if err != driver.CUresult.CUDA_SUCCESS:
                 raise RuntimeError(
-                    f'[Cuda Error: {err}], {cuda.cuGetErrorString(err)}')
-        elif isinstance(err, cudart.cudaError_t):
+                    f'[Cuda Error: {err}], {driver.cuGetErrorString(err)}')
+        elif isinstance(err, runtime.cudaError_t):
             if (err != 0):
                 raise RuntimeError(f'CudaRT Error: {err}')
         else:
@@ -165,7 +166,7 @@ class PyNitrosTypeViewBase():
     def postprocess(self):
         """Postprocess the view."""
         if self.cuda_stream:
-            err, = cudart.cudaStreamSynchronize(self.cuda_stream)
+            err, = runtime.cudaStreamSynchronize(self.cuda_stream)
             self.ASSERT_CUDA_SUCCESS(err)
         if (type(self.raw_msg) in self.nitros_bridge_msg_types):
             # Decrease the refcount
@@ -175,7 +176,7 @@ class PyNitrosTypeViewBase():
                 self._cpu_shared_mem.lock.release()
         else:
             # Free the memory
-            cudart.cudaFree(self.gpu_ptr)
+            runtime.cudaFree(self.gpu_ptr)
 
     def get_handle(self):
         return self.handle

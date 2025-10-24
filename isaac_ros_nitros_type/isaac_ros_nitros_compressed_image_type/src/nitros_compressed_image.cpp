@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
-// Copyright (c) 2022-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+// Copyright (c) 2022-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -32,6 +32,7 @@
 #include "gxf/std/tensor.hpp"
 #pragma GCC diagnostic pop
 
+#include "isaac_ros_common/cuda_stream.hpp"
 #include "isaac_ros_nitros_compressed_image_type/nitros_compressed_image.hpp"
 #include "isaac_ros_nitros/types/type_adapter_nitros_context.hpp"
 #include "rclcpp/rclcpp.hpp"
@@ -78,10 +79,10 @@ void rclcpp::TypeAdapter<
   destination.data.resize(gxf_tensor->size());
 
   // compressed results are reside on CPU
-  const cudaError_t cuda_error = cudaMemcpy(
+  const cudaError_t cuda_error = cudaMemcpyAsync(
     destination.data.data(),
     gxf_tensor->data<uint8_t>().value(), gxf_tensor->size(),
-    cudaMemcpyHostToHost);
+    cudaMemcpyHostToHost, source.cuda_stream);
 
   if (cuda_error != cudaSuccess) {
     std::stringstream error_msg;
@@ -94,6 +95,9 @@ void rclcpp::TypeAdapter<
       rclcpp::get_logger("NitrosCompressedImage"), error_msg.str().c_str());
     throw std::runtime_error(error_msg.str().c_str());
   }
+
+  cudaError_t cuda_result = cudaStreamSynchronize(source.cuda_stream);
+  CHECK_CUDA_ERROR(cuda_result, "Stream was not able to be synchronized");
 
   // Populate timestamp information back into ROS header
   auto input_timestamp = msg_entity->get<nvidia::gxf::Timestamp>("timestamp");
@@ -177,16 +181,18 @@ void rclcpp::TypeAdapter<
       rclcpp::get_logger("NitrosCompressedImage"), error_msg.str().c_str());
     throw std::runtime_error(error_msg.str().c_str());
   }
-
+  auto nitros_cuda_stream =
+    nvidia::isaac_ros::nitros::GetTypeAdapterNitrosContext()
+    .getCudaStreamFromNitrosGraph();
   // Copy data from compressed image msg to gxf tensor.
-  const cudaError_t cuda_error = cudaMemcpy(
+  const cudaError_t cuda_error = cudaMemcpyAsync(
     gxf_tensor.value()->data<uint8_t>().value(),
-    source.data.data(), source.data.size(), cudaMemcpyHostToHost);
+    source.data.data(), source.data.size(), cudaMemcpyHostToHost, nitros_cuda_stream);
 
   if (cuda_error != cudaSuccess) {
     std::stringstream error_msg;
     error_msg <<
-      "[convert_to_custom] cudaMemcpy failed for copying data from "
+      "[convert_to_custom] cudaMemcpyAsync failed for copying data from "
       "sensor_msgs::msg::CompressedImage to NitrosCompressedImage: " <<
       cudaGetErrorName(cuda_error) <<
       " (" << cudaGetErrorString(cuda_error) << ")";
@@ -194,6 +200,9 @@ void rclcpp::TypeAdapter<
       rclcpp::get_logger("NitrosCompressedImage"), error_msg.str().c_str());
     throw std::runtime_error(error_msg.str().c_str());
   }
+
+  cudaError_t cuda_result = cudaStreamSynchronize(nitros_cuda_stream);
+  CHECK_CUDA_ERROR(cuda_result, "Stream was not able to be synchronized");
 
   // Add timestamp to the message
   uint64_t input_timestamp =

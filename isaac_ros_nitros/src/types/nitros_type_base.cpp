@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
-// Copyright (c) 2022-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+// Copyright (c) 2022-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -39,11 +39,13 @@ NitrosTypeBase::NitrosTypeBase(
   const int64_t handle,
   const std::string data_format_name,
   const std::string compatible_data_format_name,
-  const std::string frame_id)
+  const std::string frame_id,
+  const cudaStream_t cuda_stream)
 : handle(handle),
   data_format_name(data_format_name),
   compatible_data_format_name(compatible_data_format_name),
-  frame_id(frame_id)
+  frame_id(frame_id),
+  cuda_stream(cuda_stream)
 {
   RCLCPP_DEBUG(
     rclcpp::get_logger("NitrosTypeBase"),
@@ -58,7 +60,8 @@ NitrosTypeBase::NitrosTypeBase(const NitrosTypeBase & other)
 : handle(other.handle),
   data_format_name(other.data_format_name),
   compatible_data_format_name(other.compatible_data_format_name),
-  frame_id(other.frame_id)
+  frame_id(other.frame_id),
+  cuda_stream(other.cuda_stream)
 {
   RCLCPP_DEBUG(
     rclcpp::get_logger("NitrosTypeBase"),

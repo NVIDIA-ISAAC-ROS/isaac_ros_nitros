@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
-// Copyright (c) 2021-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+// Copyright (c) 2021-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -20,15 +20,18 @@
 #include <cublas_v2.h>
 #include <algorithm>
 #include <limits>
+#include <mutex>
 #include <numeric>
 #include <queue>
 #include <random>
+#include <set>
 #include <string>
 #include <unordered_map>
 #include <utility>
 #include <vector>
 
 #include "convolution.h"
+#include "green_context_with_smid.h"
 
 #include "common/assert.hpp"
 #include "gxf/cuda/cuda_buffer.hpp"
@@ -619,6 +622,52 @@ class CudaAsyncBufferGenerator : public Codelet {
   std::default_random_engine generator_;
 };
 
+// Performs a green context test with detection of different SMIDs
+class GreenContextWithSmid: public Codelet {
+ public:
+  virtual ~GreenContextWithSmid() = default;
+
+  gxf_result_t registerInterface(Registrar* registrar) override {
+    Expected<void> result;
+    result &= registrar->parameter(stream_pools_, "stream_pools", "StreamPools",
+              "A cuda stream pool component");
+    result &= registrar->parameter(num_stream_pools_, "num_stream_pools", "NumStreamPools",
+              "Number of streams to allocate", 1);
+    result &= registrar->parameter(input_, "input", "Input",
+              "Receiver channel receiving messages from other graph entities");
+    return ToResultCode(result);
+  }
+  gxf_result_t start() override {
+    cudaStream_t streams[10];
+    for (int i = 0; i < num_stream_pools_.get(); i++) {
+      auto stream = stream_pools_.get()[i].value()->allocateStream();
+      streams_.push_back(stream.value());
+      streams[i] = stream.value()->stream().value();
+    }
+    test_smid_with_different_configurations(&streams[0], num_stream_pools_.get());
+    return GXF_SUCCESS;
+  }
+
+  gxf_result_t stop() override {
+    for (int i = 0; i < num_stream_pools_.get(); i++) {
+      stream_pools_.get()[i].value()->releaseStream(streams_[i]);
+    }
+    return GXF_SUCCESS;
+  }
+
+  gxf_result_t tick() override {
+    // This test is done in start()
+    return GXF_SUCCESS;
+  }
+
+ private:
+  Parameter<FixedVector<Handle<nvidia::gxf::CudaStreamPool>, kMaxComponents> > stream_pools_;
+  Parameter<int> num_stream_pools_;
+  Parameter<Handle<Receiver>> input_;
+
+  std::vector<Handle<CudaStream>> streams_;
+};
+
 // Performs an async 2D convolution operation on
 // incoming CudaBuffer objects.
 class Convolve2D: public Codelet {
@@ -808,6 +857,84 @@ class CudaBufferRx: public Codelet {
  private:
   Parameter<Handle<Receiver>> signal_;
   int count = 1;
+};
+
+// Tracks unique SM IDs used during CUDA kernel executions and validates SM count
+class CudaSMCount : public Codelet {
+ public:
+  gxf_result_t initialize() override {
+    unique_smids_.clear();
+    return GXF_SUCCESS;
+  }
+
+  gxf_result_t tick() override {
+    std::lock_guard<std::mutex> lock(smids_mutex_);
+
+    // Default kernel configuration
+    int num_blocks = 64;
+    int threads_per_block = 1024;
+
+    int32_t result = 0;
+
+    // Check if we have a stream pool
+    const auto maybe_stream_pool = stream_pool_.try_get();
+    if (maybe_stream_pool) {
+      // Allocate a stream from the pool
+      auto stream = maybe_stream_pool.value()->allocateStream();
+      if (!stream) {
+        GXF_LOG_ERROR("Failed to allocate stream from pool");
+        return GXF_FAILURE;
+      }
+
+      // Launch kernel with stream
+      result = collect_smid_from_kernel(num_blocks, threads_per_block,
+                                       stream.value()->stream().value(), unique_smids_);
+
+      // Release the stream back to the pool
+      auto release_result = maybe_stream_pool.value()->releaseStream(stream.value());
+      if (!release_result) {
+        GXF_LOG_ERROR("Failed to release stream back to pool");
+        return GXF_FAILURE;
+      }
+    } else {
+      // Launch kernel without stream
+      result = collect_smid_from_kernel(num_blocks, threads_per_block, nullptr, unique_smids_);
+    }
+
+    if (result != 0) {
+      GXF_LOG_ERROR("Failed to collect SM IDs from kernel");
+      return GXF_FAILURE;
+    }
+
+    return GXF_SUCCESS;
+  }
+
+  gxf_result_t deinitialize() override {
+    std::lock_guard<std::mutex> lock(smids_mutex_);
+    if (unique_smids_.size() > max_smid_count_.get()) {
+      GXF_LOG_ERROR("SM count check failed: used %zu SMs, expected no more than %zu",
+                    unique_smids_.size(), max_smid_count_.get());
+      return GXF_FAILURE;
+    }
+    return GXF_SUCCESS;
+  }
+
+  gxf_result_t registerInterface(Registrar* registrar) override {
+    Expected<void> result;
+    result &= registrar->parameter(
+      max_smid_count_, "max_smid_count", "Maximum number of SMs",
+      "Maximum number of unique SMs expected to be used by CUDA kernels", 1UL);
+    result &= registrar->parameter(stream_pool_, "stream_pool", "Cuda Stream Pool",
+                                   "Optional CUDA stream pool for kernel execution",
+                                   Registrar::NoDefaultParameter(), GXF_PARAMETER_FLAGS_OPTIONAL);
+    return ToResultCode(result);
+  }
+
+ private:
+  Parameter<uint64_t> max_smid_count_;
+  Parameter<Handle<CudaStreamPool>> stream_pool_;
+  std::set<uint32_t> unique_smids_;
+  mutable std::mutex smids_mutex_;
 };
 
 }  // namespace cuda

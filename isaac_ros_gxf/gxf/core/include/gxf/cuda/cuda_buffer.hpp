@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
-// Copyright (c) 2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+// Copyright (c) 2024-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -36,11 +36,11 @@ namespace gxf {
 constexpr const char* kDefaultCudaBufferName = "gxf_cuda_buffer";
 
 /**
- * @brief A container for a single block of cuda memory with support for async
-          memory allocations. Each CudaBuffer is type of MemoryBuffer associated with a
-          CudaAllocator, CudaStreamPool & CudaStream. Memory is allocated by resizing the
-          buffer. Both cuda memory and the cuda stream is released back into the pool
-          when a cuda buffer object is destroyed.
+ * @brief A container for a single block of cuda memory with support for async memory allocations.
+ *
+ * Each CudaBuffer is type of MemoryBuffer associated with a CudaAllocator, CudaStreamPool &
+ * CudaStream. Memory is allocated by resizing the buffer. Both cuda memory and the cuda stream is
+ * released back into the pool when a cuda buffer object is destroyed.
  */
 class CudaBuffer : public MemoryBuffer {
  public:

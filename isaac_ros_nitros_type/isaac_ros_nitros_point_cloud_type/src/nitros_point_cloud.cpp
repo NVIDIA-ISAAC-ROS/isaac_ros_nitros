@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
-// Copyright (c) 2022-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+// Copyright (c) 2022-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -28,6 +28,7 @@
 #include "gems/pose_tree/pose_tree.hpp"
 #pragma GCC diagnostic pop
 
+#include "isaac_ros_common/cuda_stream.hpp"
 #include "isaac_ros_nitros_point_cloud_type/nitros_point_cloud.hpp"
 #include "isaac_ros_nitros/types/type_adapter_nitros_context.hpp"
 
@@ -95,10 +96,10 @@ void rclcpp::TypeAdapter<
       "y", 1, sensor_msgs::msg::PointField::FLOAT32,
       "z", 1, sensor_msgs::msg::PointField::FLOAT32);
   }
-  const cudaError_t cuda_error = cudaMemcpy(
+  const cudaError_t cuda_error = cudaMemcpyAsync(
     destination.data.data(),
     point_cloud_parts.points->data<float>().value(), destination.row_step * destination.height,
-    cudaMemcpyDeviceToHost);
+    cudaMemcpyDeviceToHost, source.cuda_stream);
 
   if (cuda_error != cudaSuccess) {
     std::stringstream error_msg;
@@ -111,6 +112,9 @@ void rclcpp::TypeAdapter<
       rclcpp::get_logger("NitrosPointCloud"), error_msg.str().c_str());
     throw std::runtime_error(error_msg.str().c_str());
   }
+
+  cudaError_t cuda_result = cudaStreamSynchronize(source.cuda_stream);
+  CHECK_CUDA_ERROR(cuda_result, "Stream was not able to be synchronized");
 
   RCLCPP_DEBUG(
     rclcpp::get_logger("NitrosPointCloud"),
@@ -227,9 +231,13 @@ void rclcpp::TypeAdapter<
     height, width, point_float_count, use_color);
 
   // Copy data from point cloud msg to gxf tensor.
-  const cudaError_t cuda_error = cudaMemcpy(
+  auto nitros_cuda_stream =
+    nvidia::isaac_ros::nitros::GetTypeAdapterNitrosContext()
+    .getCudaStreamFromNitrosGraph();
+  const cudaError_t cuda_error = cudaMemcpyAsync(
     point_cloud_message_parts.points->data<float>().value(),
-    source.data.data(), source.row_step * source.height, cudaMemcpyHostToDevice);
+    source.data.data(), source.row_step * source.height, cudaMemcpyHostToDevice,
+    nitros_cuda_stream);
   if (cuda_error != cudaSuccess) {
     std::stringstream error_msg;
     error_msg <<
@@ -241,6 +249,9 @@ void rclcpp::TypeAdapter<
       rclcpp::get_logger("NitrosPointCloud"), error_msg.str().c_str());
     throw std::runtime_error(error_msg.str().c_str());
   }
+
+  cudaError_t cuda_result = cudaStreamSynchronize(nitros_cuda_stream);
+  CHECK_CUDA_ERROR(cuda_result, "Stream was not able to be synchronized");
 
   // Add timestamp to the message
   uint64_t input_timestamp =

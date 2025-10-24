@@ -1,7 +1,7 @@
 <?xml version="1.0"?>
 
 <!--
-Copyright (c) 2023-2024, NVIDIA CORPORATION.  All rights reserved.
+Copyright (c) 2023-2025, NVIDIA CORPORATION.  All rights reserved.
 
 NVIDIA CORPORATION and its licensors retain all intellectual property
 and proprietary rights in and to this software, related documentation
@@ -13,7 +13,7 @@ license agreement from NVIDIA CORPORATION is strictly prohibited.
 <?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
   <name>isaac_ros_nitros_detection3_d_array_type</name>
-  <version>3.2.5</version>
+  <version>4.0.0</version>
   <description>Isaac ROS Nitros Detection 3D Array Type</description>
 
   <maintainer email="isaac-ros-maintainers@nvidia.com">Isaac ROS Maintainers</maintainer>
@@ -31,6 +31,7 @@ license agreement from NVIDIA CORPORATION is strictly prohibited.
 
   <build_depend>isaac_ros_common</build_depend>
   <build_depend>gxf_isaac_gems</build_depend>
+  <build_depend>ament_index_cpp</build_depend>  
 
   <test_depend>ament_lint_auto</test_depend>
   <test_depend>ament_lint_common</test_depend>

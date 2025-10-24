@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
-// Copyright (c) 2021-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+// Copyright (c) 2021-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -23,6 +23,7 @@
 #include <memory>
 #include <mutex>
 #include <queue>
+#include <string>
 #include <unordered_map>
 #include <vector>
 
@@ -30,13 +31,15 @@
 #include "gxf/core/expected.hpp"
 #include "gxf/cuda/cuda_stream.hpp"
 #include "gxf/std/allocator.hpp"
+#include "gxf/std/cuda_green_context.hpp"
 #include "gxf/std/resources.hpp"
 
 namespace nvidia {
 namespace gxf {
 
-// A memory pools which provides a maximum number of equally sized blocks of
-// memory.
+/**
+ * @brief A stream pool containing a specified number of CUDA streams on a single device.
+ */
 class CudaStreamPool : public Allocator {
  public:
   CudaStreamPool() = default;
@@ -55,7 +58,7 @@ class CudaStreamPool : public Allocator {
   Expected<void> releaseStream(Handle<CudaStream> stream);
 
  private:
-  Expected<Entity> createNewStreamEntity();
+  Expected<Entity> createNewStreamEntity(const std::string& nvtx_identifier);
   Expected<void> reserveStreams();
 
   Resource<Handle<GPUDevice>> gpu_device_;
@@ -63,12 +66,14 @@ class CudaStreamPool : public Allocator {
   Parameter<int32_t> stream_priority_;
   Parameter<uint32_t> reserved_size_;
   Parameter<uint32_t> max_size_;
+  Parameter<std::string> nvtx_identifier_;
+  Parameter<Handle<CudaGreenContext>> cuda_green_context_;
 
   std::mutex mutex_;
   // map of <entity_id, Entity>
   std::unordered_map<gxf_uid_t, std::unique_ptr<Entity>> streams_;
   std::queue<Entity> reserved_streams_;
-  // Holds lifecycle stage of the allocator
+  CUgreenCtx green_ctx_ = nullptr;
   std::atomic<AllocatorStage> stage_{AllocatorStage::kUninitialized};
   int32_t dev_id_ = -1;
 };

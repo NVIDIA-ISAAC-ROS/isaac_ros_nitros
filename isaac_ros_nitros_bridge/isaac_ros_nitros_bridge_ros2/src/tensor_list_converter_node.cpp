@@ -19,6 +19,7 @@
 #include <cuda_runtime_api.h>
 #include <sys/un.h>
 #include <string>
+#include <atomic>
 
 #include "isaac_ros_nitros_bridge_ros2/tensor_list_converter_node.hpp"
 
@@ -35,36 +36,43 @@ namespace nitros_bridge
 
 TensorListConverterNode::TensorListConverterNode(const rclcpp::NodeOptions options)
 : rclcpp::Node("tensor_list_converter_node", options),
-  nitros_pub_{std::make_shared<nvidia::isaac_ros::nitros::ManagedNitrosPublisher<
-        nvidia::isaac_ros::nitros::NitrosTensorList>>(
-      this, "ros2_output_tensor_list",
-      nvidia::isaac_ros::nitros::nitros_tensor_list_nhwc_t::supported_type_name)},
-  nitros_bridge_pub_{
-    create_publisher<isaac_ros_nitros_bridge_interfaces::msg::NitrosBridgeTensorList>(
-      "ros2_output_bridge_tensor_list", 10)},
-  nitros_sub_{std::make_shared<nvidia::isaac_ros::nitros::ManagedNitrosSubscriber<
-        nvidia::isaac_ros::nitros::NitrosTensorListView>>(
-      this, "ros2_input_tensor_list",
-      nvidia::isaac_ros::nitros::nitros_tensor_list_nhwc_t::supported_type_name,
-      std::bind(&TensorListConverterNode::ROSToBridgeCallback, this,
-      std::placeholders::_1))},
-  nitros_bridge_sub_{
-    create_subscription<isaac_ros_nitros_bridge_interfaces::msg::NitrosBridgeTensorList>(
-      "ros2_input_bridge_tensor_list", 10,
-      std::bind(&TensorListConverterNode::BridgeToROSCallback, this,
-      std::placeholders::_1))},
   num_blocks_(declare_parameter<int64_t>("num_blocks", 40)),
-  timeout_(declare_parameter<int64_t>("timeout", 500))
+  // Timeout in microseconds: duration to wait after refcount reaches 0 before recycling the buffer
+  timeout_(declare_parameter<int64_t>("timeout", 500)),
+  nitros_pub_qos_{::isaac_ros::common::AddQosParameter(*this, "DEFAULT", "nitros_pub_qos")},
+  nitros_sub_qos_{::isaac_ros::common::AddQosParameter(*this, "DEFAULT", "nitros_sub_qos")},
+  bridge_pub_qos_{::isaac_ros::common::AddQosParameter(*this, "DEFAULT", "bridge_pub_qos")},
+  bridge_sub_qos_{::isaac_ros::common::AddQosParameter(*this, "DEFAULT", "bridge_sub_qos")}
 {
   cudaSetDevice(0);
   cuDevicePrimaryCtxRetain(&ctx_, 0);
 
   cudaEventCreateWithFlags(&event_, cudaEventInterprocess | cudaEventDisableTiming);
   cudaIpcGetEventHandle(reinterpret_cast<cudaIpcEventHandle_t *>(&ipc_event_handle_), event_);
+
+  nitros_pub_ = std::make_shared<nvidia::isaac_ros::nitros::ManagedNitrosPublisher<
+        nvidia::isaac_ros::nitros::NitrosTensorList>>(
+    this, "ros2_output_tensor_list",
+    nvidia::isaac_ros::nitros::nitros_tensor_list_nhwc_t::supported_type_name,
+    nvidia::isaac_ros::nitros::NitrosDiagnosticsConfig{}, nitros_pub_qos_);
+
+  nitros_sub_ = std::make_shared<nvidia::isaac_ros::nitros::ManagedNitrosSubscriber<
+        nvidia::isaac_ros::nitros::NitrosTensorListView>>(
+    this, "ros2_input_tensor_list",
+    nvidia::isaac_ros::nitros::nitros_tensor_list_nhwc_t::supported_type_name,
+    std::bind(&TensorListConverterNode::ROSToBridgeCallback, this, std::placeholders::_1),
+    nvidia::isaac_ros::nitros::NitrosDiagnosticsConfig{}, nitros_sub_qos_);
+
+  nitros_bridge_pub_ = create_publisher<
+    isaac_ros_nitros_bridge_interfaces::msg::NitrosBridgeTensorList>(
+    "ros2_output_bridge_tensor_list", bridge_pub_qos_);
+  nitros_bridge_sub_ = create_subscription<
+    isaac_ros_nitros_bridge_interfaces::msg::NitrosBridgeTensorList>(
+    "ros2_input_bridge_tensor_list", bridge_sub_qos_,
+    std::bind(&TensorListConverterNode::BridgeToROSCallback, this, std::placeholders::_1));
 }
 
 TensorListConverterNode::~TensorListConverterNode() = default;
-
 
 void TensorListConverterNode::BridgeToROSCallback(
   const isaac_ros_nitros_bridge_interfaces::msg::NitrosBridgeTensorList::SharedPtr msg)
@@ -120,7 +128,6 @@ void TensorListConverterNode::BridgeToROSCallback(
     total_size += tensor.strides[0] * tensor.shape.dims[0];
   }
 
-  // Compare UID if it exists
   // Compare UID if exists
   if (!msg_uid.empty()) {
     std::string shm_name = std::to_string(msg_pid) + std::to_string(msg_fd);
@@ -217,7 +224,11 @@ void TensorListConverterNode::BridgeToROSCallback(
     nvidia::isaac_ros::nitros::NitrosTensorListBuilder()
     .WithHeader(msg->header);
 
+  // Create a shared counter for all tensors from this message
+  auto tensor_list_counter = std::make_shared<std::atomic<int>>(msg->tensors.size());
+
   int offset = 0;
+  auto host_ipc_buffer_ptr = host_ipc_buffer_;
   for (size_t i = 0; i < msg->tensors.size(); i++) {
     auto ros_tensor = msg->tensors[i];
     auto tensor_shape = std::vector<int32_t>{
@@ -227,6 +238,14 @@ void TensorListConverterNode::BridgeToROSCallback(
       .WithShape(nvidia::isaac_ros::nitros::NitrosTensorShape(tensor_shape))
       .WithDataType(nvidia::isaac_ros::nitros::NitrosDataType::kFloat32)
       .WithData(reinterpret_cast<void *>(gpu_buffer + offset))
+      .WithReleaseCallback(
+      [host_ipc_buffer_ptr, tensor_list_counter]() {
+        if (host_ipc_buffer_ptr) {
+          if (tensor_list_counter->fetch_sub(1) == 1) {
+            host_ipc_buffer_ptr->refcount_dec();
+          }
+        }
+      })
       .Build();
     nitros_tensor_list_builder.AddTensor(ros_tensor.name.c_str(), cur_tensor);
     offset += ros_tensor.data.size();
@@ -235,11 +254,6 @@ void TensorListConverterNode::BridgeToROSCallback(
   auto nitros_tensor_list = nitros_tensor_list_builder.Build();
 
   nitros_pub_->publish(nitros_tensor_list);
-
-  // Update refcount if it exists
-  if (!msg_uid.empty()) {
-    host_ipc_buffer_->refcount_dec();
-  }
 
   RCLCPP_DEBUG(this->get_logger(), "NITROS Tensor List is Published from NITROS Bridge.");
 }

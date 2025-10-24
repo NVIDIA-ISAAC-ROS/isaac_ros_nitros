@@ -17,7 +17,8 @@
 
 import math
 
-from cuda import cuda, cudart
+import cuda.bindings.driver as driver
+import cuda.bindings.runtime as runtime
 from isaac_ros_pynitros.utils.tensor_data_type import TensorDataTypeUtils
 import torch
 
@@ -56,7 +57,7 @@ class PyNitrosTensorListView(PyNitrosTypeViewBase):
         if (not self.gpu_ptr):
             raise RuntimeError('Invalid GPU pointer')
         for nitros_bridge_tensor_msg in self.raw_msg.tensors:
-            cur_gpu_ptr = cuda.CUdeviceptr(int(self.gpu_ptr) + self._total_tensor_size)
+            cur_gpu_ptr = driver.CUdeviceptr(int(self.gpu_ptr) + self._total_tensor_size)
             pynitros_tensor_view = PyNitrosTensorView(
                 nitros_bridge_tensor_msg, cur_gpu_ptr)
             tensor_size = pynitros_tensor_view.get_tensor_size()
@@ -82,15 +83,15 @@ class PyNitrosTensorListView(PyNitrosTypeViewBase):
             total_tensor_size += \
                 math.prod(tensor.shape.dims) * \
                 TensorDataTypeUtils.get_size_in_bytes(tensor.data_type)
-        err, device_ptr = cudart.cudaMalloc(total_tensor_size)
+        err, device_ptr = runtime.cudaMalloc(total_tensor_size)
         self.ASSERT_CUDA_SUCCESS(err)
 
         for tensor in self.raw_msg.tensors:
             tensor_size = \
                 math.prod(tensor.shape.dims) * \
                 TensorDataTypeUtils.get_size_in_bytes(tensor.data_type)
-            err, = cudart.cudaMemcpy(device_ptr+offset, tensor.data, tensor_size,
-                                     cudart.cudaMemcpyKind.cudaMemcpyHostToDevice)
+            err, = runtime.cudaMemcpy(device_ptr+offset, tensor.data, tensor_size,
+                                      runtime.cudaMemcpyKind.cudaMemcpyHostToDevice)
             self.ASSERT_CUDA_SUCCESS(err)
             offset += tensor_size
         return device_ptr

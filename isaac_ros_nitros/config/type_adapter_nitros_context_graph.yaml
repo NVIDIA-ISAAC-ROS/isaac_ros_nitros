@@ -1,5 +1,5 @@
 %YAML 1.2
-# Copyright (c) 2022, NVIDIA CORPORATION.  All rights reserved.
+# Copyright (c) 2022-2025, NVIDIA CORPORATION.  All rights reserved.
 #
 # NVIDIA CORPORATION and its licensors retain all intellectual property
 # and proprietary rights in and to this software, related documentation
@@ -11,6 +11,17 @@ name: memory_pool
 components:
 - name: unbounded_allocator
   type: nvidia::gxf::UnboundedAllocator
+---
+name: cuda_stream_pool
+components:
+- name: stream
+  type: nvidia::gxf::CudaStreamPool
+  parameters:
+    stream_flags: 1
+    stream_priority: 0
+    reserved_size: 3
+    max_size: 3
+    nvtx_identifier: "nitros_type_adapter_stream_pool"
 ---
 #############
 # Pose Tree #

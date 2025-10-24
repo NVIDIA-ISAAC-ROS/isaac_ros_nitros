@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
-// Copyright (c) 2020-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+// Copyright (c) 2020-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -431,7 +431,6 @@ class MessageAvailableFrequencyThrottler : public SchedulingTerm {
 
  private:
   Expected<int64_t> last_run_timestamp_ = Unexpected{GXF_UNINITIALIZED_VALUE};
-  Parameter<std::string> message_recess_period_text_;
   Parameter<std::string> execution_frequency_text_;
   Parameter<FixedVector<Handle<Receiver>, kMaxComponents>> receivers_;
   Parameter<size_t> min_sum_;
