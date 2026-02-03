@@ -17,12 +17,13 @@
 
 from typing import Union
 
-from isaac_ros_nitros_bridge_interfaces.msg import NitrosBridgeImage
-from isaac_ros_nitros_bridge_interfaces.msg import NitrosBridgeTensorList
+from isaac_ros_nitros_bridge_interfaces.msg import (
+    NitrosBridgeImage, NitrosBridgePointCloud, NitrosBridgeTensorList)
 from isaac_ros_tensor_list_interfaces.msg import TensorList
 
 from rclpy.qos import QoSProfile
 from sensor_msgs.msg import Image
+from sensor_msgs.msg import PointCloud2
 
 
 class PyNitrosPublisher():
@@ -49,7 +50,8 @@ class PyNitrosPublisher():
         """
         self.node = node
         self.msg_map = {NitrosBridgeImage: Image,
-                        NitrosBridgeTensorList: TensorList}
+                        NitrosBridgeTensorList: TensorList,
+                        NitrosBridgePointCloud: PointCloud2}
 
         # Regular PyNITROS Pub
         self.message_type = message_type

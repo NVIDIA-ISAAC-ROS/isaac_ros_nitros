@@ -19,13 +19,16 @@ from typing import Union
 
 import cuda.bindings.driver as driver
 import cuda.bindings.runtime as runtime
-from isaac_ros_nitros_bridge_interfaces.msg import NitrosBridgeImage, NitrosBridgeTensorList
+from isaac_ros_nitros_bridge_interfaces.msg import (
+    NitrosBridgeImage, NitrosBridgePointCloud, NitrosBridgeTensorList)
 from isaac_ros_pynitros.pynitros_type_views.pynitros_image_view import PyNitrosImageView
+from isaac_ros_pynitros.pynitros_type_views.pynitros_point_cloud_view import PyNitrosPointCloudView
 from isaac_ros_pynitros.pynitros_type_views.pynitros_tensor_list_view import PyNitrosTensorListView
 from isaac_ros_tensor_list_interfaces.msg import TensorList
 
 from rclpy.qos import QoSProfile
 from sensor_msgs.msg import Image
+from sensor_msgs.msg import PointCloud2
 
 
 class PyNitrosSubscriber():
@@ -42,12 +45,14 @@ class PyNitrosSubscriber():
 
     BRIDGE_TYPE_TO_PYNITROS_VIEW = {
         NitrosBridgeImage: PyNitrosImageView,
-        NitrosBridgeTensorList: PyNitrosTensorListView
+        NitrosBridgeTensorList: PyNitrosTensorListView,
+        NitrosBridgePointCloud: PyNitrosPointCloudView
     }
 
     BRIDGE_TYPE_TO_RAW_TYPE = {
         NitrosBridgeImage: Image,
-        NitrosBridgeTensorList: TensorList
+        NitrosBridgeTensorList: TensorList,
+        NitrosBridgePointCloud: PointCloud2
     }
 
     def __init__(
@@ -79,6 +84,7 @@ class PyNitrosSubscriber():
         self.event = None
         self._cuda_memblock_fd_to_ptr = {}
         self._cuda_memblock_handle = []
+        self._cuda_memblock_mapping = []
 
         # Initialize the CUDA driver API
         err, = driver.cuInit(0)
@@ -135,8 +141,10 @@ class PyNitrosSubscriber():
                 return
             gpu_ptr = pynitros_view.get_buffer()
             gpu_handle = pynitros_view.get_handle()
+            mapped_size = pynitros_view.get_mapped_size()
             self._cuda_memblock_fd_to_ptr[(sender_pid, memblock_fd)] = gpu_ptr
             self._cuda_memblock_handle.append(gpu_handle)
+            self._cuda_memblock_mapping.append((gpu_ptr, mapped_size))
         else:
             gpu_ptr = self._cuda_memblock_fd_to_ptr[(sender_pid, memblock_fd)]
             try:
@@ -164,6 +172,16 @@ class PyNitrosSubscriber():
             raise RuntimeError('Unknown error type: {}'.format(err))
 
     def __del__(self):
+        if self.event:
+            err, = runtime.cudaEventDestroy(self.event)
+            self.ASSERT_CUDA_SUCCESS(err)
+
+        for gpu_ptr, mapped_size in self._cuda_memblock_mapping:
+            err, = driver.cuMemUnmap(gpu_ptr, mapped_size)
+            self.ASSERT_CUDA_SUCCESS(err)
+            err, = driver.cuMemAddressFree(gpu_ptr, mapped_size)
+            self.ASSERT_CUDA_SUCCESS(err)
+
         for gpu_handle in self._cuda_memblock_handle:
             err, = driver.cuMemRelease(gpu_handle)
             self.ASSERT_CUDA_SUCCESS(err)

@@ -53,6 +53,8 @@ setup(
                 isaac_ros_pynitros.examples.pynitros_image_forward_node:main',
             'pynitros_tensor_list_forward_node = \
                 isaac_ros_pynitros.examples.pynitros_tensor_list_forward_node:main',
+            'pynitros_point_cloud_forward_node = \
+                isaac_ros_pynitros.examples.pynitros_point_cloud_forward_node:main',
             'pynitros_dnn_image_encoder_node = \
                 isaac_ros_pynitros.examples.pynitros_dnn_image_encoder_node:main',
             'pynitros_message_filter_sync_node = \

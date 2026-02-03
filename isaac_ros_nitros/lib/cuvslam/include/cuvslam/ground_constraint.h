@@ -1,7 +1,7 @@
 /**
  * @file ground_constraint.h
 
- * @copyright Copyright (c) 2024, NVIDIA CORPORATION.  All rights reserved.\n\n
+ * @copyright Copyright (c) 2025, NVIDIA CORPORATION.  All rights reserved.\n\n
  * NVIDIA CORPORATION and its licensors retain all intellectual property
  * and proprietary rights in and to this software, related documentation
  * and any modifications thereto.  Any use, reproduction, disclosure or
@@ -11,7 +11,7 @@
 
 #pragma once
 
-#include "cuvslam.h"
+#include "cuvslam/cuvslam.h"
 
 #ifdef __cplusplus
 extern "C" {

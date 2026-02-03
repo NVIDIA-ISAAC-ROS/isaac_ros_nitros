@@ -21,7 +21,7 @@
 <?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
   <name>isaac_ros_nitros_bridge_ros2</name>
-  <version>4.0.0</version>
+  <version>4.1.0</version>
   <description>Converter between NITROS bridge messages and ROS 2 messages</description>
 
   <maintainer email="isaac-ros-maintainers@nvidia.com">Isaac ROS Maintainers</maintainer>
@@ -34,6 +34,7 @@
   <depend>rclcpp</depend>
   <depend>rclcpp_components</depend>
   <depend>std_msgs</depend>
+  <depend>libboost-dev</depend>
   <depend>isaac_ros_managed_nitros</depend>
   <depend>isaac_ros_nitros_image_type</depend>
   <depend>isaac_ros_nitros_tensor_list_type</depend>

@@ -1,5 +1,5 @@
 # SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
-# Copyright (c) 2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# Copyright (c) 2024-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -38,14 +38,12 @@ DIMENSION_HEIGHT = 120
 
 @pytest.mark.rostest
 def generate_test_description():
-    nitros_image_Switch_node = ComposableNode(
+    nitros_image_switch_node = ComposableNode(
         name='nitros_image_switch_node',
         package='custom_nitros_image',
         plugin='nvidia::isaac_ros::custom_nitros_image::NitrosImageSwitchNode',
         namespace=NitrosImageSwitchNodeTest.generate_namespace(),
-        parameters=[{
-            'sync_queue_size': 100,  # Ensure no messages dropped
-        }]
+        parameters=[{'sync_queue_size': 100}]
     )
 
     return NitrosImageSwitchNodeTest.generate_test_description([
@@ -53,7 +51,7 @@ def generate_test_description():
             name='container',
             package='rclcpp_components',
             executable='component_container_mt',
-            composable_node_descriptions=[nitros_image_Switch_node],
+            composable_node_descriptions=[nitros_image_switch_node],
             namespace=NitrosImageSwitchNodeTest.generate_namespace(),
             output='screen',
         )
@@ -64,8 +62,7 @@ class NitrosImageSwitchNodeTest(IsaacROSBaseTest):
     filepath = pathlib.Path(os.path.dirname(__file__))
 
     def test_nitros_image_switch(self):
-        TIMEOUT = 300
-        NUM_EXPECTED_MSGS = 10
+        """Test that switch ON passes messages through and switch OFF blocks them."""
         received_messages = {}
 
         self.generate_namespace_lookup(
@@ -74,69 +71,74 @@ class NitrosImageSwitchNodeTest(IsaacROSBaseTest):
 
         image_pub = self.node.create_publisher(
             Image, self.namespaces['image'], self.DEFAULT_QOS)
-
         camera_info_pub = self.node.create_publisher(
-            CameraInfo, self.namespaces['camera_info'], self.DEFAULT_QOS
-        )
+            CameraInfo, self.namespaces['camera_info'], self.DEFAULT_QOS)
 
         subs = self.create_logging_subscribers(
-            [('switched_image', Image),
-             ('switched_camera_info', CameraInfo),
-             ], received_messages, accept_multiple_messages=True)
+            [('switched_image', Image), ('switched_camera_info', CameraInfo)],
+            received_messages, accept_multiple_messages=True)
 
-        self.cli = self.node.create_client(
-            SetBool, '/isaac_ros_test/switch'
-        )
-        self.req = SetBool.Request()
+        switch_client = self.node.create_client(SetBool, '/isaac_ros_test/switch')
+        while not switch_client.wait_for_service(timeout_sec=1.0):
+            self.node.get_logger().info('Waiting for switch service...')
 
-        while not self.cli.wait_for_service(timeout_sec=1.0):
-            self.node.get_logger().info('service not available, waiting again...')
+        # Create test image
+        cv_image = np.zeros((DIMENSION_HEIGHT, DIMENSION_WIDTH, 3), np.uint8)
+        cv_image[:] = (1, 2, 3)
+        image = CvBridge().cv2_to_imgmsg(cv_image)
+        image.encoding = 'bgr8'
+        camera_info = CameraInfo()
+
+        def call_switch(state: bool):
+            future = switch_client.call_async(SetBool.Request(data=state))
+            rclpy.spin_until_future_complete(self.node, future)
+            self.assertTrue(future.result().success)
+
+        def publish_message(frame_id: str):
+            image.header.stamp = self.node.get_clock().now().to_msg()
+            image.header.frame_id = frame_id
+            camera_info.header = image.header
+            image_pub.publish(image)
+            camera_info_pub.publish(camera_info)
+
+        def spin_and_wait(duration: float = 0.5):
+            end_time = time.time() + duration
+            while time.time() < end_time:
+                rclpy.spin_once(self.node, timeout_sec=0.05)
 
         try:
-            # Create white image
-            cv_image = np.zeros((DIMENSION_HEIGHT, DIMENSION_WIDTH, 3), np.uint8)
-            cv_image[:] = (1, 2, 3)
-            image = CvBridge().cv2_to_imgmsg(cv_image)
-            image.encoding = 'bgr8'
-            camera_info = CameraInfo()
+            # Switch ON: publish messages that should pass through
+            call_switch(True)
+            for i in range(5):
+                publish_message(f'on_{i}')
+            spin_and_wait()
 
-            end_time = time.time() + TIMEOUT
-            done = False
+            on_count = len(received_messages.get('switched_image', []))
+            self.assertGreaterEqual(on_count, 5, f'Switch ON: expected 5 messages, got {on_count}')
 
-            # Switch between triggering and not triggering
-            # Each even number will be received, odd numbers won't be
-            count = 0
-            self.req.data = False
-            while time.time() < end_time:
-                self.req.data = not self.req.data
-                self.future = self.cli.call_async(self.req)
-                rclpy.spin_until_future_complete(self.node, self.future)
+            # Switch OFF: publish messages that should be blocked
+            call_switch(False)
+            for i in range(5):
+                publish_message(f'off_{i}')
+            spin_and_wait()
 
-                image.header.stamp = self.node.get_clock().now().to_msg()
-                image.header.frame_id = str(count)
-                camera_info.header = image.header
-                image_pub.publish(image)
-                camera_info_pub.publish(camera_info)
-                count += 1
-                rclpy.spin_once(self.node, timeout_sec=(0.1))
-                if 'switched_image' in received_messages and \
-                        len(received_messages['switched_image']) >= NUM_EXPECTED_MSGS and \
-                        'switched_camera_info' in received_messages and \
-                        len(received_messages['switched_camera_info']) >= NUM_EXPECTED_MSGS:
-                    done = True
-                    break
-            self.assertTrue(done, 'Appropriate output not received')
-            images = received_messages['switched_image']
-            self.assertEqual(len(images), NUM_EXPECTED_MSGS)
-            self.assertEqual(len(received_messages['switched_camera_info']), NUM_EXPECTED_MSGS)
+            off_count = len(received_messages['switched_image'])
+            extra = off_count - on_count
+            self.assertEqual(off_count, on_count,
+                             f'Switch OFF: messages should be blocked, got {extra} extra')
 
-            for i, received_image in enumerate(images):
+            # Verify all received messages are from the ON state
+            for received_image in received_messages['switched_image']:
                 self.assertEqual(received_image.height, DIMENSION_HEIGHT)
                 self.assertEqual(received_image.width, DIMENSION_WIDTH)
                 self.assertEqual(received_image.encoding, 'bgr8')
-                self.assertEqual(int(received_image.header.frame_id) % 2, 0)
+                self.assertTrue(received_image.header.frame_id.startswith('on_'),
+                                f'Unexpected frame_id: {received_image.header.frame_id}')
                 self.assertTrue((received_image.data == cv_image.flatten()).all())
+
+            self.assertEqual(len(received_messages['switched_camera_info']), off_count)
 
         finally:
             self.node.destroy_subscription(subs)
             self.node.destroy_publisher(image_pub)
+            self.node.destroy_publisher(camera_info_pub)

@@ -227,13 +227,16 @@ class PyNitrosTypeBuilder():
         err, = driver.cuStreamDestroy(self._stream)
         self.ASSERT_CUDA_SUCCESS(err)
 
-        # Free shared cuda memblocks
-        for cuda_memblock_handle, cuda_memblock_virtual_ptr, data_size in self._cuda_memblock_info:
+        for memblock_fd in self._cuda_memblock_fd_to_ptr.keys():
+            os.close(memblock_fd)
+
+        for cuda_memblock_handle, cuda_memblock_virtual_ptr, data_size in \
+                self._cuda_memblock_info:
             err, = driver.cuMemUnmap(cuda_memblock_virtual_ptr, data_size)
             self.ASSERT_CUDA_SUCCESS(err)
-
             err, = driver.cuMemAddressFree(cuda_memblock_virtual_ptr, data_size)
             self.ASSERT_CUDA_SUCCESS(err)
-
             err, = driver.cuMemRelease(cuda_memblock_handle)
             self.ASSERT_CUDA_SUCCESS(err)
+
+        runtime.cudaDeviceReset()

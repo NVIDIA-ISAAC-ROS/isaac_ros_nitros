@@ -36,10 +36,10 @@
 #include "isaac_ros_nitros/types/type_adapter_nitros_context.hpp"
 #include "rclcpp/rclcpp.hpp"
 #include "sensor_msgs/image_encodings.hpp"
-#include "isaac_ros_nitros/utils/vpi_utilities.hpp"
 #include "vpi/Image.h"
 #include "vpi/algo/ConvertImageFormat.h"
 
+#include "isaac_ros_vpi_utils/vpi_utilities.hpp"
 #include "isaac_ros_common/cuda_stream.hpp"
 
 constexpr char kEntityName[] = "memory_pool";
@@ -184,7 +184,8 @@ VPIStatus CreateVPIImageWrapper(
   const nvidia::gxf::Handle<nvidia::gxf::VideoBuffer> & video_buff)
 {
   nvidia::gxf::VideoBufferInfo image_info = video_buff->video_frame_info();
-  nitros::VPIFormat vpi_format = nitros::ToVpiFormat(image_info.color_format);
+  nvidia::isaac_ros::vpi_utils::VPIFormat vpi_format =
+    nvidia::isaac_ros::vpi_utils::ToVpiFormat(image_info.color_format);
   img_data.bufferType = VPI_IMAGE_BUFFER_CUDA_PITCH_LINEAR;
   img_data.buffer.pitch.format = vpi_format.image_format;
   img_data.buffer.pitch.numPlanes = image_info.color_planes.size();

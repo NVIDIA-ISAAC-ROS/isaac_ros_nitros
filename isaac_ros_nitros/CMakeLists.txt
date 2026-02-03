@@ -60,9 +60,9 @@ install(FILES
     DESTINATION "${CMAKE_INSTALL_PREFIX}/share/${PROJECT_NAME}/cuvslam/lib")
 
 # Install header files for cuvslam
-install(FILES lib/cuvslam/include/cuvslam.h
-              lib/cuvslam/include/ground_constraint.h
-        DESTINATION "${CMAKE_INSTALL_PREFIX}/share/${PROJECT_NAME}/cuvslam/include")
+install(FILES lib/cuvslam/include/cuvslam/cuvslam2.h
+              lib/cuvslam/include/cuvslam/ground_constraint2.h
+        DESTINATION "${CMAKE_INSTALL_PREFIX}/share/${PROJECT_NAME}/cuvslam/include/cuvslam")
 
 # cuVSLAM (register path)
 ament_index_register_resource(cuvslam CONTENT share/${PROJECT_NAME}/cuvslam)
@@ -89,7 +89,6 @@ ament_auto_add_library(${PROJECT_NAME} SHARED
   src/nitros_publisher.cpp
   src/nitros_subscriber.cpp
   src/nitros_publisher_subscriber_group.cpp
-  src/utils/vpi_utilities.cpp
 )
 target_link_libraries(${PROJECT_NAME}
   Eigen3::Eigen
