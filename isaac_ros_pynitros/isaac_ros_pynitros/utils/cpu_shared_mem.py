@@ -82,7 +82,10 @@ class CPUSharedMem():
 
     def close(self):
         """Close the shared memory object."""
-        self.cpu_shared_mem_obj.close()
-        self.cpu_shared_mem.close_fd()
-        self.cpu_shared_mem.unlink()
-        self.lock.unlink()
+        if self.cpu_shared_mem_obj:
+            self.cpu_shared_mem_obj.close()
+        if self.cpu_shared_mem:
+            self.cpu_shared_mem.close_fd()
+            self.cpu_shared_mem.unlink()
+        if self.lock:
+            self.lock.unlink()

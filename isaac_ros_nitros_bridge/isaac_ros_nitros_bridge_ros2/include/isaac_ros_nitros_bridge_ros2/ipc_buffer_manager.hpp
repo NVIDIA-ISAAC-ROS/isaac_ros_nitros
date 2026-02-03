@@ -139,7 +139,7 @@ struct HostIPCBuffer
   void refcount_dec()
   {
     boost::interprocess::scoped_lock<boost::interprocess::named_mutex> lock(*mutex_);
-    if (refcount_ == 0) {
+    if (*refcount_ == 0) {
       RCLCPP_ERROR(
         rclcpp::get_logger("IPCBufferManager"), "Refcount is already zero.");
       return;

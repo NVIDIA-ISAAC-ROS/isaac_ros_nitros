@@ -18,14 +18,20 @@
 import ctypes
 from ctypes import c_long
 import math
+import os
 
 import cuda.bindings.driver as driver
 import cuda.bindings.runtime as runtime
-from isaac_ros_nitros_bridge_interfaces.msg import NitrosBridgeImage, NitrosBridgeTensorList
+from isaac_ros_nitros_bridge_interfaces.msg import (
+    NitrosBridgeImage,
+    NitrosBridgePointCloud,
+    NitrosBridgeTensorList
+)
 from isaac_ros_pynitros.utils.cpu_shared_mem import CPUSharedMem
 from isaac_ros_tensor_list_interfaces.msg import TensorList
 import rclpy
 from sensor_msgs.msg import Image
+from sensor_msgs.msg import PointCloud2
 
 
 class PyNitrosTypeViewBase():
@@ -49,12 +55,14 @@ class PyNitrosTypeViewBase():
 
     nitros_bridge_msg_types = (
         NitrosBridgeImage,
+        NitrosBridgePointCloud,
         NitrosBridgeTensorList
     )
 
     raw_msg_types = (
         Image,
-        TensorList
+        TensorList,
+        PointCloud2
     )
 
     def __init__(self, raw_msg, gpu_ptr):
@@ -63,6 +71,7 @@ class PyNitrosTypeViewBase():
         self.cuda_stream = None
         self.handle = None
         self._cpu_shared_mem = None
+        self._mapped_size = None
 
     def _open_shm_and_check_uid(self, sender_pid, memblock_fd):
         self._cpu_shared_mem = CPUSharedMem()
@@ -95,12 +104,14 @@ class PyNitrosTypeViewBase():
             raise RuntimeError('pidfd_open failed')
 
         new_fd = self._pidfd_getfd(pidfd, memblock_fd, 0)
+        os.close(pidfd)
         if new_fd == -1:
             raise RuntimeError('pidfd_getfd failed')
 
         err, self.handle = driver.cuMemImportFromShareableHandle(
             new_fd,
             driver.CUmemAllocationHandleType.CU_MEM_HANDLE_TYPE_POSIX_FILE_DESCRIPTOR)
+        os.close(new_fd)
         self.ASSERT_CUDA_SUCCESS(err)
 
         # Allocate GPU Space -> CUmemGenericAllocationHandle
@@ -118,6 +129,7 @@ class PyNitrosTypeViewBase():
         self.ASSERT_CUDA_SUCCESS(err)
 
         rounded_data_size = self._round_up(data_size, granularity)
+        self._mapped_size = rounded_data_size
 
         # Handle -> Tensor Reconstruction
         res, virtual_ptr = driver.cuMemAddressReserve(
@@ -174,12 +186,17 @@ class PyNitrosTypeViewBase():
                 self._cpu_shared_mem.lock.acquire()
                 self._cpu_shared_mem.update_refcount(-1)
                 self._cpu_shared_mem.lock.release()
+                self._cpu_shared_mem.cpu_shared_mem_obj.close()
+                self._cpu_shared_mem.cpu_shared_mem.close_fd()
         else:
             # Free the memory
             runtime.cudaFree(self.gpu_ptr)
 
     def get_handle(self):
         return self.handle
+
+    def get_mapped_size(self):
+        return self._mapped_size
 
     def get_frame_id(self):
         return self.raw_msg.header.frame_id

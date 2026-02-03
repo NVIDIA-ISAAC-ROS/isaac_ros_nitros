@@ -42,9 +42,9 @@ find_package(yaml-cpp)
 
 # NitrosImage
 ament_auto_add_library(${PROJECT_NAME} SHARED
-src/nitros_image.cpp
-src/nitros_image_builder.cpp
-src/nitros_image_view.cpp
+  src/nitros_image.cpp
+  src/nitros_image_builder.cpp
+  src/nitros_image_view.cpp
 )
 target_link_libraries(${PROJECT_NAME}
   vpi

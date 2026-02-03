@@ -1,7 +1,7 @@
 /**
  * @file cuvslam.h
 
- * @copyright Copyright (c) 2023, NVIDIA CORPORATION.  All rights reserved.\n\n
+ * @copyright Copyright (c) 2025, NVIDIA CORPORATION.  All rights reserved.\n\n
  * NVIDIA CORPORATION and its licensors retain all intellectual property
  * and proprietary rights in and to this software, related documentation
  * and any modifications thereto.  Any use, reproduction, disclosure or
@@ -41,7 +41,7 @@
 #define CUVSLAM_API_VERSION_MAJOR 14
 
 /// Minor version
-#define CUVSLAM_API_VERSION_MINOR 0
+#define CUVSLAM_API_VERSION_MINOR 1
 
 #endif  // !defined(CUVSLAM_API)
 

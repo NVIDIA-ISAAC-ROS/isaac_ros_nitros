@@ -109,7 +109,7 @@ class IsaacROSNitrosPointCloudTest(IsaacROSBaseTest):
                     break
 
             self.assertTrue(
-                done, "Didn't receive output on output_image topic!")
+                done, "Didn't receive output on output_point_cloud topic!")
 
             received_points = received_messages['output']
 
@@ -117,21 +117,21 @@ class IsaacROSNitrosPointCloudTest(IsaacROSBaseTest):
                              'Source and received frame ids dont match')
 
             self.assertEqual(len(cloud_msg.data), len(received_points.data),
-                             'Source and received image sizes do not match: ' +
+                             'Source and received point cloud sizes do not match: ' +
                              f'{len(cloud_msg.data)} != {len(received_points.data)}')
             self.assertEqual(cloud_msg.is_bigendian, received_points.is_bigendian,
-                             'Source and received image is_bigendian field do not match')
+                             'Source and received point cloud is_bigendian field do not match')
             self.assertEqual(cloud_msg.row_step, received_points.row_step,
-                             'Source and received image row_step field do not match')
+                             'Source and received point cloud row_step field do not match')
             self.assertEqual(cloud_msg.point_step, received_points.point_step,
-                             'Source and received image point_step field do not match')
+                             'Source and received point cloud point_step field do not match')
             for i in range(len(cloud_msg.data)):
                 # by convention the 15th bit is not used and hence not passed through
                 if (i % 16 != 15):
                     self.assertEqual(cloud_msg.data[i], received_points.data[i],
-                                     'Source and received image pixels do not match')
+                                     'Source and received point cloud data do not match')
 
-            print('Source and received images are identical.')
+            print('Source and received point clouds are identical.')
         finally:
             self.node.destroy_subscription(received_cloud_sub)
             self.node.destroy_publisher(cloud_pub)

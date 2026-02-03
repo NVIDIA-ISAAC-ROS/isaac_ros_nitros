@@ -26,7 +26,7 @@ SynchronizerNode::SynchronizerNode(const rclcpp::NodeOptions options)
 : rclcpp::Node("synchronizer_node", options),
   sub_image_{},
   sub_camera_info_{},
-  sync_{ExactPolicy{3}, sub_image_, sub_camera_info_},
+  sync_{ExactPolicy{10}, sub_image_, sub_camera_info_},
   pub_{create_publisher<custom_nitros_message_filter_interfaces::msg::SyncStatus>(
       "status", 3)}
 {

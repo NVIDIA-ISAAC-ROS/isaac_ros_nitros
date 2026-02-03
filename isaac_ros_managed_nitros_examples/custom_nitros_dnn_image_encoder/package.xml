@@ -21,7 +21,7 @@
 <?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
   <name>custom_nitros_dnn_image_encoder</name>
-  <version>4.0.0</version>
+  <version>4.1.0</version>
   <description>Custom NITROS Image Encoding</description>
 
   <maintainer email="isaac-ros-maintainers@nvidia.com">Isaac ROS Maintainers</maintainer>
@@ -38,6 +38,7 @@
   <depend>isaac_ros_managed_nitros</depend>
   <depend>isaac_ros_nitros_tensor_list_type</depend>
   <depend>isaac_ros_tensor_list_interfaces</depend>
+  <depend>cvcuda0-dev</depend>
 
   <build_depend>isaac_ros_common</build_depend>
 

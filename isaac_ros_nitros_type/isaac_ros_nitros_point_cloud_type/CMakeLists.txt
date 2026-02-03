@@ -41,7 +41,12 @@ find_package(Eigen3 3.3 REQUIRED NO_MODULE)
 find_package(yaml-cpp)
 
 # NitrosPointCloud
-ament_auto_add_library(${PROJECT_NAME} SHARED src/nitros_point_cloud.cpp)
+ament_auto_add_library(${PROJECT_NAME} SHARED
+  src/nitros_point_cloud.cpp
+  src/nitros_point_cloud_builder.cpp
+  src/nitros_point_cloud_view.cpp
+)
+
 target_link_libraries(${PROJECT_NAME}
   Eigen3::Eigen
   yaml-cpp
@@ -62,15 +67,35 @@ if(BUILD_TESTING)
     BUILD_WITH_INSTALL_RPATH TRUE
     BUILD_RPATH_USE_ORIGIN TRUE
     INSTALL_RPATH_USE_LINK_PATH TRUE)
+
   rclcpp_components_register_nodes(nitros_point_cloud_forward_node "nvidia::isaac_ros::nitros::NitrosPointCloudForwardNode")
   set(node_plugins "${node_plugins}nvidia::isaac_ros::nitros::NitrosPointCloudForwardNode;$<TARGET_FILE:nitros_point_cloud_forward_node>\n")
+
+  # Find isaac_ros_managed_nitros for test node
+  # (ament_auto_find_build_dependencies only finds <depend>, not <test_depend>)
+  find_package(isaac_ros_managed_nitros REQUIRED)
+
+  # ManagedNitrosPointCloudForwardNode
+  ament_auto_add_library(managed_nitros_point_cloud_forward_node SHARED
+    test/managed_nitros_point_cloud_forward_node.cpp)
+  target_link_libraries(managed_nitros_point_cloud_forward_node ${PROJECT_NAME})
+  ament_target_dependencies(managed_nitros_point_cloud_forward_node isaac_ros_managed_nitros)
+  set_target_properties(managed_nitros_point_cloud_forward_node PROPERTIES
+    BUILD_WITH_INSTALL_RPATH TRUE
+    BUILD_RPATH_USE_ORIGIN TRUE
+    INSTALL_RPATH_USE_LINK_PATH TRUE)
+
+  rclcpp_components_register_nodes(managed_nitros_point_cloud_forward_node
+    "nvidia::isaac_ros::nitros::ManagedNitrosPointCloudForwardNode")
+  set(node_plugins
+    "${node_plugins}nvidia::isaac_ros::nitros::ManagedNitrosPointCloudForwardNode;\
+$<TARGET_FILE:managed_nitros_point_cloud_forward_node>\n")
 
   find_package(ament_lint_auto REQUIRED)
 
   # Ignore copyright notices since we use custom NVIDIA Isaac ROS Software License
   set(ament_cmake_copyright_FOUND TRUE)
   ament_lint_auto_find_test_dependencies()
-
 
   # The FindPythonInterp and FindPythonLibs modules are removed
   if(POLICY CMP0148)
@@ -79,6 +104,7 @@ if(BUILD_TESTING)
 
   find_package(launch_testing_ament_cmake REQUIRED)
   add_launch_test(test/isaac_ros_nitros_point_cloud_type_test_pol.py TIMEOUT "15")
+  add_launch_test(test/isaac_ros_managed_nitros_point_cloud_type_test_pol.py TIMEOUT "15")
 endif()
 
 

@@ -13,7 +13,7 @@ license agreement from NVIDIA CORPORATION is strictly prohibited.
 <?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
   <name>isaac_ros_gxf</name>
-  <version>4.0.0</version>
+  <version>4.1.0</version>
   <description>Isaac ROS GXF</description>
 
   <maintainer email="isaac-ros-maintainers@nvidia.com">Isaac ROS Maintainers</maintainer>
@@ -25,6 +25,9 @@ license agreement from NVIDIA CORPORATION is strictly prohibited.
   <buildtool_depend>ament_cmake</buildtool_depend>
 
   <depend>magic_enum</depend>
+  <depend>libucx0</depend>
+  <depend condition="$ISAAC_ROS_PLATFORM == amd64">nvsci</depend>
+  <depend condition="$ISAAC_ROS_PLATFORM == amd64">libgnat-23</depend>
 
   <build_depend>isaac_ros_common</build_depend>
 
