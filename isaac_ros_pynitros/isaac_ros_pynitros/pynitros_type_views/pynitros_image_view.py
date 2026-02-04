@@ -62,8 +62,7 @@ class PyNitrosImageView(PyNitrosTypeViewBase):
 
     def _from_raw_msg(self):
         image_size = len(self.raw_msg.data)
-        err, device_ptr = runtime.cudaMalloc(image_size)
-        self.ASSERT_CUDA_SUCCESS(err)
+        device_ptr = self._acquire_raw_cuda_buffer(image_size)
         err, = runtime.cudaMemcpy(device_ptr, self.raw_msg.data, image_size,
                                   runtime.cudaMemcpyKind.cudaMemcpyHostToDevice)
         self.ASSERT_CUDA_SUCCESS(err)
