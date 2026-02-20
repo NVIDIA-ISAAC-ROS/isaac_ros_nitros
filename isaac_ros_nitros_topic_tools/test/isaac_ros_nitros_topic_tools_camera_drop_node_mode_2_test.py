@@ -30,7 +30,8 @@ IMAGE_HEIGHT = 100
 IMAGE_WIDTH = 150
 TOTAL_COUNT = 10
 DROP_COUNT = 7
-RECEIVE_WAIT_TIME = 2
+EXPECTED_MESSAGE_COUNT = TOTAL_COUNT - DROP_COUNT
+RECEIVE_TIMEOUT = 10
 
 
 @pytest.mark.rostest
@@ -126,16 +127,19 @@ class NitrosCameraDropNodeMode1Test(IsaacROSBaseTest):
                 counter += 1
                 rclpy.spin_once(self.node, timeout_sec=0.01)
 
-            # Wait for the messages to be received
-            end_time = time.time() + RECEIVE_WAIT_TIME
+            # Wait for the expected number of messages to be received (polling with timeout)
+            end_time = time.time() + RECEIVE_TIMEOUT
             while time.time() < end_time:
-                time.sleep(0.1)
                 rclpy.spin_once(self.node, timeout_sec=0.1)
+                if len(received_messages) >= EXPECTED_MESSAGE_COUNT:
+                    break
 
             # Check if the correct number of messages are received
             self.assertTrue(len(received_messages) > 0, 'Did not receive output messages')
-            self.assertTrue(len(received_messages) == (TOTAL_COUNT-DROP_COUNT),
-                            'Did not receive the correct number of output messages')
+            self.assertEqual(
+                len(received_messages), EXPECTED_MESSAGE_COUNT,
+                f'Expected {EXPECTED_MESSAGE_COUNT} messages but received '
+                f'{len(received_messages)} messages')
         finally:
             self.node.destroy_publisher(image_pub)
             self.node.destroy_publisher(camera_info_pub)
