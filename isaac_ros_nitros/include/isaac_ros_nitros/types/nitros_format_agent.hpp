@@ -25,11 +25,14 @@
 #include <utility>
 #include <vector>
 
+#include "isaac_ros_nitros/nitros_node_interfaces.hpp"
 #include "isaac_ros_nitros/types/nitros_type_base.hpp"
 
 #include "negotiated/negotiated_publisher.hpp"
 #include "negotiated/negotiated_subscription.hpp"
 
+#include "rclcpp/create_publisher.hpp"
+#include "rclcpp/create_subscription.hpp"
 #include "rclcpp/logger.hpp"
 #include "rclcpp/rclcpp.hpp"
 #include "rclcpp/serialization.hpp"
@@ -50,7 +53,7 @@ struct NitrosFormatCallbacks
   // Create a compatible publisher for T
   std::function<
     void(
-      rclcpp::Node & node,
+      NitrosNodeInterfaces node_ifaces,
       std::shared_ptr<rclcpp::PublisherBase> & compatible_pub,
       const std::string & topic_name,
       const rclcpp::QoS & qos,
@@ -60,7 +63,7 @@ struct NitrosFormatCallbacks
   // Add a compatible publisher of type T to a negotiated publisher
   std::function<
     void(
-      rclcpp::Node & node,
+      NitrosNodeInterfaces node_ifaces,
       std::shared_ptr<negotiated::NegotiatedPublisher> negotiated_pub,
       std::shared_ptr<rclcpp::PublisherBase> compatible_pub,
       const double weight)>
@@ -69,7 +72,7 @@ struct NitrosFormatCallbacks
   // Add T to a negotiated publisher as a supported format
   std::function<
     void(
-      rclcpp::Node & node,
+      NitrosNodeInterfaces node_ifaces,
       std::shared_ptr<negotiated::NegotiatedPublisher> negotiated_pub,
       const double weight,
       const rclcpp::QoS & qos,
@@ -79,7 +82,7 @@ struct NitrosFormatCallbacks
   // Publish a message of type T via a negotiated publisher
   std::function<
     void(
-      rclcpp::Node & node,
+      NitrosNodeInterfaces node_ifaces,
       std::shared_ptr<negotiated::NegotiatedPublisher> negotiated_pub,
       NitrosTypeBase & base_msg)>
   negotiatedPublishCallback{nullptr};
@@ -87,7 +90,7 @@ struct NitrosFormatCallbacks
   // Publish a message of type T via a compatible publisher
   std::function<
     void(
-      rclcpp::Node & node,
+      NitrosNodeInterfaces node_ifaces,
       std::shared_ptr<rclcpp::PublisherBase> compatible_pub,
       NitrosTypeBase & base_msg)>
   compatiblePublishCallback{nullptr};
@@ -97,7 +100,7 @@ struct NitrosFormatCallbacks
   // Create a compatible subscriber for T
   std::function<
     void(
-      rclcpp::Node & node,
+      NitrosNodeInterfaces node_ifaces,
       std::shared_ptr<rclcpp::SubscriptionBase> & compatible_sub,
       const std::string & topic_name,
       const rclcpp::QoS & qos,
@@ -109,7 +112,7 @@ struct NitrosFormatCallbacks
   // Remove a compatible subscriber of type T from a negotiated subscriber
   std::function<
     void(
-      rclcpp::Node & node,
+      NitrosNodeInterfaces node_ifaces,
       std::shared_ptr<negotiated::NegotiatedSubscription> negotiated_sub,
       std::shared_ptr<rclcpp::SubscriptionBase> compatible_sub)>
   removeCompatibleSubscriberCallback {nullptr};
@@ -117,7 +120,7 @@ struct NitrosFormatCallbacks
   // Add a compatible subscriber of type T to a negotiated subscriber
   std::function<
     void(
-      rclcpp::Node & node,
+      NitrosNodeInterfaces node_ifaces,
       std::shared_ptr<negotiated::NegotiatedSubscription> negotiated_sub,
       std::shared_ptr<rclcpp::SubscriptionBase> compatible_sub,
       const double weight)>
@@ -126,7 +129,7 @@ struct NitrosFormatCallbacks
   // Add T to a negotiated subscriber as a supported format
   std::function<
     void(
-      rclcpp::Node & node,
+      NitrosNodeInterfaces node_ifaces,
       std::shared_ptr<negotiated::NegotiatedSubscription> negotiated_sub,
       const double weight,
       const rclcpp::QoS & qos,
@@ -264,26 +267,28 @@ public:
   // Publisher callbacks
   // Create a compatible publisher for T
   static void createCompatiblePublisherCallback(
-    rclcpp::Node & node,
+    NitrosNodeInterfaces node_ifaces,
     std::shared_ptr<rclcpp::PublisherBase> & compatible_pub,
     const std::string & topic_name,
     const rclcpp::QoS & qos,
     const rclcpp::PublisherOptions & options)
   {
-    compatible_pub = node.create_publisher<typename T::MsgT>(
+    compatible_pub = rclcpp::create_publisher<typename T::MsgT>(
+      node_ifaces,
       topic_name,
       qos,
       options);
 
     RCLCPP_DEBUG(
-      node.get_logger().get_child(LOGGER_SUFFIX).get_child(T::supported_type_name),
+      node_ifaces.get<rclcpp::node_interfaces::NodeLoggingInterface>()->get_logger()
+      .get_child(LOGGER_SUFFIX).get_child(T::supported_type_name),
       "Created a compatible publisher (topic_name=%s)",
       compatible_pub->get_topic_name());
   }
 
   // Add a compatible publisher of type T to a negotiated publisher
   static void addCompatiblePublisherCallback(
-    rclcpp::Node & node,
+    NitrosNodeInterfaces node_ifaces,
     std::shared_ptr<negotiated::NegotiatedPublisher> negotiated_pub,
     std::shared_ptr<rclcpp::PublisherBase> compatible_pub,
     const double weight)
@@ -296,14 +301,15 @@ public:
       weight);
 
     RCLCPP_DEBUG(
-      node.get_logger().get_child(LOGGER_SUFFIX).get_child(T::supported_type_name),
+      node_ifaces.get<rclcpp::node_interfaces::NodeLoggingInterface>()->get_logger()
+      .get_child(LOGGER_SUFFIX).get_child(T::supported_type_name),
       "Added a compatible publisher (topic_name=%s) to a negotiated publisher",
       compatible_pub->get_topic_name());
   }
 
   // Add T to a negotiated publisher as a supported format
   static void addPublisherSupportedFormatCallback(
-    rclcpp::Node & node,
+    NitrosNodeInterfaces node_ifaces,
     std::shared_ptr<negotiated::NegotiatedPublisher> negotiated_pub,
     const double weight,
     const rclcpp::QoS & qos,
@@ -315,14 +321,15 @@ public:
       options);
 
     RCLCPP_DEBUG(
-      node.get_logger().get_child(LOGGER_SUFFIX).get_child(T::supported_type_name),
+      node_ifaces.get<rclcpp::node_interfaces::NodeLoggingInterface>()->get_logger()
+      .get_child(LOGGER_SUFFIX).get_child(T::supported_type_name),
       "Added a supported format \"%s\" to a negotiated publisher",
       T::supported_type_name.c_str());
   }
 
   // Publish a message of type T via a negotiated publisher
   static void negotiatedPublishCallback(
-    rclcpp::Node & node,
+    NitrosNodeInterfaces node_ifaces,
     std::shared_ptr<negotiated::NegotiatedPublisher> negotiated_pub,
     NitrosTypeBase & base_msg)
   {
@@ -330,13 +337,14 @@ public:
     negotiated_pub->publish<T>(msg);
 
     RCLCPP_DEBUG(
-      node.get_logger().get_child(LOGGER_SUFFIX).get_child(T::supported_type_name),
+      node_ifaces.get<rclcpp::node_interfaces::NodeLoggingInterface>()->get_logger()
+      .get_child(LOGGER_SUFFIX).get_child(T::supported_type_name),
       "Published a message via the negotiated publisher");
   }
 
   // Publish a message of type T via a compatible publisher
   static void compatiblePublishCallback(
-    rclcpp::Node & node,
+    NitrosNodeInterfaces node_ifaces,
     std::shared_ptr<rclcpp::PublisherBase> compatible_pub,
     NitrosTypeBase & base_msg)
   {
@@ -346,7 +354,8 @@ public:
     cast_compatible_pub->publish(msg);
 
     RCLCPP_DEBUG(
-      node.get_logger().get_child(LOGGER_SUFFIX).get_child(T::supported_type_name),
+      node_ifaces.get<rclcpp::node_interfaces::NodeLoggingInterface>()->get_logger()
+      .get_child(LOGGER_SUFFIX).get_child(T::supported_type_name),
       "Published a message via the compatible publisher (topic_name=%s)",
       compatible_pub->get_topic_name());
   }
@@ -354,7 +363,7 @@ public:
   // Subscriber callbacks
   // Create a compatible subscriber for T
   static void createCompatibleSubscriberCallback(
-    rclcpp::Node & node,
+    NitrosNodeInterfaces node_ifaces,
     std::shared_ptr<rclcpp::SubscriptionBase> & compatible_sub,
     const std::string & topic_name,
     const rclcpp::QoS & qos,
@@ -366,14 +375,16 @@ public:
       &NitrosFormatAgent<T>::subscriberCallback,
       std::placeholders::_1,
       subscriber_callback);
-    compatible_sub = node.create_subscription<typename T::MsgT>(
+    compatible_sub = rclcpp::create_subscription<typename T::MsgT>(
+      node_ifaces,
       topic_name,
       qos,
       internal_subscriber_callback,
       options);
 
     RCLCPP_DEBUG(
-      node.get_logger().get_child(LOGGER_SUFFIX).get_child(T::supported_type_name),
+      node_ifaces.get<rclcpp::node_interfaces::NodeLoggingInterface>()->get_logger()
+      .get_child(LOGGER_SUFFIX).get_child(T::supported_type_name),
       "Created a compatible subscriber (topic_name=%s, format_name=%s)",
       compatible_sub->get_topic_name(),
       T::supported_type_name.c_str());
@@ -381,7 +392,7 @@ public:
 
   // Remove a compatible subscriber of type T from a negotiated subscriber
   static void removeCompatibleSubscriberCallback(
-    rclcpp::Node & node,
+    NitrosNodeInterfaces node_ifaces,
     std::shared_ptr<negotiated::NegotiatedSubscription> negotiated_sub,
     std::shared_ptr<rclcpp::SubscriptionBase> compatible_sub)
   {
@@ -391,14 +402,15 @@ public:
       cast_compatible_sub, T::supported_type_name);
 
     RCLCPP_DEBUG(
-      node.get_logger().get_child(LOGGER_SUFFIX).get_child(T::supported_type_name),
+      node_ifaces.get<rclcpp::node_interfaces::NodeLoggingInterface>()->get_logger()
+      .get_child(LOGGER_SUFFIX).get_child(T::supported_type_name),
       "Removed a compatible subscriber (topic_name=%s) from a negotiated subscriber",
       compatible_sub->get_topic_name());
   }
 
   // Add a compatible subscriber of type T to a negotiated subscriber
   static void addCompatibleSubscriberCallback(
-    rclcpp::Node & node,
+    NitrosNodeInterfaces node_ifaces,
     std::shared_ptr<negotiated::NegotiatedSubscription> negotiated_sub,
     std::shared_ptr<rclcpp::SubscriptionBase> compatible_sub,
     const double weight)
@@ -411,14 +423,15 @@ public:
       weight);
 
     RCLCPP_DEBUG(
-      node.get_logger().get_child(LOGGER_SUFFIX).get_child(T::supported_type_name),
+      node_ifaces.get<rclcpp::node_interfaces::NodeLoggingInterface>()->get_logger()
+      .get_child(LOGGER_SUFFIX).get_child(T::supported_type_name),
       "Added a compatible subscriber (topic_name=%s) to a negotiated subscriber",
       compatible_sub->get_topic_name());
   }
 
   // Add T to a negotiated subscriber as a supported format
   static void addSubscriberSupportedFormatCallback(
-    rclcpp::Node & node,
+    NitrosNodeInterfaces node_ifaces,
     std::shared_ptr<negotiated::NegotiatedSubscription> negotiated_sub,
     const double weight,
     const rclcpp::QoS & qos,
@@ -438,7 +451,8 @@ public:
       options);
 
     RCLCPP_DEBUG(
-      node.get_logger().get_child(LOGGER_SUFFIX).get_child(T::supported_type_name),
+      node_ifaces.get<rclcpp::node_interfaces::NodeLoggingInterface>()->get_logger()
+      .get_child(LOGGER_SUFFIX).get_child(T::supported_type_name),
       "Added a supported format \"%s\" to a negotiated subscriber",
       T::supported_type_name.c_str());
   }

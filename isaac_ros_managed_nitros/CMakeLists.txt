@@ -59,6 +59,30 @@ if(BUILD_TESTING)
   set(ament_cmake_copyright_FOUND TRUE)
   ament_lint_auto_find_test_dependencies()
 
+  # NitrosEmptyLifecycleNode — validates ManagedNitrosPublisher with LifecycleNode (issue #68)
+  find_package(rclcpp_lifecycle REQUIRED)
+  find_package(launch_testing_ament_cmake REQUIRED)
+
+  add_library(nitros_empty_lifecycle_node SHARED
+    test/src/nitros_empty_lifecycle_node.cpp)
+  target_include_directories(nitros_empty_lifecycle_node PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/include)
+  ament_target_dependencies(nitros_empty_lifecycle_node
+    isaac_ros_nitros
+    rclcpp_lifecycle
+    rclcpp_components)
+  set_target_properties(nitros_empty_lifecycle_node PROPERTIES
+    BUILD_WITH_INSTALL_RPATH TRUE
+    BUILD_RPATH_USE_ORIGIN TRUE
+    INSTALL_RPATH_USE_LINK_PATH TRUE)
+  rclcpp_components_register_nodes(
+    nitros_empty_lifecycle_node
+    "nvidia::isaac_ros::nitros::NitrosEmptyLifecycleNode")
+  install(TARGETS nitros_empty_lifecycle_node
+    DESTINATION lib)
+
+  add_launch_test(test/isaac_ros_nitros_lifecycle_test_pol.py TIMEOUT "30")
+
 endif()
 
 

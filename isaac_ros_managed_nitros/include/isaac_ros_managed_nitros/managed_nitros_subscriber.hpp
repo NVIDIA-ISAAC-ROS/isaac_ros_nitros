@@ -23,6 +23,7 @@
 #include <vector>
 
 #include "extensions/gxf_optimizer/core/optimizer.hpp"
+#include "isaac_ros_nitros/nitros_node_interfaces.hpp"
 #include "isaac_ros_nitros/nitros_subscriber.hpp"
 #include "isaac_ros_nitros/types/nitros_type_manager.hpp"
 #include "rclcpp/rclcpp.hpp"
@@ -39,15 +40,17 @@ template<typename NitrosMsgView>
 class ManagedNitrosSubscriber
 {
 public:
+  template<typename NodeT>
   explicit ManagedNitrosSubscriber(
-    rclcpp::Node * node,
+    NodeT * node,
     const std::string & topic_name,
     const std::string & format,
     std::function<void(const NitrosMsgView & msg_view)> callback = nullptr,
     const NitrosDiagnosticsConfig & diagnostics_config = {},
     const rclcpp::QoS qos = rclcpp::QoS(1))
-  : node_{node}, topic_{topic_name},
-    nitros_type_manager_{std::make_shared<NitrosTypeManager>(node_)}
+  : node_ifaces_(MakeNitrosNodeInterfaces(*node)), topic_{topic_name},
+    nitros_type_manager_{std::make_shared<NitrosTypeManager>(
+      node_ifaces_.get<rclcpp::node_interfaces::NodeLoggingInterface>()->get_logger())}
   {
     nitros_type_manager_->registerSupportedType<typename NitrosMsgView::BaseType>();
     nitros_type_manager_->loadExtensions(format);
@@ -66,18 +69,19 @@ public:
     };
 
     nitros_sub_ = std::make_shared<NitrosSubscriber>(
-      *node_, GetTypeAdapterNitrosContext().getContext(), nitros_type_manager_,
+      node_ifaces_, GetTypeAdapterNitrosContext().getContext(), nitros_type_manager_,
       supported_data_formats, component_config, diagnostics_config);
 
     nitros_sub_->start();
 
     RCLCPP_INFO(
-      node_->get_logger().get_child("ManagedNitrosSubscriber"),
+      node_ifaces_.get<rclcpp::node_interfaces::NodeLoggingInterface>()->get_logger().get_child(
+        "ManagedNitrosSubscriber"),
       "Starting Managed Nitros Subscriber");
   }
 
 private:
-  rclcpp::Node * node_;
+  NitrosNodeInterfaces node_ifaces_;
   std::string topic_;
   std::shared_ptr<NitrosTypeManager> nitros_type_manager_;
   std::shared_ptr<NitrosSubscriber> nitros_sub_;

@@ -36,10 +36,10 @@ namespace nitros
 {
 
 NitrosPublisherWaitable::NitrosPublisherWaitable(
-  rclcpp::Node & node,
+  std::string node_name,
   NitrosPublisher & nitros_publisher)
 : rclcpp::Waitable(),
-  node_(node),
+  node_name_(std::move(node_name)),
   nitros_publisher_(nitros_publisher)
 {}
 
@@ -47,7 +47,7 @@ void NitrosPublisherWaitable::trigger()
 {
   std::stringstream nvtx_tag_name;
   nvtx_tag_name <<
-    "[" << node_.get_name() << "] NitrosPublisherWaitable::trigger(" <<
+    "[" << node_name_ << "] NitrosPublisherWaitable::trigger(" <<
     nitros_publisher_.getConfig().topic_name << ")";
   nvtxRangePushWrapper(nvtx_tag_name.str().c_str(), CLR_BLUE);
 
@@ -62,7 +62,7 @@ bool NitrosPublisherWaitable::is_ready(rcl_wait_set_t * wait_set)
 {
   std::stringstream nvtx_tag_name;
   nvtx_tag_name <<
-    "[" << node_.get_name() << "] NitrosPublisherWaitable::is_ready(" <<
+    "[" << node_name_ << "] NitrosPublisherWaitable::is_ready(" <<
     nitros_publisher_.getConfig().topic_name << ")";
   nvtxRangePushWrapper(nvtx_tag_name.str().c_str(), CLR_BLUE);
 
@@ -93,7 +93,7 @@ void NitrosPublisherWaitable::execute(std::shared_ptr<void> & data)
   (void)data;  // unused
   std::stringstream nvtx_tag_name;
   nvtx_tag_name <<
-    "[" << node_.get_name() << "] NitrosPublisherWaitable::execute(" <<
+    "[" << node_name_ << "] NitrosPublisherWaitable::execute(" <<
     nitros_publisher_.getConfig().topic_name << ")";
   nvtxRangePushWrapper(nvtx_tag_name.str().c_str(), CLR_BLUE);
 
@@ -115,14 +115,14 @@ void NitrosPublisherWaitable::add_to_wait_set(rcl_wait_set_t * wait_set)
 }
 
 NitrosPublisher::NitrosPublisher(
-  rclcpp::Node & node,
+  NitrosNodeInterfaces node_ifaces,
   std::shared_ptr<NitrosTypeManager> nitros_type_manager,
   const gxf::optimizer::ComponentInfo & gxf_component_info,
   const std::vector<std::string> & supported_data_formats,
   const NitrosPublisherSubscriberConfig & config,
   const negotiated::NegotiatedPublisherOptions & negotiated_pub_options)
 : NitrosPublisherSubscriberBase(
-    node, nitros_type_manager, gxf_component_info, supported_data_formats, config)
+    std::move(node_ifaces), nitros_type_manager, gxf_component_info, supported_data_formats, config)
 {
   // Bind the callback function to be used by a message relay in GXF graph
   gxf_message_relay_callback_func_ = std::bind(
@@ -149,9 +149,9 @@ NitrosPublisher::NitrosPublisher(
     negotiated_pub_options;
   updated_negotiated_pub_options.negotiate_on_subscription_removal = false;
 
-  // Create a negotiated publisher object
+  // Create a negotiated publisher object (node_ifaces_ is node-like, works via template ctor)
   negotiated_pub_ = std::make_shared<negotiated::NegotiatedPublisher>(
-    node_,
+    node_ifaces_,
     compatible_pub_->get_topic_name() + std::string("/nitros"),
     updated_negotiated_pub_options);
 
@@ -173,7 +173,7 @@ NitrosPublisher::NitrosPublisher(
 }
 
 NitrosPublisher::NitrosPublisher(
-  rclcpp::Node & node,
+  NitrosNodeInterfaces node_ifaces,
   const gxf_context_t context,
   std::shared_ptr<NitrosTypeManager> nitros_type_manager,
   const gxf::optimizer::ComponentInfo & gxf_component_info,
@@ -181,14 +181,14 @@ NitrosPublisher::NitrosPublisher(
   const NitrosPublisherSubscriberConfig & config,
   const negotiated::NegotiatedPublisherOptions & negotiated_pub_options)
 : NitrosPublisher(
-    node, nitros_type_manager, gxf_component_info, supported_data_formats, config,
-    negotiated_pub_options)
+    std::move(node_ifaces), nitros_type_manager, gxf_component_info, supported_data_formats,
+    config, negotiated_pub_options)
 {
   setContext(context);
 }
 
 NitrosPublisher::NitrosPublisher(
-  rclcpp::Node & node,
+  NitrosNodeInterfaces node_ifaces,
   const gxf_context_t context,
   std::shared_ptr<NitrosTypeManager> nitros_type_manager,
   const gxf::optimizer::ComponentInfo & gxf_component_info,
@@ -197,8 +197,8 @@ NitrosPublisher::NitrosPublisher(
   const negotiated::NegotiatedPublisherOptions & negotiated_pub_options,
   const NitrosDiagnosticsConfig & diagnostics_config)
 : NitrosPublisher(
-    node, context, nitros_type_manager, gxf_component_info, supported_data_formats, config,
-    negotiated_pub_options)
+    std::move(node_ifaces), context, nitros_type_manager, gxf_component_info,
+    supported_data_formats, config, negotiated_pub_options)
 {
   diagnostics_config_ = diagnostics_config;
 
@@ -213,6 +213,58 @@ NitrosPublisher::NitrosPublisher(
 }
 
 NitrosPublisher::NitrosPublisher(
+  NitrosNodeInterfaces node_ifaces,
+  const gxf_context_t context,
+  std::shared_ptr<NitrosTypeManager> nitros_type_manager,
+  const std::vector<std::string> & supported_data_formats,
+  const NitrosPublisherSubscriberConfig & config,
+  const NitrosDiagnosticsConfig & diagnostics_config)
+: NitrosPublisher(
+    std::move(node_ifaces), context, nitros_type_manager, {}, supported_data_formats, config,
+    {}, diagnostics_config)
+{}
+
+// Backward-compatible rclcpp::Node & constructors — delegate to NitrosNodeInterfaces versions
+NitrosPublisher::NitrosPublisher(
+  rclcpp::Node & node,
+  std::shared_ptr<NitrosTypeManager> nitros_type_manager,
+  const gxf::optimizer::ComponentInfo & gxf_component_info,
+  const std::vector<std::string> & supported_data_formats,
+  const NitrosPublisherSubscriberConfig & config,
+  const negotiated::NegotiatedPublisherOptions & negotiated_pub_options)
+: NitrosPublisher(
+    MakeNitrosNodeInterfaces(node), nitros_type_manager, gxf_component_info,
+    supported_data_formats, config, negotiated_pub_options)
+{}
+
+NitrosPublisher::NitrosPublisher(
+  rclcpp::Node & node,
+  const gxf_context_t context,
+  std::shared_ptr<NitrosTypeManager> nitros_type_manager,
+  const gxf::optimizer::ComponentInfo & gxf_component_info,
+  const std::vector<std::string> & supported_data_formats,
+  const NitrosPublisherSubscriberConfig & config,
+  const negotiated::NegotiatedPublisherOptions & negotiated_pub_options)
+: NitrosPublisher(
+    MakeNitrosNodeInterfaces(node), context, nitros_type_manager, gxf_component_info,
+    supported_data_formats, config, negotiated_pub_options)
+{}
+
+NitrosPublisher::NitrosPublisher(
+  rclcpp::Node & node,
+  const gxf_context_t context,
+  std::shared_ptr<NitrosTypeManager> nitros_type_manager,
+  const gxf::optimizer::ComponentInfo & gxf_component_info,
+  const std::vector<std::string> & supported_data_formats,
+  const NitrosPublisherSubscriberConfig & config,
+  const negotiated::NegotiatedPublisherOptions & negotiated_pub_options,
+  const NitrosDiagnosticsConfig & diagnostics_config)
+: NitrosPublisher(
+    MakeNitrosNodeInterfaces(node), context, nitros_type_manager, gxf_component_info,
+    supported_data_formats, config, negotiated_pub_options, diagnostics_config)
+{}
+
+NitrosPublisher::NitrosPublisher(
   rclcpp::Node & node,
   const gxf_context_t context,
   std::shared_ptr<NitrosTypeManager> nitros_type_manager,
@@ -220,8 +272,8 @@ NitrosPublisher::NitrosPublisher(
   const NitrosPublisherSubscriberConfig & config,
   const NitrosDiagnosticsConfig & diagnostics_config)
 : NitrosPublisher(
-    node, context, nitros_type_manager, {}, supported_data_formats, config,
-    {}, diagnostics_config)
+    MakeNitrosNodeInterfaces(node), context, nitros_type_manager, supported_data_formats,
+    config, diagnostics_config)
 {}
 
 std::shared_ptr<negotiated::NegotiatedPublisher> NitrosPublisher::getNegotiatedPublisher()
@@ -242,33 +294,33 @@ void NitrosPublisher::addSupportedDataFormat(
       "[NitrosPublisher] Could not identify the supported data foramt: " <<
       "\"" << data_format.c_str() << "\"";
     RCLCPP_ERROR(
-      node_.get_logger(), error_msg.str().c_str());
+      get_node_logger(), error_msg.str().c_str());
     throw std::runtime_error(error_msg.str().c_str());
   }
 
   if (data_format == config_.compatible_data_format) {
     nitros_type_manager_->getFormatCallbacks(data_format).addCompatiblePublisherCallback(
-      node_,
+      node_ifaces_,
       negotiated_pub_,
       compatible_pub_,
       weight
     );
 
     RCLCPP_DEBUG(
-      node_.get_logger(),
+      get_node_logger(),
       "[NitrosPublisher] Added a compatible publisher: "
       "topic_name=\"%s\", data_format=\"%s\"",
       compatible_pub_->get_topic_name(), config_.compatible_data_format.c_str());
   } else {
     nitros_type_manager_->getFormatCallbacks(data_format).addPublisherSupportedFormatCallback(
-      node_,
+      node_ifaces_,
       negotiated_pub_,
       weight,
       config_.qos,
       pub_options);
 
     RCLCPP_DEBUG(
-      node_.get_logger(),
+      get_node_logger(),
       "[NitrosPublisher] Added a supported data format: "
       "topic_name=\"%s\", data_format=\"%s\"",
       compatible_pub_->get_topic_name(), data_format.c_str());
@@ -293,13 +345,13 @@ void NitrosPublisher::createCompatiblePublisher()
       "[NitrosPublisher] Could not identify the compatible data foramt: " <<
       "\"" << config_.compatible_data_format.c_str() << "\"";
     RCLCPP_ERROR(
-      node_.get_logger(), error_msg.str().c_str());
+      get_node_logger(), error_msg.str().c_str());
     throw std::runtime_error(error_msg.str().c_str());
   }
 
   nitros_type_manager_->getFormatCallbacks(config_.compatible_data_format).
   createCompatiblePublisherCallback(
-    node_,
+    node_ifaces_,
     compatible_pub_,
     config_.topic_name,
     config_.qos,
@@ -317,17 +369,17 @@ void NitrosPublisher::postNegotiationCallback()
   if (!topics_info.success || topics_info.negotiated_topics.size() == 0) {
     negotiated_data_format_ = "";
     RCLCPP_INFO(
-      node_.get_logger(),
+      get_node_logger(),
       "[NitrosPublisher] Negotiation ended with no results");
     RCLCPP_INFO(
-      node_.get_logger(),
+      get_node_logger(),
       "[NitrosPublisher] Use only the compatible publisher: "
       "topic_name=\"%s\", data_format=\"%s\"",
       compatible_pub_->get_topic_name(), config_.compatible_data_format.c_str());
   } else {
     negotiated_data_format_ = topics_info.negotiated_topics[0].supported_type_name;
     RCLCPP_INFO(
-      node_.get_logger(),
+      get_node_logger(),
       "[NitrosPublisher] Use the negotiated data format: \"%s\"",
       negotiated_data_format_.c_str());
   }
@@ -353,18 +405,19 @@ void NitrosPublisher::setMessageRelayPointer(void * gxf_message_relay_ptr)
 void NitrosPublisher::startGxfVaultPeriodicPollingTimer()
 {
   // Set the Vault data polling timer
-  gxf_vault_periodic_polling_timer_ = node_.create_wall_timer(
+  gxf_vault_periodic_polling_timer_ = rclcpp::create_wall_timer(
     std::chrono::microseconds(100),
-    [this]() -> void {
-      extractMessagesFromGXF();
-    });
+    [this]() -> void {extractMessagesFromGXF();},
+    nullptr,
+    node_ifaces_.get<rclcpp::node_interfaces::NodeBaseInterface>().get(),
+    node_ifaces_.get<rclcpp::node_interfaces::NodeTimersInterface>().get());
 }
 
 void NitrosPublisher::enableNitrosPublisherWaitable()
 {
-  auto waitable_interfaces = node_.get_node_waitables_interface();
+  auto waitable_interfaces = node_ifaces_.get<rclcpp::node_interfaces::NodeWaitablesInterface>();
   waitable_ = std::make_shared<NitrosPublisherWaitable>(
-    node_,
+    get_node_name(),
     *this
   );
   waitable_interfaces->add_waitable(waitable_, nullptr);
@@ -374,7 +427,7 @@ void NitrosPublisher::extractMessagesFromGXF()
 {
   std::stringstream nvtx_tag_name;
   nvtx_tag_name <<
-    "[" << node_.get_name() << "] NitrosPublisher::extractMessagesFromGXF(" <<
+    "[" << get_node_name() << "] NitrosPublisher::extractMessagesFromGXF(" <<
     config_.topic_name << ")";
   nvtxRangePushWrapper(nvtx_tag_name.str().c_str(), CLR_MAGENTA);
 
@@ -388,7 +441,7 @@ void NitrosPublisher::extractMessagesFromGXF()
     auto msg_eids = gxf_vault_ptr_->store(100);
     if (msg_eids.size() > 0) {
       RCLCPP_DEBUG(
-        node_.get_logger(),
+        get_node_logger(),
         "[NitrosPublisher] Obtained %ld messages from the vault", msg_eids.size());
     }
     for (const auto msg_eid : msg_eids) {
@@ -400,7 +453,7 @@ void NitrosPublisher::extractMessagesFromGXF()
     auto msg_eids = gxf_message_relay_ptr_->store(100);
     if (msg_eids.size() > 0) {
       RCLCPP_DEBUG(
-        node_.get_logger(),
+        get_node_logger(),
         "[NitrosPublisher] Obtained %ld messages from the message relay for topic_name=\"%s\"",
         msg_eids.size(), config_.topic_name.c_str());
     }
@@ -415,7 +468,7 @@ void NitrosPublisher::extractMessagesFromGXF()
 
 void NitrosPublisher::gxfMessageRelayCallback()
 {
-  RCLCPP_DEBUG(node_.get_logger(), "[NitrosPublisher] gxfMessageRelayCallback");
+  RCLCPP_DEBUG(get_node_logger(), "[NitrosPublisher] gxfMessageRelayCallback");
   waitable_->trigger();
 }
 
@@ -426,7 +479,7 @@ void NitrosPublisher::publish(const int64_t handle)
     if (frame_id_map_ptr_->count(config_.frame_id_source_key) > 0) {
       frame_id = frame_id_map_ptr_->at(config_.frame_id_source_key);
       RCLCPP_DEBUG(
-        node_.get_logger(),
+        get_node_logger(),
         "[NitrosPublisher] Associating frame_id=\"%s\" to an Nitros-typed "
         "message (eid=%ld)", frame_id.c_str(), handle);
     }
@@ -454,7 +507,7 @@ void NitrosPublisher::publish(const int64_t handle)
 void NitrosPublisher::publish(const int64_t handle, const std_msgs::msg::Header & ros_header)
 {
   RCLCPP_DEBUG(
-    node_.get_logger(),
+    get_node_logger(),
     "[NitrosPublisher] Publishing an Nitros-typed message with timestamps updated (eid=%ld)",
     handle);
 
@@ -480,7 +533,7 @@ void NitrosPublisher::publish(const int64_t handle, const std_msgs::msg::Header 
 
   if (!is_timestamp_updated) {
     RCLCPP_ERROR(
-      node_.get_logger(),
+      get_node_logger(),
       "[NitrosPublisher] Failed to update timestamps in a message entity (eid=%ld) as "
       "no Timestamp component was found",
       handle);
@@ -494,7 +547,7 @@ void NitrosPublisher::publish(
   const std_msgs::msg::Header & ros_header)
 {
   RCLCPP_DEBUG(
-    node_.get_logger(),
+    get_node_logger(),
     "[NitrosPublisher] Publishing an Nitros-typed message with timestamps updated (eid=%ld)",
     base_msg.handle);
 
@@ -520,7 +573,7 @@ void NitrosPublisher::publish(
 
   if (!is_timestamp_updated) {
     RCLCPP_ERROR(
-      node_.get_logger(),
+      get_node_logger(),
       "[NitrosPublisher] Failed to update timestamps in a message entity (eid=%ld) as "
       "no Timestamp component was found",
       base_msg.handle);
@@ -534,7 +587,7 @@ void NitrosPublisher::publish(NitrosTypeBase & base_msg)
   {
     std::stringstream nvtx_tag_name;
     nvtx_tag_name <<
-      "[" << node_.get_name() << "] NitrosPublisher::publish(" <<
+      "[" << get_node_name() << "] NitrosPublisher::publish(" <<
       config_.topic_name << ", t=" <<
       getTimestamp(base_msg) << ")";
     nvtxRangePushWrapper(nvtx_tag_name.str().c_str(), CLR_PURPLE);
@@ -545,13 +598,13 @@ void NitrosPublisher::publish(NitrosTypeBase & base_msg)
     {
       std::stringstream nvtx_tag_name;
       nvtx_tag_name <<
-        "[" << node_.get_name() << "] NitrosPublisher::publish(" <<
+        "[" << get_node_name() << "] NitrosPublisher::publish(" <<
         config_.topic_name << ")::config_.callback";
       nvtxRangePushWrapper(nvtx_tag_name.str().c_str(), CLR_PURPLE);
     }
 
     RCLCPP_DEBUG(
-      node_.get_logger(),
+      get_node_logger(),
       "[NitrosPublisher] Calling user-defined callback for an Nitros-typed "
       "message (eid=%ld)", base_msg.handle);
     config_.callback(context_, base_msg);
@@ -566,12 +619,12 @@ void NitrosPublisher::publish(NitrosTypeBase & base_msg)
   }
 
   RCLCPP_DEBUG(
-    node_.get_logger(),
+    get_node_logger(),
     "[NitrosPublisher] Publishing an Nitros-typed message (eid=%ld)", base_msg.handle);
 
   if (!negotiated_data_format_.empty()) {
     nitros_type_manager_->getFormatCallbacks(negotiated_data_format_).negotiatedPublishCallback(
-      node_,
+      node_ifaces_,
       negotiated_pub_,
       base_msg);
   }
@@ -579,7 +632,7 @@ void NitrosPublisher::publish(NitrosTypeBase & base_msg)
   if (config_.compatible_data_format != negotiated_data_format_) {
     nitros_type_manager_->getFormatCallbacks(config_.compatible_data_format).
     compatiblePublishCallback(
-      node_,
+      node_ifaces_,
       compatible_pub_,
       base_msg);
   }

@@ -26,16 +26,20 @@
 #include <mutex>
 #include <queue>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "extensions/gxf_optimizer/exporter/graph_types.hpp"
 #include "gxf/core/gxf.h"
 #include "gxf/std/timestamp.hpp"
+#include "isaac_ros_nitros/nitros_node_interfaces.hpp"
 #include "isaac_ros_nitros/types/nitros_type_base.hpp"
 #include "isaac_ros_nitros/types/nitros_type_manager.hpp"
 
 #include "diagnostic_msgs/msg/diagnostic_array.hpp"
 #include "diagnostic_msgs/msg/key_value.hpp"
+#include "rclcpp/create_publisher.hpp"
+#include "rclcpp/create_timer.hpp"
 #include "rclcpp/rclcpp.hpp"
 
 namespace nvidia
@@ -122,16 +126,38 @@ using NitrosPublisherSubscriberConfigMap =
 class NitrosPublisherSubscriberBase
 {
 public:
-  // Constructor
+  // Primary constructors (accept any node-like object via NitrosNodeInterfaces)
+  NitrosPublisherSubscriberBase(
+    NitrosNodeInterfaces node_ifaces,
+    std::shared_ptr<NitrosTypeManager> nitros_type_manager,
+    const gxf::optimizer::ComponentInfo & gxf_component_info,
+    const std::vector<std::string> & supported_data_formats,
+    const NitrosPublisherSubscriberConfig & config)
+  : node_ifaces_(std::move(node_ifaces)), nitros_type_manager_(nitros_type_manager),
+    gxf_component_info_(gxf_component_info),
+    supported_data_formats_(supported_data_formats), config_(config) {}
+
+  NitrosPublisherSubscriberBase(
+    NitrosNodeInterfaces node_ifaces, const gxf_context_t context,
+    std::shared_ptr<NitrosTypeManager> nitros_type_manager,
+    const gxf::optimizer::ComponentInfo & gxf_component_info,
+    const std::vector<std::string> & supported_data_formats,
+    const NitrosPublisherSubscriberConfig & config)
+  : node_ifaces_(std::move(node_ifaces)), context_(context),
+    nitros_type_manager_(nitros_type_manager),
+    gxf_component_info_(gxf_component_info),
+    supported_data_formats_(supported_data_formats), config_(config) {}
+
+  // Backward-compatible constructors: delegate to NitrosNodeInterfaces versions
   NitrosPublisherSubscriberBase(
     rclcpp::Node & node,
     std::shared_ptr<NitrosTypeManager> nitros_type_manager,
     const gxf::optimizer::ComponentInfo & gxf_component_info,
     const std::vector<std::string> & supported_data_formats,
     const NitrosPublisherSubscriberConfig & config)
-  : node_(node), nitros_type_manager_(nitros_type_manager),
-    gxf_component_info_(gxf_component_info),
-    supported_data_formats_(supported_data_formats), config_(config) {}
+  : NitrosPublisherSubscriberBase(
+      MakeNitrosNodeInterfaces(node), nitros_type_manager,
+      gxf_component_info, supported_data_formats, config) {}
 
   NitrosPublisherSubscriberBase(
     rclcpp::Node & node, const gxf_context_t context,
@@ -139,10 +165,9 @@ public:
     const gxf::optimizer::ComponentInfo & gxf_component_info,
     const std::vector<std::string> & supported_data_formats,
     const NitrosPublisherSubscriberConfig & config)
-  : node_(node), context_(context),
-    nitros_type_manager_(nitros_type_manager),
-    gxf_component_info_(gxf_component_info),
-    supported_data_formats_(supported_data_formats), config_(config) {}
+  : NitrosPublisherSubscriberBase(
+      MakeNitrosNodeInterfaces(node), context, nitros_type_manager,
+      gxf_component_info, supported_data_formats, config) {}
 
   const NitrosPublisherSubscriberConfig getConfig() const {return config_;}
 
@@ -194,6 +219,24 @@ public:
     frame_id_map_ptr_ = frame_id_map_ptr;
   }
 
+  // Helper accessors (avoid repeating verbose node_ifaces_ lookups)
+  rclcpp::Logger get_node_logger() const
+  {
+    return node_ifaces_.get<rclcpp::node_interfaces::NodeLoggingInterface>()->get_logger();
+  }
+  const char * get_node_name() const
+  {
+    return node_ifaces_.get<rclcpp::node_interfaces::NodeBaseInterface>()->get_name();
+  }
+  const char * get_node_namespace() const
+  {
+    return node_ifaces_.get<rclcpp::node_interfaces::NodeBaseInterface>()->get_namespace();
+  }
+  std::shared_ptr<const rclcpp::Clock> get_node_clock() const
+  {
+    return node_ifaces_.get<rclcpp::node_interfaces::NodeClockInterface>()->get_clock();
+  }
+
   uint64_t getTimestamp(NitrosTypeBase & base_msg) const
   {
     auto msg_entity = nvidia::gxf::Entity::Shared(context_, base_msg.handle);
@@ -204,7 +247,7 @@ public:
       }
     } else {
       RCLCPP_FATAL(
-        node_.get_logger(),
+        get_node_logger(),
         "[NitrosPublisherSubscriberBase] Failed to resolve entity "
         "(eid=%ld) (error=%s)",
         base_msg.handle, GxfResultStr(msg_entity.error()));
@@ -212,7 +255,7 @@ public:
     }
 
     RCLCPP_DEBUG(
-      node_.get_logger(),
+      get_node_logger(),
       "[NitrosPublisherSubscriberBase] Failed to get timestamp from a NITROS"
       " message (eid=%ld)",
       base_msg.handle);
@@ -247,7 +290,7 @@ public:
 
       // Fix format security issue by using static format string
       RCLCPP_ERROR(
-        node_.get_logger(),
+        get_node_logger(),
         "[NitrosPublisherSubscriberBase] Specified compatible format \"%s\" was"
         " not listed in the supported format list: %s",
         config_.compatible_data_format.c_str(),
@@ -283,7 +326,7 @@ public:
       // Increment jitter outlier count
       num_jitter_outliers_node_++;
       RCLCPP_DEBUG(
-        node_.get_logger(),
+        get_node_logger(),
         "[NitrosDiagnostics Node Time]"
         " Difference of time between messages(%li) and expected time between"
         " messages(%i) is out of tolerance(%i) by %i for topic %s. Units "
@@ -334,7 +377,7 @@ public:
       frames_dropped_since_last_pub_++;
       prev_drop_ts_ = clock_.now();
       RCLCPP_DEBUG(
-        node_.get_logger(),
+        get_node_logger(),
         "[NitrosDiagnostics Message Timestamp]"
         " Difference of time between messages(%lu) and expected "
         "time between"
@@ -380,7 +423,7 @@ public:
       num_non_increasing_msg_++;
       prev_noninc_msg_ts_ = clock_.now();
       RCLCPP_WARN(
-        node_.get_logger(),
+        get_node_logger(),
         "[NitrosDiagnostics Message Timestamp Non Increasing]"
         " Message timestamp is not increasing. Current timestamp: "
         "%lu, Previous timestamp: %lu"
@@ -429,7 +472,7 @@ public:
       }
     }
 
-    rclcpp::Time time_from_node = node_.get_clock()->now();
+    rclcpp::Time time_from_node = get_node_clock()->now();
     uint64_t ros_node_system_time_us = time_from_node.nanoseconds() / kMicrosecondsToNanoseconds;
 
     const uint64_t latency_wrt_current_timestamp_node_ms =
@@ -574,8 +617,8 @@ public:
   {
     topic_name_ = config_.topic_name;
     diagnostic_msgs::msg::DiagnosticStatus topic_status;
-    topic_status.name = node_.get_name();
-    topic_status.name.append(node_.get_namespace());
+    topic_status.name = get_node_name();
+    topic_status.name.append(get_node_namespace());
     topic_status.name.append("/");
     topic_status.name.append(config_.topic_name);
     topic_status.hardware_id = nvidiaID;
@@ -605,18 +648,22 @@ public:
     outdated_msg_ = true;
 
     diagnostic_publisher_ =
-      node_.create_publisher<diagnostic_msgs::msg::DiagnosticArray>(
-      "/diagnostics", 10);
-    diagnostics_publisher_timer_ = node_.create_wall_timer(
+      rclcpp::create_publisher<diagnostic_msgs::msg::DiagnosticArray>(
+      node_ifaces_, "/diagnostics", rclcpp::QoS(10));
+    diagnostics_publisher_timer_ = rclcpp::create_wall_timer(
       std::chrono::milliseconds(
         static_cast<int>(
           1000 / diagnostics_config_.diagnostics_publish_rate)),
-      [this]() -> void {publishDiagnostics();});
+      [this]() -> void {publishDiagnostics();},
+      nullptr,
+      node_ifaces_.get<rclcpp::node_interfaces::NodeBaseInterface>().get(),
+      node_ifaces_.get<rclcpp::node_interfaces::NodeTimersInterface>().get());
   }
 
 protected:
-  // The parent ROS 2 node
-  rclcpp::Node & node_;
+  // Node interfaces — works with rclcpp::Node, rclcpp_lifecycle::LifecycleNode, or any
+  // type that satisfies the rclcpp node interface contracts.
+  NitrosNodeInterfaces node_ifaces_;
 
   // The parent GXF context
   gxf_context_t context_ = nullptr;
