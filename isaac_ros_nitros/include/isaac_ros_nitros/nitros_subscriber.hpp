@@ -44,7 +44,35 @@ namespace nitros
 class NitrosSubscriber : public NitrosPublisherSubscriberBase
 {
 public:
-  // Constructor
+  // Primary constructors (NitrosNodeInterfaces — accepts any node-like type)
+  NitrosSubscriber(
+    NitrosNodeInterfaces node_ifaces,
+    const gxf_context_t context,
+    std::shared_ptr<NitrosTypeManager> nitros_type_manager,
+    const gxf::optimizer::ComponentInfo & gxf_component_info,
+    const std::vector<std::string> & supported_data_formats,
+    const NitrosPublisherSubscriberConfig & config,
+    const NitrosDiagnosticsConfig & diagnostics_config,
+    const bool use_callback_group = false);
+
+  NitrosSubscriber(
+    NitrosNodeInterfaces node_ifaces,
+    const gxf_context_t context,
+    std::shared_ptr<NitrosTypeManager> nitros_type_manager,
+    const gxf::optimizer::ComponentInfo & gxf_component_info,
+    const std::vector<std::string> & supported_data_formats,
+    const NitrosPublisherSubscriberConfig & config);
+
+  // Constructor for creating a subscriber without an associated gxf ingress port
+  NitrosSubscriber(
+    NitrosNodeInterfaces node_ifaces,
+    const gxf_context_t context,
+    std::shared_ptr<NitrosTypeManager> nitros_type_manager,
+    const std::vector<std::string> & supported_data_formats,
+    const NitrosPublisherSubscriberConfig & config,
+    const NitrosDiagnosticsConfig & diagnostics_config);
+
+  // Backward-compatible constructors: delegate to NitrosNodeInterfaces versions
   NitrosSubscriber(
     rclcpp::Node & node,
     const gxf_context_t context,

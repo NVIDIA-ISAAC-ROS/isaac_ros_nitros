@@ -57,7 +57,7 @@ class NitrosPublisherWaitable : public rclcpp::Waitable
 {
 public:
   NitrosPublisherWaitable(
-    rclcpp::Node & node,
+    std::string node_name,
     NitrosPublisher & nitros_publisher);
 
   size_t get_number_of_ready_guard_conditions()
@@ -78,7 +78,7 @@ public:
   void add_to_wait_set(rcl_wait_set_t * wait_set) override;
 
 private:
-  rclcpp::Node & node_;
+  std::string node_name_;  // cached for NVTX profiling tags
   NitrosPublisher & nitros_publisher_;
   std::mutex guard_condition_mutex_;
   rclcpp::GuardCondition guard_condition_;
@@ -92,7 +92,44 @@ private:
 class NitrosPublisher : public NitrosPublisherSubscriberBase
 {
 public:
-  // Constructor
+  // Primary constructors (NitrosNodeInterfaces — accepts any node-like type)
+  NitrosPublisher(
+    NitrosNodeInterfaces node_ifaces,
+    std::shared_ptr<NitrosTypeManager> nitros_type_manager,
+    const gxf::optimizer::ComponentInfo & gxf_component_info,
+    const std::vector<std::string> & supported_data_formats,
+    const NitrosPublisherSubscriberConfig & config,
+    const negotiated::NegotiatedPublisherOptions & negotiated_pub_options);
+
+  NitrosPublisher(
+    NitrosNodeInterfaces node_ifaces,
+    const gxf_context_t context,
+    std::shared_ptr<NitrosTypeManager> nitros_type_manager,
+    const gxf::optimizer::ComponentInfo & gxf_component_info,
+    const std::vector<std::string> & supported_data_formats,
+    const NitrosPublisherSubscriberConfig & config,
+    const negotiated::NegotiatedPublisherOptions & negotiated_pub_options);
+
+  NitrosPublisher(
+    NitrosNodeInterfaces node_ifaces,
+    const gxf_context_t context,
+    std::shared_ptr<NitrosTypeManager> nitros_type_manager,
+    const gxf::optimizer::ComponentInfo & gxf_component_info,
+    const std::vector<std::string> & supported_data_formats,
+    const NitrosPublisherSubscriberConfig & config,
+    const negotiated::NegotiatedPublisherOptions & negotiated_pub_options,
+    const NitrosDiagnosticsConfig & diagnostics_config);
+
+  // Constructor for creating a publisher without an associated gxf egress port
+  NitrosPublisher(
+    NitrosNodeInterfaces node_ifaces,
+    const gxf_context_t context,
+    std::shared_ptr<NitrosTypeManager> nitros_type_manager,
+    const std::vector<std::string> & supported_data_formats,
+    const NitrosPublisherSubscriberConfig & config,
+    const NitrosDiagnosticsConfig & diagnostics_config);
+
+  // Backward-compatible constructors: delegate to NitrosNodeInterfaces versions
   NitrosPublisher(
     rclcpp::Node & node,
     std::shared_ptr<NitrosTypeManager> nitros_type_manager,
@@ -120,7 +157,6 @@ public:
     const negotiated::NegotiatedPublisherOptions & negotiated_pub_options,
     const NitrosDiagnosticsConfig & diagnostics_config);
 
-  // Constructor for creating a publisher without an associated gxf egress port
   NitrosPublisher(
     rclcpp::Node & node,
     const gxf_context_t context,
