@@ -16,11 +16,11 @@
 # SPDX-License-Identifier: Apache-2.0
 
 """
-Launch test verifying that ManagedNitrosPublisher works inside a LifecycleNode.
+Launch test verifying that ManagedNitrosPublisher/Subscriber work inside a LifecycleNode.
 
-The test loads NitrosEmptyLifecycleNode in a component container, drives it
-through the configure transition, and verifies the node reaches the 'inactive'
-state without errors.
+The test loads NitrosEmptyLifecycleNode in a component container, drives it through
+the configure transition (which creates both a ManagedNitrosPublisher and a
+ManagedNitrosSubscriber), and verifies the node transitions succeed.
 """
 
 import time
@@ -51,47 +51,68 @@ def generate_test_description():
                 name='nitros_empty_lifecycle_node',
             ),
         ],
-        output='screen',
+        output='both',
     )
 
-    return generate_test_description.generate(
+    return TestNitrosLifecycle.generate_test_description([
         container,
-        launch_testing.actions.ReadyToTest(),
-    )
-
-
-generate_test_description.generate = lambda *actions: launch.LaunchDescription(list(actions))
+        launch.actions.TimerAction(
+            period=2.5, actions=[launch_testing.actions.ReadyToTest()])
+    ])
 
 
 class TestNitrosLifecycle(IsaacROSBaseTest):
-    """Test that NitrosEmptyLifecycleNode transitions to 'inactive' state."""
+    """Test that NitrosEmptyLifecycleNode pub/sub construction works via lifecycle."""
 
     package = 'isaac_ros_managed_nitros'
 
-    def test_lifecycle_configure(self):
-        """Drive the lifecycle node through configure and verify success."""
-        self.node.create_client(
-            ChangeState,
-            '/nitros_empty_lifecycle_node/change_state',
-        )
-        change_state_client = self.node.create_client(
+    def _make_change_state_client(self):
+        """Return a ChangeState client for the lifecycle node."""
+        return self.node.create_client(
             ChangeState,
             '/nitros_empty_lifecycle_node/change_state',
         )
 
-        # Wait for the service to be available
+    def _send_transition(self, client, transition_id, timeout_sec=10.0):
+        """Send a lifecycle transition and return the result, or None on timeout."""
+        available = client.wait_for_service(timeout_sec=timeout_sec)
+        if not available:
+            return None
+        request = ChangeState.Request()
+        request.transition.id = transition_id
+        future = client.call_async(request)
+        rclpy.spin_until_future_complete(self.node, future, timeout_sec=timeout_sec)
+        return future.result()
+
+    def test_lifecycle_configure(self):
+        """Drive the lifecycle node through configure and verify success."""
+        client = self._make_change_state_client()
+
         start = time.time()
-        available = change_state_client.wait_for_service(timeout_sec=10.0)
         self.assertTrue(
-            available,
+            client.wait_for_service(timeout_sec=10.0),
             msg=f'ChangeState service not available after {time.time() - start:.1f}s',
         )
 
-        # Send configure transition
-        request = ChangeState.Request()
-        request.transition.id = Transition.TRANSITION_CONFIGURE
-        future = change_state_client.call_async(request)
-        rclpy.spin_until_future_complete(self.node, future, timeout_sec=10.0)
+        result = self._send_transition(client, Transition.TRANSITION_CONFIGURE)
 
-        self.assertIsNotNone(future.result(), 'ChangeState future returned None')
-        self.assertTrue(future.result().success, 'configure transition failed')
+        self.assertIsNotNone(result, 'ChangeState future returned None')
+        self.assertTrue(result.success, 'configure transition failed')
+
+    def test_lifecycle_configure_and_cleanup(self):
+        """Configure then cleanup to verify pub/sub resource teardown."""
+        client = self._make_change_state_client()
+
+        start = time.time()
+        self.assertTrue(
+            client.wait_for_service(timeout_sec=10.0),
+            msg=f'ChangeState service not available after {time.time() - start:.1f}s',
+        )
+
+        configure_result = self._send_transition(client, Transition.TRANSITION_CONFIGURE)
+        self.assertIsNotNone(configure_result, 'configure future returned None')
+        self.assertTrue(configure_result.success, 'configure transition failed')
+
+        cleanup_result = self._send_transition(client, Transition.TRANSITION_CLEANUP)
+        self.assertIsNotNone(cleanup_result, 'cleanup future returned None')
+        self.assertTrue(cleanup_result.success, 'cleanup transition failed')

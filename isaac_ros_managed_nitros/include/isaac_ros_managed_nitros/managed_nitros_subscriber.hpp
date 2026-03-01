@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
-// Copyright (c) 2022-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+// Copyright (c) 2022-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -63,8 +63,10 @@ public:
       .compatible_data_format = format,
       .topic_name = topic_name,
       .callback = [callback](const gxf_context_t, NitrosTypeBase & msg) -> void {
-          const NitrosMsgView view(*(static_cast<typename NitrosMsgView::BaseType *>(&msg)));
-          callback(view);
+          if (callback) {
+            const NitrosMsgView view(*(static_cast<typename NitrosMsgView::BaseType *>(&msg)));
+            callback(view);
+          }
         }
     };
 

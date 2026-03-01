@@ -19,7 +19,9 @@
 #include <string>
 
 #include "isaac_ros_managed_nitros/managed_nitros_publisher.hpp"
+#include "isaac_ros_managed_nitros/managed_nitros_subscriber.hpp"
 #include "isaac_ros_nitros/types/nitros_empty.hpp"
+#include "isaac_ros_nitros/types/nitros_type_view_factory.hpp"
 
 #include "rclcpp/rclcpp.hpp"
 #include "rclcpp_components/register_node_macro.hpp"
@@ -32,8 +34,15 @@ namespace isaac_ros
 namespace nitros
 {
 
-// Minimal lifecycle node that creates a ManagedNitrosPublisher in on_configure().
-// Validates that NitrosPublisher / ManagedNitrosPublisher work with LifecycleNode.
+// Minimal view wrapper for NitrosEmpty, required by ManagedNitrosSubscriber.
+NITROS_TYPE_VIEW_FACTORY_BEGIN(NitrosEmpty)
+NITROS_TYPE_VIEW_FACTORY_END(NitrosEmpty)
+
+void NitrosEmptyView::InitView() {}  // NitrosEmpty carries no GXF components
+
+// Minimal lifecycle node that creates both a ManagedNitrosPublisher and a
+// ManagedNitrosSubscriber in on_configure().  Validates that both types work
+// correctly when owned by an rclcpp_lifecycle::LifecycleNode (issue #68).
 class NitrosEmptyLifecycleNode : public rclcpp_lifecycle::LifecycleNode
 {
 public:
@@ -48,6 +57,12 @@ public:
       ManagedNitrosPublisher<NitrosEmpty>>(
       this,
       "lifecycle_pub_output",
+      nitros_empty::supported_type_name);
+
+    nitros_sub_ = std::make_shared<
+      ManagedNitrosSubscriber<NitrosEmptyView>>(
+      this,
+      "lifecycle_sub_input",
       nitros_empty::supported_type_name);
 
     return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn::SUCCESS;
@@ -69,6 +84,7 @@ public:
   on_cleanup(const rclcpp_lifecycle::State &) override
   {
     nitros_pub_.reset();
+    nitros_sub_.reset();
     return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn::SUCCESS;
   }
 
@@ -76,11 +92,13 @@ public:
   on_shutdown(const rclcpp_lifecycle::State &) override
   {
     nitros_pub_.reset();
+    nitros_sub_.reset();
     return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn::SUCCESS;
   }
 
 private:
   std::shared_ptr<ManagedNitrosPublisher<NitrosEmpty>> nitros_pub_;
+  std::shared_ptr<ManagedNitrosSubscriber<NitrosEmptyView>> nitros_sub_;
 };
 
 }  // namespace nitros
