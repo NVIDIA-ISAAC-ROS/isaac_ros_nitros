@@ -84,23 +84,23 @@ class TestNitrosLifecycle(IsaacROSBaseTest):
         rclpy.spin_until_future_complete(self.node, future, timeout_sec=timeout_sec)
         return future.result()
 
-    def test_lifecycle_configure(self):
-        """Drive the lifecycle node through configure and verify success."""
-        client = self._make_change_state_client()
-
-        start = time.time()
-        self.assertTrue(
-            client.wait_for_service(timeout_sec=10.0),
-            msg=f'ChangeState service not available after {time.time() - start:.1f}s',
-        )
-
-        result = self._send_transition(client, Transition.TRANSITION_CONFIGURE)
-
-        self.assertIsNotNone(result, 'ChangeState future returned None')
-        self.assertTrue(result.success, 'configure transition failed')
-
     def test_lifecycle_configure_and_cleanup(self):
-        """Configure then cleanup to verify pub/sub resource teardown."""
+        """
+        Drive configure → cleanup → configure cycle in one test.
+
+        A single test method avoids cross-test state leakage: both test methods
+        would share the same launched lifecycle node, so a standalone
+        'test_configure' would leave the node in 'inactive', making a subsequent
+        'configure' call invalid (configure is only valid from 'unconfigured').
+
+        Sequence:
+          1. configure  (unconfigured → inactive): constructs ManagedNitrosPublisher
+             and ManagedNitrosSubscriber via LifecycleNode
+          2. cleanup    (inactive → unconfigured): destroys pub/sub, verifies
+             on_cleanup() returns SUCCESS
+          3. configure  (unconfigured → inactive): re-constructs pub/sub, verifies
+             resources can be re-created after a cleanup
+        """
         client = self._make_change_state_client()
 
         start = time.time()
@@ -109,10 +109,17 @@ class TestNitrosLifecycle(IsaacROSBaseTest):
             msg=f'ChangeState service not available after {time.time() - start:.1f}s',
         )
 
+        # Step 1: configure — creates publisher + subscriber
         configure_result = self._send_transition(client, Transition.TRANSITION_CONFIGURE)
-        self.assertIsNotNone(configure_result, 'configure future returned None')
-        self.assertTrue(configure_result.success, 'configure transition failed')
+        self.assertIsNotNone(configure_result, 'configure (1st) future returned None')
+        self.assertTrue(configure_result.success, 'configure (1st) transition failed')
 
+        # Step 2: cleanup — destroys publisher + subscriber
         cleanup_result = self._send_transition(client, Transition.TRANSITION_CLEANUP)
         self.assertIsNotNone(cleanup_result, 'cleanup future returned None')
         self.assertTrue(cleanup_result.success, 'cleanup transition failed')
+
+        # Step 3: configure again — verifies resources can be re-created
+        reconfigure_result = self._send_transition(client, Transition.TRANSITION_CONFIGURE)
+        self.assertIsNotNone(reconfigure_result, 'configure (2nd) future returned None')
+        self.assertTrue(reconfigure_result.success, 'configure (2nd) transition failed')
