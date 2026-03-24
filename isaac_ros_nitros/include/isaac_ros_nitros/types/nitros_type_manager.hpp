@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
-// Copyright (c) 2022-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+// Copyright (c) 2022-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -49,6 +49,8 @@ public:
   {
     setNode(node);
   }
+  explicit NitrosTypeManager(rclcpp::Logger logger)
+  : logger_(logger) {}
 
   // Setter for node_ that is used to get ROS logger if set
   void setNode(const rclcpp::Node * node)
@@ -169,11 +171,14 @@ private:
     if (node_ != nullptr) {
       return node_->get_logger();
     }
-    return rclcpp::get_logger("NitrosTypeManager");
+    return logger_;
   }
 
   // The associated ROS node (for logging purpose)
   const rclcpp::Node * node_ = nullptr;
+
+  // Fallback logger used when node_ is nullptr (e.g. when constructed from a Logger directly)
+  rclcpp::Logger logger_{rclcpp::get_logger("NitrosTypeManager")};
 
   // A map storing callback functions for each registered format
   std::map<std::string, NitrosFormatCallbacks> format_callback_map_;
