@@ -32,6 +32,7 @@ TOTAL_COUNT = 10
 DROP_COUNT = 7
 EXPECTED_MESSAGE_COUNT = TOTAL_COUNT - DROP_COUNT
 RECEIVE_TIMEOUT = 10
+BRINGUP_TIMEOUT = 10
 
 
 @pytest.mark.rostest
@@ -106,10 +107,21 @@ class NitrosCameraDropNodeMode0Test(IsaacROSBaseTest):
 
             # Publish TOTAL_COUNT number of messages
             counter = 0
-            # This test requires deterministic communication between the test node
-            # and the NitrosCameraDropNode. A 1-second delay ensures the NitrosCameraDropNode
-            # has fully started, preventing message drops/flaky tests.
-            time.sleep(1.0)
+            # Ensure NitrosCameraDropNode subscriptions are connected before publishing.
+            # Waiting for subscription counts is more robust than a fixed delay and
+            # prevents message drops / flaky tests on loaded CI machines.
+            end_time = time.time() + BRINGUP_TIMEOUT
+            while time.time() < end_time:
+                if (image_pub.get_subscription_count() > 0 and
+                        camera_info_pub.get_subscription_count() > 0):
+                    break
+                rclpy.spin_once(self.node, timeout_sec=0.1)
+            self.assertGreater(
+                image_pub.get_subscription_count(), 0,
+                'NitrosCameraDropNode did not subscribe to image_1 in time')
+            self.assertGreater(
+                camera_info_pub.get_subscription_count(), 0,
+                'NitrosCameraDropNode did not subscribe to camera_info_1 in time')
             while counter < TOTAL_COUNT:
                 header = self.node.get_clock().now().to_msg()
                 image_msg.header.stamp = header

@@ -32,6 +32,7 @@ TOTAL_COUNT = 10
 DROP_COUNT = 7
 EXPECTED_MESSAGE_COUNT = TOTAL_COUNT - DROP_COUNT
 RECEIVE_TIMEOUT = 10
+BRINGUP_TIMEOUT = 10
 
 
 @pytest.mark.rostest
@@ -41,7 +42,7 @@ def generate_test_description():
         package='isaac_ros_nitros_topic_tools',
         plugin='nvidia::isaac_ros::nitros::NitrosCameraDropNode',
         name='nitros_drop_node',
-        namespace=NitrosCameraDropNodeMode1Test.generate_namespace(),
+        namespace=NitrosCameraDropNodeMode2Test.generate_namespace(),
         parameters=[{
                     'X': DROP_COUNT,
                     'Y': TOTAL_COUNT,
@@ -59,10 +60,10 @@ def generate_test_description():
         arguments=['--ros-args', '--log-level', 'info'],
     )
 
-    return NitrosCameraDropNodeMode1Test.generate_test_description([container])
+    return NitrosCameraDropNodeMode2Test.generate_test_description([container])
 
 
-class NitrosCameraDropNodeMode1Test(IsaacROSBaseTest):
+class NitrosCameraDropNodeMode2Test(IsaacROSBaseTest):
     """Test NitrosCameraDropNode in Mode = mono+depth."""
 
     def create_image(self, name):
@@ -111,10 +112,25 @@ class NitrosCameraDropNodeMode1Test(IsaacROSBaseTest):
 
             # Publish TOTAL_COUNT number of messages
             counter = 0
-            # This test requires deterministic communication between the test node
-            # and the NitrosCameraDropNode. A 1-second delay ensures the NitrosCameraDropNode
-            # has fully started, preventing message drops/flaky tests.
-            time.sleep(1.0)
+            # Ensure NitrosCameraDropNode subscriptions are connected before publishing.
+            # Waiting for subscription counts is more robust than a fixed delay and
+            # prevents message drops / flaky tests on loaded CI machines.
+            end_time = time.time() + BRINGUP_TIMEOUT
+            while time.time() < end_time:
+                if (image_pub.get_subscription_count() > 0 and
+                        camera_info_pub.get_subscription_count() > 0 and
+                        depth_pub.get_subscription_count() > 0):
+                    break
+                rclpy.spin_once(self.node, timeout_sec=0.1)
+            self.assertGreater(
+                image_pub.get_subscription_count(), 0,
+                'NitrosCameraDropNode did not subscribe to image_1 in time')
+            self.assertGreater(
+                camera_info_pub.get_subscription_count(), 0,
+                'NitrosCameraDropNode did not subscribe to camera_info_1 in time')
+            self.assertGreater(
+                depth_pub.get_subscription_count(), 0,
+                'NitrosCameraDropNode did not subscribe to depth_1 in time')
             while counter < TOTAL_COUNT:
                 header = self.node.get_clock().now().to_msg()
                 image_msg.header.stamp = header
