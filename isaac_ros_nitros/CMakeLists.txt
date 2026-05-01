@@ -1,5 +1,5 @@
 # SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
-# Copyright (c) 2022-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# Copyright (c) 2022-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -38,26 +38,30 @@ if(USE_NVTX)
     link_libraries("CUDA::nvtx3")
 endif()
 
-# cuVSLAM and cuApriltags (register paths and install)
+# cuVSLAM, cuApriltags, and cuMotion (register paths and install)
 
 # Determine the architecture
 if(CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64")
     set(CUVSLAM_LIB_PATH "lib/cuvslam/lib_aarch64_jetpack70")
     set(CUAPRILTAGS_LIB_PATH "lib/cuapriltags/lib_aarch64_jetpack61")
+    set(CUMOTION_PATH "lib/cumotion/aarch64_jetpack70")
 elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64")
     set(CUVSLAM_LIB_PATH "lib/cuvslam/lib_x86_64_cuda_13_0")
     set(CUAPRILTAGS_LIB_PATH "lib/cuapriltags/lib_x86_64_cuda_12_6")
+    set(CUMOTION_PATH "lib/cumotion/x86_64_cuda_13_0")
 else()
     message(FATAL_ERROR "Unsupported architecture: ${CMAKE_SYSTEM_PROCESSOR}")
 endif()
 
 # Install exported libraries
 install(FILES ${CUAPRILTAGS_LIB_PATH}/libcuapriltags.a
-    DESTINATION "${CMAKE_INSTALL_PREFIX}/share/${PROJECT_NAME}/cuapriltags/lib")
+        DESTINATION "${CMAKE_INSTALL_PREFIX}/share/${PROJECT_NAME}/cuapriltags/lib")
 install(FILES
-      ${CUVSLAM_LIB_PATH}/libcuvslam.so
-      ${CUVSLAM_LIB_PATH}/cuvslam_api_launcher
-    DESTINATION "${CMAKE_INSTALL_PREFIX}/share/${PROJECT_NAME}/cuvslam/lib")
+        ${CUVSLAM_LIB_PATH}/libcuvslam.so
+        ${CUVSLAM_LIB_PATH}/cuvslam_api_launcher
+        DESTINATION "${CMAKE_INSTALL_PREFIX}/share/${PROJECT_NAME}/cuvslam/lib")
+install(DIRECTORY ${CUMOTION_PATH}/lib
+        DESTINATION "${CMAKE_INSTALL_PREFIX}/share/${PROJECT_NAME}/cumotion")
 
 # Install header files for cuvslam
 install(FILES lib/cuvslam/include/cuvslam/cuvslam2.h
@@ -73,6 +77,13 @@ install(FILES lib/cuapriltags/cuapriltags/cuAprilTags.h
 
 # cuApriltags (register path)
 ament_index_register_resource(cuapriltags CONTENT share/${PROJECT_NAME}/cuapriltags)
+
+# Install the header files for cuMotion
+install(DIRECTORY ${CUMOTION_PATH}/include
+        DESTINATION "${CMAKE_INSTALL_PREFIX}/share/${PROJECT_NAME}/cumotion")
+
+# cuMotion (register path)
+ament_index_register_resource(cumotion CONTENT share/${PROJECT_NAME}/cumotion)
 
 # Dependencies
 find_package(Eigen3 3.3 REQUIRED NO_MODULE)

@@ -59,7 +59,7 @@ void StringDecoderNode::InputCallback(const nvidia::isaac_ros::nitros::NitrosTen
   RCLCPP_INFO(this->get_logger(), "String from CUDA buffer: '%s'", buffer.c_str());
 
   std_msgs::msg::String string_msg;
-  string_msg.data = buffer;
+  string_msg.data = buffer.c_str();
   RCLCPP_INFO(this->get_logger(), "Output String message: '%s'", string_msg.data.c_str());
 
   pub_->publish(string_msg);
