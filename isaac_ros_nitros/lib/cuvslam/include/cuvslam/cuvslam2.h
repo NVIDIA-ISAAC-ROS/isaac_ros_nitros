@@ -1,12 +1,12 @@
-/**
- * @file cuvslam2.h
-
- * @copyright Copyright (c) 2025, NVIDIA CORPORATION.  All rights reserved.\n\n
- * NVIDIA CORPORATION and its licensors retain all intellectual property
- * and proprietary rights in and to this software, related documentation
- * and any modifications thereto.  Any use, reproduction, disclosure or
- * distribution of this software and related documentation without an express
- * license agreement from NVIDIA CORPORATION is strictly prohibited.
+/*
+ * Copyright (c) 2026, NVIDIA CORPORATION. All rights reserved.
+ *
+ * NVIDIA software released under the NVIDIA Open Software License is intended to be used permissively and enable the
+ * further development of AI technologies. Subject to the terms of this License, NVIDIA confirms that you are free to
+ * commercially use, modify, and distribute the software with NVIDIA hardware. NVIDIA does not claim ownership to any
+ * outputs generated using the software or derivative works thereof. By using, reproducing, modifying, distributing,
+ * performing or displaying any portion or element of the software or derivative works thereof, you agree to be bound by
+ * this License.
  */
 
 #pragma once
@@ -30,25 +30,20 @@
 #else
 #define CUVSLAM_API __attribute__((visibility("default")))
 #endif
-
-/// Major version. API is guaranteed to be compatible between the same major version numbers.
-#define CUVSLAM_API_VERSION_MAJOR 14
-
-/// Minor version
-#define CUVSLAM_API_VERSION_MINOR 1
 /// @endcond
 
 namespace cuvslam {
 
 /**
- * Use this function to check the version of the library you are using.
+ * @brief Get the version of the library.
  * Any one of the pointers could be null.
  * @param[out] major   - major version
  * @param[out] minor   - minor version
- * @return - detailed version in string format
+ * @param[out] patch   - patch version
+ * @return semantic version string view
  */
 CUVSLAM_API
-std::string_view GetVersion(int32_t* major, int32_t* minor);
+std::string_view GetVersion(int32_t* major, int32_t* minor, int32_t* patch);
 
 /**
  * Set verbosity. The higher the value, the more output from the library. 0 (default) for no output.
@@ -426,6 +421,7 @@ public:
     /// Default: false
     bool enable_landmarks_export = false;
     /// Enable GetFinalLandmarks(). Warning: export flags slow down execution and result in additional memory usage.
+    /// This flag also sets enable_landmarks_export and enable_observations_export.
     /// Default: false
     bool enable_final_landmarks_export = false;
     /// Maximum frame delta in seconds. Odometry will warn if time delta between frames is higher than the threshold.
@@ -643,6 +639,10 @@ public:
    * @brief SLAM configuration parameters
    */
   struct Config {
+    /// If empty, map is kept in memory only. Else, map is synced to disk (LMDB) at this path, allowing large-scale
+    /// maps; if the path already exists it will be overwritten. To load an existing map, use LocalizeInMap(). To save
+    /// map, use SaveMap().
+    std::string_view map_cache_path = "";
     /// Enable GPU use for SLAM
     bool use_gpu = true;
     /// Synchronous mode (does not run a separate work thread if true)
@@ -701,13 +701,14 @@ public:
    * @brief Data layer for SLAM
    */
   enum class DataLayer : uint8_t {
-    Map,                    ///< Landmarks of the map
-    LoopClosure,            ///< Map's landmarks that are visible in the last loop closure event
-    PoseGraph,              ///< Pose Graph
-    LocalizerProbes,        ///< Localizer probes
-    LocalizerMap,           ///< Landmarks of the Localizer map (opened database)
-    LocalizerObservations,  ///< Landmarks that are visible in the localization
-    LocalizerLoopClosure,   ///< Landmarks that are visible in the final loop closure of the localization
+    Landmarks,             ///< Landmarks that are visible in the current frame
+    Map,                   ///< Landmarks of the map
+    LoopClosure,           ///< Map's landmarks that are visible in the last loop closure event
+    PoseGraph,             ///< Pose Graph
+    LocalizerProbes,       ///< Localizer probes
+    LocalizerMap,          ///< Landmarks of the Localizer map (opened database)
+    LocalizerLandmarks,    ///< Landmarks that are visible in the localization
+    LocalizerLoopClosure,  ///< Landmarks that are visible in the final loop closure of the localization
     Max,
   };
 
