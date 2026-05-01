@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
-// Copyright (c) 2022-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+// Copyright (c) 2022-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -35,7 +35,7 @@ constexpr uint32_t kGxfReceiverPushPollPeriodNs = 100000;  // 100us
 constexpr uint32_t kGxfReceiverPushPollWarningPeriodLoopCount = 100000;  // 10s
 
 NitrosSubscriber::NitrosSubscriber(
-  rclcpp::Node & node,
+  NitrosNodeInterfaces node_ifaces,
   const gxf_context_t context,
   std::shared_ptr<NitrosTypeManager> nitros_type_manager,
   const gxf::optimizer::ComponentInfo & gxf_component_info,
@@ -44,7 +44,8 @@ NitrosSubscriber::NitrosSubscriber(
   const NitrosDiagnosticsConfig & diagnostics_config,
   const bool use_callback_group)
 : NitrosPublisherSubscriberBase(
-    node, context, nitros_type_manager, gxf_component_info, supported_data_formats, config),
+    std::move(node_ifaces), context, nitros_type_manager,
+    gxf_component_info, supported_data_formats, config),
   use_callback_group_{use_callback_group}
 {
   if (config_.type == NitrosPublisherSubscriberType::NOOP) {
@@ -62,9 +63,11 @@ NitrosSubscriber::NitrosSubscriber(
   }
 
   if (use_callback_group_) {
-    callback_group_ = node_.create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive);
+    callback_group_ =
+      node_ifaces_.get<rclcpp::node_interfaces::NodeBaseInterface>()->create_callback_group(
+        rclcpp::CallbackGroupType::MutuallyExclusive);
     RCLCPP_DEBUG(
-      node_.get_logger(),
+      get_node_logger(),
       "[NitrosSubscriber] Created a MutuallyExclusive callback group");
   }
 
@@ -81,7 +84,7 @@ NitrosSubscriber::NitrosSubscriber(
 
   // Create a negotiated subscriber object
   negotiated_sub_ = std::make_shared<negotiated::NegotiatedSubscription>(
-    node_,
+    node_ifaces_,
     compatible_sub_->get_topic_name() + std::string("/nitros"));
 
   // Add supported data formats (which also adds the compatible subscriber)
@@ -95,6 +98,47 @@ NitrosSubscriber::NitrosSubscriber(
 }
 
 NitrosSubscriber::NitrosSubscriber(
+  NitrosNodeInterfaces node_ifaces,
+  const gxf_context_t context,
+  std::shared_ptr<NitrosTypeManager> nitros_type_manager,
+  const gxf::optimizer::ComponentInfo & gxf_component_info,
+  const std::vector<std::string> & supported_data_formats,
+  const NitrosPublisherSubscriberConfig & config)
+: NitrosSubscriber(
+    std::move(node_ifaces), context, nitros_type_manager,
+    gxf_component_info, supported_data_formats, config, {})
+{}
+
+NitrosSubscriber::NitrosSubscriber(
+  NitrosNodeInterfaces node_ifaces,
+  const gxf_context_t context,
+  std::shared_ptr<NitrosTypeManager> nitros_type_manager,
+  const std::vector<std::string> & supported_data_formats,
+  const NitrosPublisherSubscriberConfig & config,
+  const NitrosDiagnosticsConfig & diagnostics_config)
+: NitrosSubscriber(
+    std::move(node_ifaces), context, nitros_type_manager,
+    {}, supported_data_formats, config, diagnostics_config)
+{
+  use_gxf_receiver_ = false;
+}
+
+// Backward-compatible rclcpp::Node & constructors — delegate to NitrosNodeInterfaces versions
+NitrosSubscriber::NitrosSubscriber(
+  rclcpp::Node & node,
+  const gxf_context_t context,
+  std::shared_ptr<NitrosTypeManager> nitros_type_manager,
+  const gxf::optimizer::ComponentInfo & gxf_component_info,
+  const std::vector<std::string> & supported_data_formats,
+  const NitrosPublisherSubscriberConfig & config,
+  const NitrosDiagnosticsConfig & diagnostics_config,
+  const bool use_callback_group)
+: NitrosSubscriber(
+    MakeNitrosNodeInterfaces(node), context, nitros_type_manager,
+    gxf_component_info, supported_data_formats, config, diagnostics_config, use_callback_group)
+{}
+
+NitrosSubscriber::NitrosSubscriber(
   rclcpp::Node & node,
   const gxf_context_t context,
   std::shared_ptr<NitrosTypeManager> nitros_type_manager,
@@ -102,7 +146,8 @@ NitrosSubscriber::NitrosSubscriber(
   const std::vector<std::string> & supported_data_formats,
   const NitrosPublisherSubscriberConfig & config)
 : NitrosSubscriber(
-    node, context, nitros_type_manager, gxf_component_info, supported_data_formats, config, {})
+    MakeNitrosNodeInterfaces(node), context, nitros_type_manager,
+    gxf_component_info, supported_data_formats, config, {})
 {}
 
 NitrosSubscriber::NitrosSubscriber(
@@ -113,10 +158,9 @@ NitrosSubscriber::NitrosSubscriber(
   const NitrosPublisherSubscriberConfig & config,
   const NitrosDiagnosticsConfig & diagnostics_config)
 : NitrosSubscriber(
-    node, context, nitros_type_manager, {}, supported_data_formats, config, diagnostics_config)
-{
-  use_gxf_receiver_ = false;
-}
+    MakeNitrosNodeInterfaces(node), context, nitros_type_manager,
+    supported_data_formats, config, diagnostics_config)
+{}
 
 std::shared_ptr<negotiated::NegotiatedSubscription> NitrosSubscriber::getNegotiatedSubscriber()
 {
@@ -139,20 +183,20 @@ void NitrosSubscriber::addSupportedDataFormat(
       "[NitrosSubscriber] Could not identify the supported data foramt: " <<
       "\"" << data_format.c_str() << "\"";
     RCLCPP_ERROR(
-      node_.get_logger(), error_msg.str().c_str());
+      get_node_logger(), error_msg.str().c_str());
     throw std::runtime_error(error_msg.str().c_str());
   }
 
   if (data_format == config_.compatible_data_format) {
     nitros_type_manager_->getFormatCallbacks(data_format).addCompatibleSubscriberCallback(
-      node_,
+      node_ifaces_,
       negotiated_sub_,
       compatible_sub_,
       weight
     );
 
     RCLCPP_DEBUG(
-      node_.get_logger(),
+      get_node_logger(),
       "[NitrosSubscriber] Added a compatible subscriber: "
       "topic_name=\"%s\", data_format=\"%s\"",
       compatible_sub_->get_topic_name(), config_.compatible_data_format.c_str());
@@ -166,7 +210,7 @@ void NitrosSubscriber::addSupportedDataFormat(
       std::placeholders::_2);
 
     nitros_type_manager_->getFormatCallbacks(data_format).addSubscriberSupportedFormatCallback(
-      node_,
+      node_ifaces_,
       negotiated_sub_,
       weight,
       config_.qos,
@@ -174,7 +218,7 @@ void NitrosSubscriber::addSupportedDataFormat(
       sub_options);
 
     RCLCPP_DEBUG(
-      node_.get_logger(),
+      get_node_logger(),
       "[NitrosSubscriber] Added a supported data format: "
       "topic_name=\"%s\", data_format=\"%s\"",
       compatible_sub_->get_topic_name(), data_format.c_str());
@@ -207,7 +251,7 @@ void NitrosSubscriber::createCompatibleSubscriber()
       "[NitrosSubscriber] Could not identify the compatible data foramt: " <<
       "\"" << config_.compatible_data_format.c_str() << "\"";
     RCLCPP_ERROR(
-      node_.get_logger(), error_msg.str().c_str());
+      get_node_logger(), error_msg.str().c_str());
     throw std::runtime_error(error_msg.str().c_str());
   }
 
@@ -221,7 +265,7 @@ void NitrosSubscriber::createCompatibleSubscriber()
 
   nitros_type_manager_->getFormatCallbacks(config_.compatible_data_format).
   createCompatibleSubscriberCallback(
-    node_,
+    node_ifaces_,
     compatible_sub_,
     config_.topic_name,
     config_.qos,
@@ -239,10 +283,10 @@ void NitrosSubscriber::postNegotiationCallback()
   auto topics_info = negotiated_sub_->get_negotiated_topics_info();
   if (!topics_info.success || topics_info.negotiated_topics.size() == 0) {
     RCLCPP_INFO(
-      node_.get_logger(),
+      get_node_logger(),
       "[NitrosSubscriber] Negotiation ended with no results");
     RCLCPP_INFO(
-      node_.get_logger(),
+      get_node_logger(),
       "[NitrosSubscriber] Use the compatible subscriber: "
       "topic_name=\"%s\", data_format=\"%s\"",
       compatible_sub_->get_topic_name(), config_.compatible_data_format.c_str());
@@ -251,7 +295,7 @@ void NitrosSubscriber::postNegotiationCallback()
     negotiated_data_format_ = topics_info.negotiated_topics[0].supported_type_name;
 
     RCLCPP_INFO(
-      node_.get_logger(),
+      get_node_logger(),
       "[NitrosSubscriber] Use the negotiated data format: \"%s\"",
       negotiated_data_format_.c_str());
 
@@ -259,12 +303,12 @@ void NitrosSubscriber::postNegotiationCallback()
       // Delete the compatible subscriber as we don't use it anymore
       nitros_type_manager_->getFormatCallbacks(config_.compatible_data_format).
       removeCompatibleSubscriberCallback(
-        node_,
+        node_ifaces_,
         negotiated_sub_,
         compatible_sub_);
 
       RCLCPP_DEBUG(
-        node_.get_logger(),
+        get_node_logger(),
         "[NitrosSubscriber] Removed a compatible subscriber: "
         "topic_name=\"%s\", data_format=\"%s\"",
         compatible_sub_->get_topic_name(), config_.compatible_data_format.c_str());
@@ -283,7 +327,7 @@ void NitrosSubscriber::setReceiverPolicy(const size_t policy)
 {
   if (gxf_receiver_ptr_ == nullptr) {
     RCLCPP_ERROR(
-      node_.get_logger().get_child(LOGGER_SUFFIX),
+      get_node_logger().get_child(LOGGER_SUFFIX),
       "The underlying receiver pointer (\"%s\") is not set when setting its policy.",
       GenerateComponentKey(gxf_component_info_).c_str());
     return;
@@ -293,7 +337,7 @@ void NitrosSubscriber::setReceiverPolicy(const size_t policy)
   code = GxfParameterSetUInt64(context_, gxf_receiver_ptr_->cid(), "policy", policy);
   if (code != GXF_SUCCESS) {
     RCLCPP_ERROR(
-      node_.get_logger().get_child(LOGGER_SUFFIX),
+      get_node_logger().get_child(LOGGER_SUFFIX),
       "Failed to set policy for the underlying receiver (\"%s\"): %s",
       GenerateComponentKey(gxf_component_info_).c_str(),
       GxfResultStr(code));
@@ -301,7 +345,7 @@ void NitrosSubscriber::setReceiverPolicy(const size_t policy)
   }
 
   RCLCPP_DEBUG(
-    node_.get_logger().get_child(LOGGER_SUFFIX),
+    get_node_logger().get_child(LOGGER_SUFFIX),
     "Set policy to %zu for the underlying receiver (\"%s\")",
     policy, GenerateComponentKey(gxf_component_info_).c_str());
 }
@@ -311,7 +355,7 @@ void NitrosSubscriber::setReceiverCapacity(const size_t capacity)
 {
   if (gxf_receiver_ptr_ == nullptr) {
     RCLCPP_ERROR(
-      node_.get_logger().get_child(LOGGER_SUFFIX),
+      get_node_logger().get_child(LOGGER_SUFFIX),
       "The underlying receiver pointer (\"%s\") is not set when setting its capacity.",
       GenerateComponentKey(gxf_component_info_).c_str());
     return;
@@ -321,7 +365,7 @@ void NitrosSubscriber::setReceiverCapacity(const size_t capacity)
   code = GxfParameterSetUInt64(context_, gxf_receiver_ptr_->cid(), "capacity", capacity);
   if (code != GXF_SUCCESS) {
     RCLCPP_ERROR(
-      node_.get_logger().get_child(LOGGER_SUFFIX),
+      get_node_logger().get_child(LOGGER_SUFFIX),
       "Failed to set capacity for the underlying receiver (\"%s\"): %s",
       GenerateComponentKey(gxf_component_info_).c_str(),
       GxfResultStr(code));
@@ -329,7 +373,7 @@ void NitrosSubscriber::setReceiverCapacity(const size_t capacity)
   }
 
   RCLCPP_DEBUG(
-    node_.get_logger().get_child(LOGGER_SUFFIX),
+    get_node_logger().get_child(LOGGER_SUFFIX),
     "Set capacity to %zu for the underlying receiver (\"%s\")",
     capacity, GenerateComponentKey(gxf_component_info_).c_str());
 }
@@ -346,7 +390,7 @@ bool NitrosSubscriber::pushEntity(const int64_t eid, bool should_block)
     {
       if (loop_count > 0 && loop_count % kGxfReceiverPushPollWarningPeriodLoopCount == 0) {
         RCLCPP_WARN(
-          node_.get_logger().get_child(LOGGER_SUFFIX),
+          get_node_logger().get_child(LOGGER_SUFFIX),
           "%.1fs passed while waiting to push a message entity (eid=%ld) "
           "to the receiver %s",
           (loop_count * (kGxfReceiverPushPollPeriodNs / 1000000000.0)),
@@ -358,7 +402,7 @@ bool NitrosSubscriber::pushEntity(const int64_t eid, bool should_block)
       code = GxfEntityGetStatus(context_, gxf_receiver_eid, &entity_status);
       if (code != GXF_SUCCESS) {
         RCLCPP_ERROR(
-          node_.get_logger(),
+          get_node_logger(),
           "[NitrosSubscriber] Failed to get the receiver entity (eid=%ld) status: %s",
           gxf_receiver_eid, GxfResultStr(code));
         return false;
@@ -371,7 +415,7 @@ bool NitrosSubscriber::pushEntity(const int64_t eid, bool should_block)
   GxfEntityNotifyEventType(context_, gxf_receiver_ptr_->eid(), GXF_EVENT_MESSAGE_SYNC);
 
   RCLCPP_DEBUG(
-    node_.get_logger(),
+    get_node_logger(),
     "[NitrosSubscriber] Pushed a message entity (eid=%ld) to "
     "the appliation", eid);
 
@@ -384,7 +428,7 @@ void NitrosSubscriber::subscriberCallback(
 {
   std::stringstream nvtx_tag_name;
   nvtx_tag_name <<
-    "[" << node_.get_name() << "] NitrosSubscriber::subscriberCallback(" <<
+    "[" << get_node_name() << "] NitrosSubscriber::subscriberCallback(" <<
     config_.topic_name << ", t=" <<
     getTimestamp(msg_base) << ")";
   nvtxRangePushWrapper(nvtx_tag_name.str().c_str(), CLR_PURPLE);
@@ -399,21 +443,21 @@ void NitrosSubscriber::subscriberCallback(
     updateDiagnostics(getTimestamp(msg_base));
   }
 
-  RCLCPP_DEBUG(node_.get_logger(), "[NitrosSubscriber] Received a Nitros-typed messgae");
-  RCLCPP_DEBUG(node_.get_logger(), "[NitrosSubscriber] \teid: %ld", msg_base.handle);
+  RCLCPP_DEBUG(get_node_logger(), "[NitrosSubscriber] Received a Nitros-typed messgae");
+  RCLCPP_DEBUG(get_node_logger(), "[NitrosSubscriber] \teid: %ld", msg_base.handle);
   RCLCPP_DEBUG(
-    node_.get_logger(), "[NitrosSubscriber] \tdata_format_name: %s",
+    get_node_logger(), "[NitrosSubscriber] \tdata_format_name: %s",
     data_format_name.c_str());
   RCLCPP_DEBUG(
-    node_.get_logger(), "[NitrosSubscriber] \tmsg_base: %s",
+    get_node_logger(), "[NitrosSubscriber] \tmsg_base: %s",
     msg_base.data_format_name.c_str());
   RCLCPP_DEBUG(
-    node_.get_logger(), "[NitrosSubscriber] \tReceiver's pointer: %p",
+    get_node_logger(), "[NitrosSubscriber] \tReceiver's pointer: %p",
     (void *)gxf_receiver_ptr_);
 
   if (use_gxf_receiver_ && (!is_gxf_running_ || gxf_receiver_ptr_ == nullptr)) {
     RCLCPP_DEBUG(
-      node_.get_logger(),
+      get_node_logger(),
       "[NitrosSubscriber] Received a message but the underlying GXF graph is"
       "not yet ready.");
     nvtxRangePopWrapper();
@@ -426,14 +470,14 @@ void NitrosSubscriber::subscriberCallback(
     (*frame_id_map_ptr_.get())[frame_id_source_key] = msg_base.frame_id;
 
     RCLCPP_DEBUG(
-      node_.get_logger(),
+      get_node_logger(),
       "[NitrosSubscriber] Updated frame_id=%s",
       (*frame_id_map_ptr_.get())[frame_id_source_key].c_str());
   }
 
   if (config_.callback != nullptr) {
     RCLCPP_DEBUG(
-      node_.get_logger(),
+      get_node_logger(),
       "[NitrosSubscriber] Calling user-defined callback for an Nitros-typed "
       "message (eid=%ld)", msg_base.handle);
     config_.callback(context_, msg_base);

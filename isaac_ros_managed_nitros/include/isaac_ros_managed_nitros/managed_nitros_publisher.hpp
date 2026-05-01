@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
-// Copyright (c) 2022-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+// Copyright (c) 2022-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -33,6 +33,7 @@
 #include "extensions/gxf_optimizer/core/optimizer.hpp"
 #include "extensions/gxf_optimizer/exporter/graph_types.hpp"
 
+#include "isaac_ros_nitros/nitros_node_interfaces.hpp"
 #include "isaac_ros_nitros/nitros_publisher.hpp"
 #include "isaac_ros_nitros/types/nitros_type_manager.hpp"
 #include "isaac_ros_nitros/nitros_publisher_subscriber_group.hpp"
@@ -51,15 +52,17 @@ template<typename T>
 class ManagedNitrosPublisher
 {
 public:
+  template<typename NodeT>
   ManagedNitrosPublisher(
-    rclcpp::Node * node,
+    NodeT * node,
     const std::string & topic,
     const std::string & format,
     const NitrosDiagnosticsConfig & diagnostics_config = {},
     const rclcpp::QoS qos = rclcpp::QoS(1))
-  : node_{node},
+  : node_ifaces_(MakeNitrosNodeInterfaces(*node)),
     context_{GetTypeAdapterNitrosContext()},
-    nitros_type_manager_{std::make_shared<NitrosTypeManager>(node_)}
+    nitros_type_manager_{std::make_shared<NitrosTypeManager>(
+      node_ifaces_.get<rclcpp::node_interfaces::NodeLoggingInterface>()->get_logger())}
   {
     nitros_type_manager_->registerSupportedType<T>();
     nitros_type_manager_->loadExtensions(format);
@@ -74,13 +77,14 @@ public:
     };
 
     nitros_pub_ = std::make_shared<NitrosPublisher>(
-      *node_, GetTypeAdapterNitrosContext().getContext(), nitros_type_manager_,
+      node_ifaces_, GetTypeAdapterNitrosContext().getContext(), nitros_type_manager_,
       supported_data_formats, component_config, diagnostics_config);
 
     nitros_pub_->start();
 
     RCLCPP_INFO(
-      node_->get_logger().get_child("ManagedNitrosPublisher"),
+      node_ifaces_.get<rclcpp::node_interfaces::NodeLoggingInterface>()->get_logger().get_child(
+        "ManagedNitrosPublisher"),
       "Starting Managed Nitros Publisher");
   }
 
@@ -90,7 +94,7 @@ public:
   }
 
 private:
-  rclcpp::Node * node_;
+  NitrosNodeInterfaces node_ifaces_;
   NitrosContext context_;
   std::shared_ptr<NitrosTypeManager> nitros_type_manager_;
   std::shared_ptr<NitrosPublisher> nitros_pub_;
