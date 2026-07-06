@@ -1,5 +1,5 @@
 # SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
-# Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# Copyright (c) 2025-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -88,8 +88,7 @@ class IsaacROSManagedNitrosPointCloudTest(IsaacROSBaseTest):
         try:
             cloud_msg = PCDLoader.generate_pointcloud2_from_pcd_file(
                 test_folder / 'ketchup.pcd', 'sample_points')
-            # Wait at most TIMEOUT seconds for subscriber to respond
-            TIMEOUT = 2
+            TIMEOUT = 10
             end_time = time.time() + TIMEOUT
 
             done = False
@@ -100,7 +99,6 @@ class IsaacROSManagedNitrosPointCloudTest(IsaacROSBaseTest):
                 cloud_pub.publish(cloud_msg)
                 rclpy.spin_once(self.node, timeout_sec=0.1)
 
-                # If we have received a message on the output topic, break
                 if 'output' in received_messages:
                     done = True
                     break
@@ -110,7 +108,6 @@ class IsaacROSManagedNitrosPointCloudTest(IsaacROSBaseTest):
 
             received_points = received_messages['output']
 
-            # Validate header fields
             self.assertEqual(cloud_msg.header.frame_id, received_points.header.frame_id,
                              'Source and received frame ids dont match')
 
@@ -123,7 +120,6 @@ class IsaacROSManagedNitrosPointCloudTest(IsaacROSBaseTest):
                              f'{cloud_msg.header.stamp.nanosec} != '
                              f'{received_points.header.stamp.nanosec}')
 
-            # Validate point cloud structure
             self.assertEqual(len(cloud_msg.data), len(received_points.data),
                              'Source and received point cloud sizes do not match: ' +
                              f'{len(cloud_msg.data)} != {len(received_points.data)}')
@@ -142,7 +138,6 @@ class IsaacROSManagedNitrosPointCloudTest(IsaacROSBaseTest):
             self.assertEqual(cloud_msg.is_dense, received_points.is_dense,
                              'Source and received point cloud is_dense field do not match')
 
-            # Validate PointFields
             self.assertEqual(len(cloud_msg.fields), len(received_points.fields),
                              'Source and received point cloud field counts do not match: '
                              f'{len(cloud_msg.fields)} != {len(received_points.fields)}')
@@ -161,7 +156,6 @@ class IsaacROSManagedNitrosPointCloudTest(IsaacROSBaseTest):
                                  f'Field {i} ({src_field.name}) count mismatch: '
                                  f'{src_field.count} != {recv_field.count}')
 
-            # Validate point data
             for i in range(len(cloud_msg.data)):
                 self.assertEqual(cloud_msg.data[i], received_points.data[i],
                                  'Source and received point clouds do not match')

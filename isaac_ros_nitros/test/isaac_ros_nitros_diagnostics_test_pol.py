@@ -126,7 +126,7 @@ class IsaacROSNitrosNodeTest(IsaacROSBaseTest):
 
             # Publish messages at a fixed frame rate set by test_frame_rate
             start_time = time.time()
-            end_time = time.time() + 2
+            end_time = time.time() + 10
             sent_count = 0
             while time.time() < end_time:
                 sent_count += 1

@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
-// Copyright (c) 2022-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+// Copyright (c) 2022-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -16,33 +16,27 @@
 // SPDX-License-Identifier: Apache-2.0
 #include <cuda_runtime.h>
 
+#include <sstream>
 #include <string>
 #include <unordered_map>
 #include <vector>
 
+#include "isaac_ros_common/cuda_stream.hpp"
+#include "isaac_ros_nitros/types/cuda_stream_pool.hpp"
+#include "isaac_ros_nitros_point_cloud_type/nitros_point_cloud.hpp"
+
+#ifdef NITROS_GXF_COMPAT_MODE
+#include "isaac_ros_nitros/types/type_adapter_nitros_context.hpp"
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wunused-parameter"
-#pragma GCC diagnostic ignored "-Wmissing-field-initializers"
 #pragma GCC diagnostic ignored "-Wpedantic"
+#include "gxf/core/entity.hpp"
+#include "gxf/core/gxf.h"
 #include "messages/point_cloud_message.hpp"
-#include "gems/pose_tree/pose_tree.hpp"
 #pragma GCC diagnostic pop
-
-#include "isaac_ros_common/cuda_stream.hpp"
-#include "isaac_ros_nitros_point_cloud_type/nitros_point_cloud.hpp"
-#include "isaac_ros_nitros/types/type_adapter_nitros_context.hpp"
+#endif
 
 #include "rclcpp/rclcpp.hpp"
-
-namespace
-{
-constexpr char kEntityName[] = "memory_pool";
-constexpr char kComponentName[] = "unbounded_allocator";
-constexpr char kComponentTypeName[] = "nvidia::gxf::UnboundedAllocator";
-constexpr char kPoseTreeEntityName[] = "global_pose_tree";
-constexpr char kPoseTreeComponentName[] = "pose_tree";
-constexpr char kPoseTreeComponentTypeName[] = "nvidia::isaac::PoseTree";
-}  // namespace
 
 void rclcpp::TypeAdapter<
   nvidia::isaac_ros::nitros::NitrosPointCloud,
@@ -57,30 +51,91 @@ void rclcpp::TypeAdapter<
     rclcpp::get_logger("NitrosPointCloud"),
     "[convert_to_ros_message] Conversion started for handle=%ld", source.handle);
 
-  auto context = nvidia::isaac_ros::nitros::GetTypeAdapterNitrosContext().getContext();
-  auto msg_entity = nvidia::gxf::Entity::Shared(context, source.handle);
-
-  auto maybe_point_cloud_parts = nvidia::isaac_ros::messages::GetPointCloudMessage(
-    msg_entity.value());
-  if (!maybe_point_cloud_parts) {
-    std::stringstream error_msg;
-    error_msg <<
-      "[convert_to_ros_message] Failed to get pointcloud message from message entity: " <<
-      GxfResultStr(maybe_point_cloud_parts.error());
-    RCLCPP_ERROR(
-      rclcpp::get_logger("NitrosPointCloud"), error_msg.str().c_str());
-    throw std::runtime_error(error_msg.str().c_str());
+#ifdef NITROS_GXF_COMPAT_MODE
+  if (source.handle >= 0) {
+    auto context = nvidia::isaac_ros::nitros::GetTypeAdapterNitrosContext().getContext();
+    auto entity = nvidia::gxf::Entity::Shared(context, source.handle);
+    if (!entity) {
+      throw std::runtime_error("NitrosPointCloud GXF compat: Failed to get GXF entity");
+    }
+    auto maybe_parts = nvidia::isaac_ros::messages::GetPointCloudMessage(entity.value());
+    if (!maybe_parts) {
+      std::stringstream error_msg;
+      error_msg << "[convert_to_ros_message] Failed to get point cloud message: "
+                << GxfResultStr(maybe_parts.error());
+      RCLCPP_ERROR(rclcpp::get_logger("NitrosPointCloud"), error_msg.str().c_str());
+      throw std::runtime_error(error_msg.str().c_str());
+    }
+    auto parts = maybe_parts.value();
+    destination.height = 1;
+    destination.width = static_cast<uint32_t>(parts.points->shape().dimension(0));
+    destination.point_step = parts.info->use_color ? 16u : 12u;
+    destination.row_step = destination.point_step * destination.width;
+    destination.is_bigendian = parts.info->is_bigendian;
+    destination.is_dense = false;
+    sensor_msgs::PointCloud2Modifier pc2_modifier(destination);
+    if (parts.info->use_color) {
+      pc2_modifier.setPointCloud2Fields(
+        4,
+        "x", 1, sensor_msgs::msg::PointField::FLOAT32,
+        "y", 1, sensor_msgs::msg::PointField::FLOAT32,
+        "z", 1, sensor_msgs::msg::PointField::FLOAT32,
+        "rgb", 1, sensor_msgs::msg::PointField::FLOAT32);
+    } else {
+      pc2_modifier.setPointCloud2Fields(
+        3,
+        "x", 1, sensor_msgs::msg::PointField::FLOAT32,
+        "y", 1, sensor_msgs::msg::PointField::FLOAT32,
+        "z", 1, sensor_msgs::msg::PointField::FLOAT32);
+    }
+    destination.data.resize(destination.row_step * destination.height);
+    auto maybe_src = parts.points->data<float>();
+    if (!maybe_src) {
+      throw std::runtime_error("[convert_to_ros_message] Tensor returned no data pointer");
+    }
+    const size_t copy_bytes = destination.row_step * destination.height;
+    const cudaError_t err = cudaMemcpy(
+      destination.data.data(), *maybe_src, copy_bytes, cudaMemcpyDeviceToHost);
+    if (err != cudaSuccess) {
+      std::stringstream error_msg;
+      error_msg << "[convert_to_ros_message] cudaMemcpy failed: "
+                << cudaGetErrorName(err) << " (" << cudaGetErrorString(err) << ")";
+      RCLCPP_ERROR(rclcpp::get_logger("NitrosPointCloud"), error_msg.str().c_str());
+      throw std::runtime_error(error_msg.str().c_str());
+    }
+    destination.header.stamp.sec = source.timestamp_sec;
+    destination.header.stamp.nanosec = source.timestamp_nsec;
+    destination.header.frame_id = source.frame_id;
+    nvidia::isaac_ros::nitros::nvtxRangePopWrapper();
+    return;
   }
-  auto point_cloud_parts = maybe_point_cloud_parts.value();
-  const int32_t n_points = point_cloud_parts.points->shape().dimension(0);
+#endif
 
-  destination.height = 1;
-  destination.width = n_points;
-  destination.is_bigendian = point_cloud_parts.info->is_bigendian;
+  // RAII handle: declared BEFORE read_handle so reverse-destruction order
+  // lets read_handle record its CUDA event before the stream returns to the
+  // pool. Returns the stream to the pool on every exit path (success and
+  // exception), fixing a leak where the success path never released the
+  // stream and the pool was permanently exhausted after ~32 messages.
+  auto stream_handle =
+    nvidia::isaac_ros::nitros::CudaStreamPool::instance().get_stream_handle();
+  cudaStream_t stream = stream_handle.get();
+
+  // Use read handle for proper event synchronization
+  auto read_handle = source.get_read_handle(stream);
+  const uint8_t * dev_ptr = read_handle.get_ptr();
+  if (dev_ptr == nullptr) {
+    throw std::invalid_argument("NitrosPointCloud device pointer is nullptr");
+  }
+
+  destination.height = source.height;
+  destination.width = source.width;
+  destination.point_step = source.point_step;
+  destination.row_step = source.row_step;
+  destination.is_bigendian = source.is_bigendian;
   destination.is_dense = false;
 
   sensor_msgs::PointCloud2Modifier pc2_modifier(destination);
-  if (point_cloud_parts.info->use_color) {
+  if (source.use_color) {
     // Data format: x,y,z,rgb; 16 bytes per point
     pc2_modifier.setPointCloud2Fields(
       4,
@@ -96,11 +151,12 @@ void rclcpp::TypeAdapter<
       "y", 1, sensor_msgs::msg::PointField::FLOAT32,
       "z", 1, sensor_msgs::msg::PointField::FLOAT32);
   }
+
+  destination.data.resize(destination.row_step * destination.height);
   const cudaError_t cuda_error = cudaMemcpyAsync(
     destination.data.data(),
-    point_cloud_parts.points->data<float>().value(), destination.row_step * destination.height,
-    cudaMemcpyDeviceToHost, source.cuda_stream);
-
+    dev_ptr, destination.row_step * destination.height,
+    cudaMemcpyDeviceToHost, stream);
   if (cuda_error != cudaSuccess) {
     std::stringstream error_msg;
     error_msg <<
@@ -112,14 +168,21 @@ void rclcpp::TypeAdapter<
       rclcpp::get_logger("NitrosPointCloud"), error_msg.str().c_str());
     throw std::runtime_error(error_msg.str().c_str());
   }
-
-  cudaError_t cuda_result = cudaStreamSynchronize(source.cuda_stream);
-  CHECK_CUDA_ERROR(cuda_result, "Stream was not able to be synchronized");
+  cudaError_t cuda_err = cudaStreamSynchronize(stream);
+  if (cuda_err != cudaSuccess) {
+    std::stringstream error_msg;
+    error_msg << "[convert_to_ros_message] cudaStreamSynchronize failed: " <<
+      cudaGetErrorName(cuda_err) << " (" << cudaGetErrorString(cuda_err) << ")";
+    RCLCPP_ERROR(rclcpp::get_logger("NitrosPointCloud"), error_msg.str().c_str());
+    throw std::runtime_error(error_msg.str().c_str());
+  }
 
   RCLCPP_DEBUG(
     rclcpp::get_logger("NitrosPointCloud"),
     "[convert_to_ros_message] "
-    "row_step: %d, point_step: %d, x_offset: %d, y_offset: %d, y_offset: %d",
+    "height: %u, width: %u, row_step: %u, point_step: %u, x_offset: %u, y_offset: %u, z_offset: %u",
+    destination.height,
+    destination.width,
     destination.row_step,
     destination.point_step,
     destination.fields[0].offset,
@@ -127,41 +190,9 @@ void rclcpp::TypeAdapter<
     destination.fields[2].offset);
 
   // Populate timestamp information back into ROS header
-  auto input_timestamp = point_cloud_parts.timestamp;
-  if (input_timestamp) {
-    destination.header.stamp.sec = static_cast<int32_t>(
-      input_timestamp->acqtime / static_cast<uint64_t>(1e9));
-    destination.header.stamp.nanosec = static_cast<uint32_t>(
-      input_timestamp->acqtime % static_cast<uint64_t>(1e9));
-  }
-
-  // Get pointer to posetree component
-  gxf_uid_t cid;
-  nvidia::isaac_ros::nitros::GetTypeAdapterNitrosContext().getCid(
-    kPoseTreeEntityName, kPoseTreeComponentName, kPoseTreeComponentTypeName, cid);
-  auto maybe_pose_tree_handle =
-    nvidia::gxf::Handle<nvidia::isaac::PoseTree>::Create(context, cid);
-  if (!maybe_pose_tree_handle) {
-    std::stringstream error_msg;
-    error_msg <<
-      "[convert_to_custom] Failed to get pose tree's handle: " <<
-      GxfResultStr(maybe_pose_tree_handle.error());
-    RCLCPP_ERROR(
-      rclcpp::get_logger("NitrosPointCloud"), error_msg.str().c_str());
-    throw std::runtime_error(error_msg.str().c_str());
-  }
-  auto pose_tree_handle = maybe_pose_tree_handle.value();
-  auto frame_name = pose_tree_handle->getFrameName(point_cloud_parts.pose_frame_uid->uid);
-  if (frame_name) {
-    destination.header.frame_id = frame_name.value();
-  } else {
-    RCLCPP_DEBUG(
-      rclcpp::get_logger("NitrosPointCloud"),
-      "Setting frame_id=%s from NITROS msg",
-      source.frame_id.c_str());
-    // Set NITROS frame id as fallback method of populating frame_id
-    destination.header.frame_id = source.frame_id;
-  }
+  destination.header.stamp.sec = source.timestamp_sec;
+  destination.header.stamp.nanosec = source.timestamp_nsec;
+  destination.header.frame_id = source.frame_id;
 
   RCLCPP_DEBUG(
     rclcpp::get_logger("NitrosPointCloud"),
@@ -184,112 +215,65 @@ void rclcpp::TypeAdapter<
     rclcpp::get_logger("NitrosPointCloud"),
     "[convert_to_custom] Conversion started");
 
-  auto context = nvidia::isaac_ros::nitros::GetTypeAdapterNitrosContext().getContext();
-
-  // Get pointer to allocator component
-  gxf_uid_t cid;
-  nvidia::isaac_ros::nitros::GetTypeAdapterNitrosContext().getCid(
-    kEntityName, kComponentName, kComponentTypeName, cid);
-  auto maybe_allocator_handle =
-    nvidia::gxf::Handle<nvidia::gxf::Allocator>::Create(context, cid);
-  if (!maybe_allocator_handle) {
-    std::stringstream error_msg;
-    error_msg <<
-      "[convert_to_custom] Failed to get allocator's handle: " <<
-      GxfResultStr(maybe_allocator_handle.error());
-    RCLCPP_ERROR(
-      rclcpp::get_logger("NitrosPointCloud"), error_msg.str().c_str());
-    throw std::runtime_error(error_msg.str().c_str());
-  }
-  auto allocator_handle = maybe_allocator_handle.value();
+  auto & stream_pool = nvidia::isaac_ros::nitros::CudaStreamPool::instance();
+  cudaStream_t stream = stream_pool.acquire();
 
   const int32_t height = source.height;
   const int32_t width = source.width;
   const int32_t point_float_count = source.point_step / sizeof(float);
   const bool use_color = (point_float_count == 4);  // {x, y, z, RGB}
-  const int32_t n_points = source.height * source.width;
+  const size_t total_bytes = height * width * point_float_count * sizeof(float);
 
-  auto maybe_point_cloud_message_parts = nvidia::isaac_ros::messages::CreatePointCloudMessage(
-    context, allocator_handle, n_points, use_color);
-  if (!maybe_point_cloud_message_parts) {
+  nvidia::isaac_ros::nitros::NitrosPointCloud point_cloud;
+  uint8_t * dptr = nullptr;
+  cudaError_t cuda_err = cudaMallocAsync(reinterpret_cast<void **>(&dptr), total_bytes, stream);
+  if (cuda_err != cudaSuccess) {
+    stream_pool.release(stream);
     std::stringstream error_msg;
     error_msg <<
-      "[convert_to_ros_message] Failed to create CreatePointCloudMessage " << GxfResultStr(
-      maybe_point_cloud_message_parts.error());
-    RCLCPP_ERROR(
-      rclcpp::get_logger("NitrosPointCloud"), error_msg.str().c_str());
-    throw std::runtime_error(error_msg.str().c_str());
-  }
-  auto point_cloud_message_parts = maybe_point_cloud_message_parts.value();
-
-  point_cloud_message_parts.info->use_color = use_color;
-  point_cloud_message_parts.info->is_bigendian = source.is_bigendian;
-
-  RCLCPP_DEBUG(
-    rclcpp::get_logger("NitrosPointCloud"),
-    "[convert_to_custom] height: %d, width: %d, point_float_count: %d, use_color: %d",
-    height, width, point_float_count, use_color);
-
-  // Copy data from point cloud msg to gxf tensor.
-  auto nitros_cuda_stream =
-    nvidia::isaac_ros::nitros::GetTypeAdapterNitrosContext()
-    .getCudaStreamFromNitrosGraph();
-  const cudaError_t cuda_error = cudaMemcpyAsync(
-    point_cloud_message_parts.points->data<float>().value(),
-    source.data.data(), source.row_step * source.height, cudaMemcpyHostToDevice,
-    nitros_cuda_stream);
-  if (cuda_error != cudaSuccess) {
-    std::stringstream error_msg;
-    error_msg <<
-      "[convert_to_custom] cudaMemcpy failed for copying data from "
-      "sensor_msgs::msg::PointCloud2 to NitrosPointCloud: " <<
-      cudaGetErrorName(cuda_error) <<
-      " (" << cudaGetErrorString(cuda_error) << ")";
-    RCLCPP_ERROR(
-      rclcpp::get_logger("NitrosPointCloud"), error_msg.str().c_str());
+      "[convert_to_custom] cudaMallocAsync failed: " <<
+      cudaGetErrorName(cuda_err) << " (" << cudaGetErrorString(cuda_err) << ")";
+    RCLCPP_ERROR(rclcpp::get_logger("NitrosPointCloud"), error_msg.str().c_str());
     throw std::runtime_error(error_msg.str().c_str());
   }
 
-  cudaError_t cuda_result = cudaStreamSynchronize(nitros_cuda_stream);
-  CHECK_CUDA_ERROR(cuda_result, "Stream was not able to be synchronized");
+  {
+    auto deleter = [stream, &stream_pool](uint8_t * p){
+        if (p) {
+          cudaFreeAsync(p, stream);
+        }
+        if (stream) {
+          stream_pool.release(stream);
+        }
+      };
 
-  // Add timestamp to the message
-  uint64_t input_timestamp =
-    source.header.stamp.sec * static_cast<uint64_t>(1e9) +
-    source.header.stamp.nanosec;
-  point_cloud_message_parts.timestamp->acqtime = input_timestamp;
+    auto write_handle = point_cloud.from_external(
+      dptr, total_bytes, width, height, source.point_step, source.row_step, source.is_bigendian,
+      use_color, stream, deleter);
 
-  // Get pointer to posetree component
-  nvidia::isaac_ros::nitros::GetTypeAdapterNitrosContext().getCid(
-    kPoseTreeEntityName, kPoseTreeComponentName, kPoseTreeComponentTypeName, cid);
-  auto maybe_pose_tree_handle =
-    nvidia::gxf::Handle<nvidia::isaac::PoseTree>::Create(context, cid);
-  if (!maybe_pose_tree_handle) {
-    std::stringstream error_msg;
-    error_msg <<
-      "[convert_to_custom] Failed to get pose tree's handle: " <<
-      GxfResultStr(maybe_pose_tree_handle.error());
-    RCLCPP_ERROR(
-      rclcpp::get_logger("NitrosPointCloud"), error_msg.str().c_str());
-    throw std::runtime_error(error_msg.str().c_str());
-  }
-  auto pose_tree_handle = maybe_pose_tree_handle.value();
-  auto maybe_pointcloud_frame_uid = pose_tree_handle->findOrCreateFrame(
-    source.header.frame_id.c_str());
-
-  if (maybe_pointcloud_frame_uid) {
-    point_cloud_message_parts.pose_frame_uid->uid = maybe_pointcloud_frame_uid.value();
-  } else {
-    RCLCPP_WARN(
-      rclcpp::get_logger("NitrosPointCloud"), "Could not create Pose Tree Frame");
+    cuda_err = cudaMemcpyAsync(write_handle.get_ptr(), source.data.data(), total_bytes,
+      cudaMemcpyHostToDevice, stream);
+    if (cuda_err != cudaSuccess) {
+      std::stringstream error_msg;
+      error_msg <<
+        "[convert_to_custom] cudaMemcpyAsync H2D failed: " <<
+        cudaGetErrorName(cuda_err) << " (" << cudaGetErrorString(cuda_err) << ")";
+      RCLCPP_ERROR(rclcpp::get_logger("NitrosPointCloud"), error_msg.str().c_str());
+      throw std::runtime_error(error_msg.str().c_str());
+    }
   }
 
-  // Set NITROS frame id as fallback method of populating frame_id
+  destination = std::move(point_cloud);
+  destination.width = source.width;
+  destination.height = source.height;
+  destination.point_step = source.point_step;
+  destination.row_step = source.row_step;
+  destination.is_bigendian = source.is_bigendian;
+  destination.use_color = use_color;
+
+  destination.timestamp_sec = source.header.stamp.sec;
+  destination.timestamp_nsec = source.header.stamp.nanosec;
   destination.frame_id = source.header.frame_id;
-
-  // Set Entity Id
-  destination.handle = point_cloud_message_parts.message.eid();
-  GxfEntityRefCountInc(context, point_cloud_message_parts.message.eid());
 
   RCLCPP_DEBUG(
     rclcpp::get_logger("NitrosPointCloud"),

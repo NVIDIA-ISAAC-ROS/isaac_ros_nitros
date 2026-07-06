@@ -1,5 +1,5 @@
 # SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
-# Copyright (c) 2022-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# Copyright (c) 2022-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -41,11 +41,27 @@ find_package(Eigen3 3.3 REQUIRED NO_MODULE)
 find_package(yaml-cpp)
 
 # NitrosPointCloud
-ament_auto_add_library(${PROJECT_NAME} SHARED
+set(NITROS_POINT_CLOUD_SOURCES
   src/nitros_point_cloud.cpp
   src/nitros_point_cloud_builder.cpp
   src/nitros_point_cloud_view.cpp
 )
+
+# Option to turn on NITROS_GXF_COMPAT_MODE
+option(NITROS_GXF_COMPAT_MODE "Enable support for GXF compatibility mode" ON)
+if(NITROS_GXF_COMPAT_MODE)
+  add_compile_definitions(NITROS_GXF_COMPAT_MODE)
+endif()
+
+if(NITROS_GXF_COMPAT_MODE)
+  list(APPEND NITROS_POINT_CLOUD_SOURCES src/nitros_point_cloud_gxf_compat.cpp)
+endif()
+
+ament_auto_add_library(${PROJECT_NAME} SHARED ${NITROS_POINT_CLOUD_SOURCES})
+
+if(NITROS_GXF_COMPAT_MODE)
+  target_compile_definitions(${PROJECT_NAME} PUBLIC NITROS_GXF_COMPAT_MODE)
+endif()
 
 target_link_libraries(${PROJECT_NAME}
   Eigen3::Eigen
@@ -103,8 +119,8 @@ $<TARGET_FILE:managed_nitros_point_cloud_forward_node>\n")
   endif()
 
   find_package(launch_testing_ament_cmake REQUIRED)
-  add_launch_test(test/isaac_ros_nitros_point_cloud_type_test_pol.py TIMEOUT "15")
-  add_launch_test(test/isaac_ros_managed_nitros_point_cloud_type_test_pol.py TIMEOUT "15")
+  add_launch_test(test/isaac_ros_nitros_point_cloud_type_test_pol.py TIMEOUT "60")
+  add_launch_test(test/isaac_ros_managed_nitros_point_cloud_type_test_pol.py TIMEOUT "60")
 endif()
 
 

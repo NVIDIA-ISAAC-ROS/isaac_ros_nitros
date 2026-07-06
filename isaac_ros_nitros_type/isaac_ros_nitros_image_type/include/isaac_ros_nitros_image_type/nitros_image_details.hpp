@@ -196,6 +196,103 @@ struct NoPaddingColorPlanes<VideoFormat::GXF_VIDEO_FORMAT_RGBD32>
   std::array<nvidia::gxf::ColorPlane, 1> planes;
 };
 
+// Map to store the Nitros image format encoding to Video buffer format
+const std::unordered_map<std::string, VideoFormat> g_nitros_to_gxf_video_format({
+    {"nitros_image_rgb8", VideoFormat::GXF_VIDEO_FORMAT_RGB},
+    {"nitros_image_rgba8", VideoFormat::GXF_VIDEO_FORMAT_RGBA},
+    {"nitros_image_rgb16", VideoFormat::GXF_VIDEO_FORMAT_RGB16},
+    {"nitros_image_bgr8", VideoFormat::GXF_VIDEO_FORMAT_BGR},
+    {"nitros_image_bgra8", VideoFormat::GXF_VIDEO_FORMAT_BGRA},
+    {"nitros_image_bgr16", VideoFormat::GXF_VIDEO_FORMAT_BGR16},
+    {"nitros_image_mono8", VideoFormat::GXF_VIDEO_FORMAT_GRAY},
+    {"nitros_image_mono16", VideoFormat::GXF_VIDEO_FORMAT_GRAY16},
+    {"nitros_image_32FC1", VideoFormat::GXF_VIDEO_FORMAT_GRAY32},
+    {"nitros_image_nv12", VideoFormat::GXF_VIDEO_FORMAT_NV12},
+    {"nitros_image_nv24", VideoFormat::GXF_VIDEO_FORMAT_NV24},
+    {"nitros_image_32FC3", VideoFormat::GXF_VIDEO_FORMAT_RGB32},
+    {"nitros_image_32FC4", VideoFormat::GXF_VIDEO_FORMAT_RGBD32}
+  });
+
+inline uint64_t calculate_image_size(const std::string image_type, uint32_t width, uint32_t height)
+{
+  auto color_fmt = g_nitros_to_gxf_video_format.find(image_type);
+  if (color_fmt == std::end(g_nitros_to_gxf_video_format)) {
+    throw std::runtime_error("[calculate_image_size] Unsupported encoding from ROS.");
+  }
+
+  uint64_t image_size = 0;
+  switch (color_fmt->second) {
+    case VideoFormat::GXF_VIDEO_FORMAT_RGB: {
+        nvidia::gxf::VideoFormatSize<VideoFormat::GXF_VIDEO_FORMAT_RGB> format_size_rgb8;
+        image_size = format_size_rgb8.size(width, height);
+        break;
+      }
+    case VideoFormat::GXF_VIDEO_FORMAT_RGBA: {
+        nvidia::gxf::VideoFormatSize<VideoFormat::GXF_VIDEO_FORMAT_RGBA> format_size_rgba;
+        image_size = format_size_rgba.size(width, height);
+        break;
+      }
+    case VideoFormat::GXF_VIDEO_FORMAT_RGB16: {
+        nvidia::gxf::VideoFormatSize<VideoFormat::GXF_VIDEO_FORMAT_RGB16> format_size_rgb16;
+        image_size = format_size_rgb16.size(width, height);
+        break;
+      }
+    case VideoFormat::GXF_VIDEO_FORMAT_BGR: {
+        nvidia::gxf::VideoFormatSize<VideoFormat::GXF_VIDEO_FORMAT_BGR> format_size_bgr8;
+        image_size = format_size_bgr8.size(width, height);
+        break;
+      }
+    case VideoFormat::GXF_VIDEO_FORMAT_BGRA: {
+        nvidia::gxf::VideoFormatSize<VideoFormat::GXF_VIDEO_FORMAT_BGRA> format_size_bgra;
+        image_size = format_size_bgra.size(width, height);
+        break;
+      }
+    case VideoFormat::GXF_VIDEO_FORMAT_BGR16: {
+        nvidia::gxf::VideoFormatSize<VideoFormat::GXF_VIDEO_FORMAT_BGR16> format_size_bgr16;
+        image_size = format_size_bgr16.size(width, height);
+        break;
+      }
+    case VideoFormat::GXF_VIDEO_FORMAT_GRAY: {
+        nvidia::gxf::VideoFormatSize<VideoFormat::GXF_VIDEO_FORMAT_GRAY> format_size_gray;
+        image_size = format_size_gray.size(width, height);
+        break;
+      }
+    case VideoFormat::GXF_VIDEO_FORMAT_GRAY16: {
+        nvidia::gxf::VideoFormatSize<VideoFormat::GXF_VIDEO_FORMAT_GRAY16> format_size_gray16;
+        image_size = format_size_gray16.size(width, height);
+        break;
+      }
+    case VideoFormat::GXF_VIDEO_FORMAT_GRAY32: {
+        nvidia::gxf::VideoFormatSize<VideoFormat::GXF_VIDEO_FORMAT_GRAY32> format_size_gray32;
+        image_size = format_size_gray32.size(width, height);
+        break;
+      }
+    case VideoFormat::GXF_VIDEO_FORMAT_NV12: {
+        nvidia::gxf::VideoFormatSize<VideoFormat::GXF_VIDEO_FORMAT_NV12> format_size_nv12;
+        image_size = format_size_nv12.size(width, height);
+        break;
+      }
+    case VideoFormat::GXF_VIDEO_FORMAT_NV24: {
+        nvidia::gxf::VideoFormatSize<VideoFormat::GXF_VIDEO_FORMAT_NV24> format_size_nv24;
+        image_size = format_size_nv24.size(width, height);
+        break;
+      }
+    case VideoFormat::GXF_VIDEO_FORMAT_RGB32: {
+        nvidia::gxf::VideoFormatSize<VideoFormat::GXF_VIDEO_FORMAT_RGB32> format_size_rgb32;
+        image_size = format_size_rgb32.size(width, height);
+        break;
+      }
+    case VideoFormat::GXF_VIDEO_FORMAT_RGBD32: {
+        nvidia::gxf::VideoFormatSize<VideoFormat::GXF_VIDEO_FORMAT_RGBD32> format_size_rgbd32;
+        image_size = format_size_rgbd32.size(width, height);
+        break;
+      }
+    default:
+      break;
+  }
+  return image_size;
+}
+
 }  // namespace
 
 #endif  // ISAAC_ROS_NITROS_IMAGE_TYPE__NITROS_IMAGE_DETAILS_HPP_

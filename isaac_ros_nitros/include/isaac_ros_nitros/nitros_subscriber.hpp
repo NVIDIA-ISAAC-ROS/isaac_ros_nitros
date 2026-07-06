@@ -105,7 +105,7 @@ public:
 
   // The subscriber callback
   void subscriberCallback(
-    NitrosTypeBase & msg_base,
+    std::shared_ptr<NitrosTypeBase> msg_base,
     const std::string data_format_name);
 
 private:

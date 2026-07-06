@@ -1,5 +1,5 @@
 # SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
-# Copyright (c) 2022-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# Copyright (c) 2022-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -44,9 +44,10 @@ def generate_test_description():
                 plugin='nvidia::isaac_ros::nitros::NitrosTensorListForwardNode',
                 name='NitrosTensorListForwardNode',
                 namespace=test_ns,
-                parameters=[{
-                    'compatible_format': 'nitros_tensor_list_nchw'
-                }]
+                remappings=[
+                    ('tensor_list_input', 'topic_forward_input'),
+                    ('tensor_list_output', 'topic_forward_output'),
+                ]
             ),
         ],
         output='both',
@@ -124,7 +125,7 @@ class IsaacROSNitrosTensorListTest(IsaacROSBaseTest):
             # Start sending messages
             self.node.get_logger().info('Start publishing messages')
             sent_count = 0
-            end_time = time.time() + 2.0
+            end_time = time.time() + 10
             while time.time() < end_time:
                 sent_count += 1
                 pub.publish(tensor_list)

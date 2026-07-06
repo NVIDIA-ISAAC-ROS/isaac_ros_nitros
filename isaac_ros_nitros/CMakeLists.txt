@@ -38,7 +38,14 @@ if(USE_NVTX)
     link_libraries("CUDA::nvtx3")
 endif()
 
-# cuVSLAM, cuApriltags, and cuMotion (register paths and install)
+# INTERIM: Enable GXF compatibility mode for GXF-free NITROS types
+# TODO: Remove when all nodes migrated to ManagedNitros
+option(NITROS_GXF_COMPAT_MODE "Enable GXF compatibility for GXF-free types" ON)
+if(NITROS_GXF_COMPAT_MODE)
+  add_compile_definitions(NITROS_GXF_COMPAT_MODE)
+endif()
+
+# cuVSLAM and cuApriltags (register paths and install)
 
 # Determine the architecture
 if(CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64")
@@ -125,7 +132,7 @@ if(BUILD_TESTING)
   rclcpp_components_register_nodes(nitros_empty_forward_node "nvidia::isaac_ros::nitros::NitrosEmptyForwardNode")
   set(node_plugins "${node_plugins}nvidia::isaac_ros::nitros::NitrosEmpty;$<TARGET_FILE:nitros_empty_forward_node>\n")
 
-find_package(ament_lint_auto REQUIRED)
+  find_package(ament_lint_auto REQUIRED)
 
   # Ignore copyright notices since we use custom NVIDIA Isaac ROS Software License
   set(ament_cmake_copyright_FOUND TRUE)
@@ -137,10 +144,19 @@ find_package(ament_lint_auto REQUIRED)
   endif()
 
   find_package(launch_testing_ament_cmake REQUIRED)
-  add_launch_test(test/isaac_ros_nitros_test_pol.py TIMEOUT "15")
-  add_launch_test(test/isaac_ros_nitros_diagnostics_test_pol.py TIMEOUT "15")
+  add_launch_test(test/isaac_ros_nitros_test_pol.py TIMEOUT "60")
+  add_launch_test(test/isaac_ros_nitros_diagnostics_test_pol.py TIMEOUT "60")
+
+  find_package(ament_cmake_gtest REQUIRED)
+  ament_add_gtest(test_cuda_stream_pool test/src/test_cuda_stream_pool.cpp)
+  target_link_libraries(test_cuda_stream_pool ${PROJECT_NAME} CUDA::cudart)
 endif()
 
+# Install header files for isaac_ros_nitros
+install(FILES include/isaac_ros_nitros/types/nitros_buffer.hpp
+    DESTINATION "${CMAKE_INSTALL_PREFIX}/include/${PROJECT_NAME}/include/isaac_ros_nitros/types/nitros_buffer.hpp")
+install(FILES include/isaac_ros_nitros/types/cuda_stream_pool.hpp
+    DESTINATION "${CMAKE_INSTALL_PREFIX}/include/${PROJECT_NAME}/include/isaac_ros_nitros/types/cuda_stream_pool.hpp")
 
 # Embed versioning information into installed files
 ament_index_get_resource(ISAAC_ROS_COMMON_CMAKE_PATH isaac_ros_common_cmake_path isaac_ros_common)

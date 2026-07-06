@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
-// Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+// Copyright (c) 2025-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -19,18 +19,7 @@
 
 #include <sstream>
 
-#include "isaac_ros_nitros/types/type_adapter_nitros_context.hpp"
-
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wunused-parameter"
-#pragma GCC diagnostic ignored "-Wmissing-field-initializers"
-#pragma GCC diagnostic ignored "-Wpedantic"
-#include "gxf/core/entity.hpp"
-#include "gxf/core/gxf.h"
-#include "gxf/std/allocator.hpp"
-#include "gxf/std/timestamp.hpp"
-#include "messages/point_cloud_message.hpp"
-#pragma GCC diagnostic pop
+#include "isaac_ros_nitros/types/cuda_stream_pool.hpp"
 
 #include "rclcpp/rclcpp.hpp"
 
@@ -44,8 +33,6 @@ namespace nitros
 NitrosPointCloudBuilder::NitrosPointCloudBuilder()
 : nitros_point_cloud_{}
 {
-  // NOTE: we defer creation of the msg until the Build function
-  // which is done to use CreatePointCloudMessage
   RCLCPP_DEBUG(
     rclcpp::get_logger("NitrosPointCloudBuilder"),
     "[constructor] NitrosPointCloudBuilder initialized");
@@ -154,13 +141,10 @@ NitrosPointCloudBuilder & NitrosPointCloudBuilder::WithReleaseCallback(
 
 NitrosPointCloud NitrosPointCloudBuilder::Build()
 {
-  // Validate all data is present before building the NitrosPointCloud
   Validate();
 
-  // If CUDA event provided, synchronize on that event before building
   if (event_) {
     cudaError_t cuda_error = cudaEventSynchronize(event_);
-
     if (cuda_error != cudaSuccess) {
       std::stringstream error_msg;
       error_msg <<
@@ -185,119 +169,40 @@ NitrosPointCloud NitrosPointCloudBuilder::Build()
     }
   }
 
-  // Get allocator handle
-  gxf_uid_t cid;
-  GetTypeAdapterNitrosContext().getCid(
-    "memory_pool", "unbounded_allocator", "nvidia::gxf::UnboundedAllocator", cid);
-  auto maybe_allocator_handle =
-    nvidia::gxf::Handle<nvidia::gxf::Allocator>::Create(
-      GetTypeAdapterNitrosContext().getContext(), cid);
-  if (!maybe_allocator_handle) {
-    std::stringstream error_msg;
-    error_msg <<
-      "[Build] Failed to get allocator's handle: " <<
-      GxfResultStr(maybe_allocator_handle.error());
-    RCLCPP_ERROR(
-      rclcpp::get_logger("NitrosPointCloudBuilder"), error_msg.str().c_str());
-    throw std::runtime_error(error_msg.str().c_str());
-  }
-  auto allocator_handle = maybe_allocator_handle.value();
+  const uint32_t width = static_cast<uint32_t>(num_points_);
+  const uint32_t height = 1u;
+  const uint32_t point_step = use_color_ ? 16u : 12u;
+  const uint32_t row_step = point_step * width;
+  const size_t buffer_size = static_cast<size_t>(point_step) * width * height;
 
-  // Create point cloud message
-  auto maybe_point_cloud_message_parts = nvidia::isaac_ros::messages::CreatePointCloudMessage(
-    GetTypeAdapterNitrosContext().getContext(), allocator_handle, num_points_, use_color_);
-  if (!maybe_point_cloud_message_parts) {
-    std::stringstream error_msg;
-    error_msg <<
-      "[Build] Failed to create point cloud message: " << GxfResultStr(
-      maybe_point_cloud_message_parts.error());
-    RCLCPP_ERROR(
-      rclcpp::get_logger("NitrosPointCloudBuilder"), error_msg.str().c_str());
-    throw std::runtime_error(error_msg.str().c_str());
-  }
-  auto point_cloud_message_parts = maybe_point_cloud_message_parts.value();
+  auto & stream_pool = nvidia::isaac_ros::nitros::CudaStreamPool::instance();
+  cudaStream_t cuda_stream = stream_pool.acquire();
 
-  // Set point cloud info
-  point_cloud_message_parts.info->use_color = use_color_;
-  point_cloud_message_parts.info->is_bigendian = false;
+  auto deleter = [release_callback = release_callback_, &stream_pool, cuda_stream](uint8_t * p) {
+      if (p) {
+        if (release_callback) {
+          release_callback();
+        } else {
+          cudaFreeAsync(p, cuda_stream);
+        }
+      }
+      stream_pool.release(cuda_stream);
+    };
 
-  // Apply header (timestamp and frame_id)
-  point_cloud_message_parts.timestamp->acqtime =
-    header_.stamp.sec * static_cast<uint64_t>(1e9) + header_.stamp.nanosec;
+  [[maybe_unused]] auto write_handle = nitros_point_cloud_.from_external(
+    const_cast<void *>(points_data_), buffer_size,
+    width, height, point_step, row_step,
+    false /* is_bigendian */, use_color_,
+    cuda_stream, deleter);
+
   nitros_point_cloud_.frame_id = header_.frame_id;
-
-  // Copy data to the tensor
-  auto nitros_cuda_stream =
-    GetTypeAdapterNitrosContext().getCudaStreamFromNitrosGraph();
-
-  const size_t data_size = num_points_ * (use_color_ ? 4 : 3) * sizeof(float);
-
-  auto maybe_dst = point_cloud_message_parts.points->data<float>();
-  if (!maybe_dst) {
-    throw std::runtime_error("[Build] Tensor returned no data pointer");
-  }
-
-  const cudaError_t cuda_error = cudaMemcpyAsync(
-    *maybe_dst,
-    points_data_, data_size, cudaMemcpyDeviceToDevice,
-    nitros_cuda_stream);
-  if (cuda_error != cudaSuccess) {
-    std::stringstream error_msg;
-    error_msg <<
-      "[Build] cudaMemcpyAsync failed for copying point cloud data: " <<
-      cudaGetErrorName(cuda_error) <<
-      " (" << cudaGetErrorString(cuda_error) << ")";
-    RCLCPP_ERROR(
-      rclcpp::get_logger("NitrosPointCloudBuilder"), error_msg.str().c_str());
-    throw std::runtime_error(error_msg.str().c_str());
-  }
-
-  cudaError_t cuda_result = cudaStreamSynchronize(nitros_cuda_stream);
-  if (cuda_result != cudaSuccess) {
-    std::stringstream error_msg;
-    error_msg <<
-      "[Build] Stream was not able to be synchronized: " <<
-      cudaGetErrorName(cuda_result) <<
-      " (" << cudaGetErrorString(cuda_result) << ")";
-    RCLCPP_ERROR(
-      rclcpp::get_logger("NitrosPointCloudBuilder"), error_msg.str().c_str());
-    throw std::runtime_error(error_msg.str().c_str());
-  }
-
-  nitros_point_cloud_.handle = point_cloud_message_parts.message.eid();
-  GxfEntityRefCountInc(
-    GetTypeAdapterNitrosContext().getContext(),
-    point_cloud_message_parts.message.eid());
+  nitros_point_cloud_.timestamp_sec = header_.stamp.sec;
+  nitros_point_cloud_.timestamp_nsec = header_.stamp.nanosec;
 
   RCLCPP_DEBUG(
     rclcpp::get_logger("NitrosPointCloudBuilder"),
     "[Build] Point cloud built with %d points, use_color: %d", num_points_, use_color_);
 
-  // Free the input buffer since we copied the data
-  if (release_callback_) {
-    release_callback_();
-    RCLCPP_DEBUG(
-      rclcpp::get_logger("NitrosPointCloudBuilder"),
-      "[Build] Release callback invoked to free input buffer");
-  } else {
-    // Default: free GPU memory with cudaFree
-    cudaError_t free_error = cudaFree(const_cast<void *>(points_data_));
-    if (free_error != cudaSuccess) {
-      std::stringstream error_msg;
-      error_msg <<
-        "[Build] cudaFree failed: " <<
-        cudaGetErrorName(free_error) <<
-        " (" << cudaGetErrorString(free_error) << ")";
-      RCLCPP_ERROR(
-        rclcpp::get_logger("NitrosPointCloudBuilder"), error_msg.str().c_str());
-      throw std::runtime_error(error_msg.str().c_str());
-    }
-    RCLCPP_DEBUG(
-      rclcpp::get_logger("NitrosPointCloudBuilder"),
-      "[Build] Input buffer freed with cudaFree");
-  }
-
-  // Resetting data after it is done building
   points_data_ = nullptr;
   return nitros_point_cloud_;
 }

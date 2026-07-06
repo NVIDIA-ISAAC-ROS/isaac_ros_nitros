@@ -113,9 +113,7 @@ NitrosCameraDropNode::NitrosCameraDropNode(const rclcpp::NodeOptions & options)
   } else if (mode_ == modeToStringMap.at(CameraDropMode::MonoDepth)) {
     // Mode 2: Camera + CameraInfo + Depth (mono+depth)
     // Initialize depth subscriber and publisher
-    depth_sub_.subscribe(
-      this, "depth_1", input_qos_profile, rclcpp::SubscriptionOptions(),
-      depth_format_string_);
+    depth_sub_.subscribe(this, "depth_1", input_qos_profile);
     depth_pub_ = std::make_shared<
       nvidia::isaac_ros::nitros::ManagedNitrosPublisher<nvidia::isaac_ros::nitros::NitrosImage>>(
       this, "depth_1_drop", depth_format_string_);

@@ -101,8 +101,8 @@ struct NitrosFormatCallbacks
       std::shared_ptr<rclcpp::SubscriptionBase> & compatible_sub,
       const std::string & topic_name,
       const rclcpp::QoS & qos,
-      // std::function<void(std::shared_ptr<DATA_TYPE_NAME::MsgT>)> & subscriber_callback,
-      std::function<void(NitrosTypeBase &, const std::string data_format_name)> subscriber_callback,
+      std::function<void(std::shared_ptr<NitrosTypeBase>,
+      const std::string data_format_name)> subscriber_callback,
       const rclcpp::SubscriptionOptions & options)>
   createCompatibleSubscriberCallback{nullptr};
 
@@ -130,8 +130,8 @@ struct NitrosFormatCallbacks
       std::shared_ptr<negotiated::NegotiatedSubscription> negotiated_sub,
       const double weight,
       const rclcpp::QoS & qos,
-      // std::function<void(std::shared_ptr<DATA_TYPE_NAME::MsgT>)> subscriber_callback,
-      std::function<void(NitrosTypeBase &, const std::string data_format_name)> subscriber_callback,
+      std::function<void(std::shared_ptr<NitrosTypeBase>,
+      const std::string data_format_name)> subscriber_callback,
       const rclcpp::SubscriptionOptions & options)>
   addSubscriberSupportedFormatCallback{nullptr};
 
@@ -358,7 +358,8 @@ public:
     std::shared_ptr<rclcpp::SubscriptionBase> & compatible_sub,
     const std::string & topic_name,
     const rclcpp::QoS & qos,
-    std::function<void(NitrosTypeBase &, const std::string data_format_name)> subscriber_callback,
+    std::function<void(std::shared_ptr<NitrosTypeBase>,
+    const std::string data_format_name)> subscriber_callback,
     const rclcpp::SubscriptionOptions & options)
   {
     std::function<void(std::shared_ptr<const typename T::MsgT>)> internal_subscriber_callback =
@@ -422,8 +423,8 @@ public:
     std::shared_ptr<negotiated::NegotiatedSubscription> negotiated_sub,
     const double weight,
     const rclcpp::QoS & qos,
-    // std::function<void(std::shared_ptr<DATA_TYPE_NAME::MsgT>)> subscriber_callback,
-    std::function<void(NitrosTypeBase &, const std::string data_format_name)> subscriber_callback,
+    std::function<void(std::shared_ptr<NitrosTypeBase>,
+    const std::string data_format_name)> subscriber_callback,
     const rclcpp::SubscriptionOptions & options)
   {
     std::function<void(std::shared_ptr<const typename T::MsgT>)> internal_subscriber_callback =
@@ -477,14 +478,14 @@ private:
   static void subscriberCallback(
     const std::shared_ptr<const typename T::MsgT> msg,
     std::function<void(
-      NitrosTypeBase &,
+      std::shared_ptr<NitrosTypeBase>,
       const std::string data_format_name)> subscriber_callback)
   {
-    auto base_msg = (NitrosTypeBase)(*msg.get());
-    subscriber_callback(
-      base_msg,
-      T::supported_type_name
-    );
+    // Cast shared_ptr to base type pointer (no copy, no slicing)
+    // Cast away const since messages may be modified (e.g., timestamp updates)
+    auto base_msg = std::const_pointer_cast<NitrosTypeBase>(
+      std::static_pointer_cast<const NitrosTypeBase>(msg));
+    subscriber_callback(base_msg, T::supported_type_name);
   }
 };
 

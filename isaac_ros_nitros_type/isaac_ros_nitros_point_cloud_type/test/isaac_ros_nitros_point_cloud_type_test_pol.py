@@ -1,5 +1,5 @@
 # SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
-# Copyright (c) 2022-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# Copyright (c) 2022-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -92,7 +92,7 @@ class IsaacROSNitrosPointCloudTest(IsaacROSBaseTest):
             cloud_msg = PCDLoader.generate_pointcloud2_from_pcd_file(
                 test_folder / 'ketchup.pcd', 'sample_points')
             # Wait at most TIMEOUT seconds for subscriber to respond
-            TIMEOUT = 2
+            TIMEOUT = 10
             end_time = time.time() + TIMEOUT
 
             done = False

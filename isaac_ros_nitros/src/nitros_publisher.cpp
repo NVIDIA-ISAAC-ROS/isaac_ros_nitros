@@ -458,32 +458,39 @@ void NitrosPublisher::publish(const int64_t handle, const std_msgs::msg::Header 
     "[NitrosPublisher] Publishing an Nitros-typed message with timestamps updated (eid=%ld)",
     handle);
 
-  bool is_timestamp_updated = false;
+  if (handle >= 0) {
+    bool is_timestamp_updated = false;
 
-  auto msg_entity = nvidia::gxf::Entity::Shared(context_, handle);
+    auto msg_entity = nvidia::gxf::Entity::Shared(context_, handle);
 
-  uint64_t input_timestamp =
-    ros_header.stamp.sec * static_cast<uint64_t>(1e9) +
-    ros_header.stamp.nanosec;
+    uint64_t input_timestamp =
+      ros_header.stamp.sec * static_cast<uint64_t>(1e9) +
+      ros_header.stamp.nanosec;
 
-  auto maybe_input_timestamp = msg_entity->get<nvidia::gxf::Timestamp>();
-  if (maybe_input_timestamp) {
-    maybe_input_timestamp.value()->acqtime = input_timestamp;
-    is_timestamp_updated = true;
-  }
+    auto maybe_input_timestamp = msg_entity->get<nvidia::gxf::Timestamp>();
+    if (maybe_input_timestamp) {
+      maybe_input_timestamp.value()->acqtime = input_timestamp;
+      is_timestamp_updated = true;
+    }
 
-  maybe_input_timestamp = msg_entity->get<nvidia::gxf::Timestamp>("timestamp");
-  if (maybe_input_timestamp) {
-    maybe_input_timestamp.value()->acqtime = input_timestamp;
-    is_timestamp_updated = true;
-  }
+    maybe_input_timestamp = msg_entity->get<nvidia::gxf::Timestamp>("timestamp");
+    if (maybe_input_timestamp) {
+      maybe_input_timestamp.value()->acqtime = input_timestamp;
+      is_timestamp_updated = true;
+    }
 
-  if (!is_timestamp_updated) {
-    RCLCPP_ERROR(
+    if (!is_timestamp_updated) {
+      RCLCPP_ERROR(
+        node_.get_logger(),
+        "[NitrosPublisher] Failed to update timestamps in a message entity (eid=%ld) as "
+        "no Timestamp component was found",
+        handle);
+    }
+  } else {
+    RCLCPP_WARN(
       node_.get_logger(),
-      "[NitrosPublisher] Failed to update timestamps in a message entity (eid=%ld) as "
-      "no Timestamp component was found",
-      handle);
+      "[NitrosPublisher] Cannot update timestamp for buffer-based message via handle. "
+      "Use publish(NitrosTypeBase&, header) with typed message instead.");
   }
 
   publish(handle);
@@ -498,32 +505,41 @@ void NitrosPublisher::publish(
     "[NitrosPublisher] Publishing an Nitros-typed message with timestamps updated (eid=%ld)",
     base_msg.handle);
 
-  bool is_timestamp_updated = false;
+  if (base_msg.handle >= 0) {
+    bool is_timestamp_updated = false;
 
-  auto msg_entity = nvidia::gxf::Entity::Shared(context_, base_msg.handle);
+    auto msg_entity = nvidia::gxf::Entity::Shared(context_, base_msg.handle);
 
-  uint64_t input_timestamp =
-    ros_header.stamp.sec * static_cast<uint64_t>(1e9) +
-    ros_header.stamp.nanosec;
+    uint64_t input_timestamp =
+      ros_header.stamp.sec * static_cast<uint64_t>(1e9) +
+      ros_header.stamp.nanosec;
 
-  auto maybe_input_timestamp = msg_entity->get<nvidia::gxf::Timestamp>();
-  if (maybe_input_timestamp) {
-    maybe_input_timestamp.value()->acqtime = input_timestamp;
-    is_timestamp_updated = true;
-  }
+    auto maybe_input_timestamp = msg_entity->get<nvidia::gxf::Timestamp>();
+    if (maybe_input_timestamp) {
+      maybe_input_timestamp.value()->acqtime = input_timestamp;
+      is_timestamp_updated = true;
+    }
 
-  maybe_input_timestamp = msg_entity->get<nvidia::gxf::Timestamp>("timestamp");
-  if (maybe_input_timestamp) {
-    maybe_input_timestamp.value()->acqtime = input_timestamp;
-    is_timestamp_updated = true;
-  }
+    maybe_input_timestamp = msg_entity->get<nvidia::gxf::Timestamp>("timestamp");
+    if (maybe_input_timestamp) {
+      maybe_input_timestamp.value()->acqtime = input_timestamp;
+      is_timestamp_updated = true;
+    }
 
-  if (!is_timestamp_updated) {
-    RCLCPP_ERROR(
+    if (!is_timestamp_updated) {
+      RCLCPP_ERROR(
+        node_.get_logger(),
+        "[NitrosPublisher] Failed to update timestamps in a message entity (eid=%ld) as "
+        "no Timestamp component was found",
+        base_msg.handle);
+    }
+  } else {
+    base_msg.set_timestamp_sec(ros_header.stamp.sec);
+    base_msg.set_timestamp_nsec(ros_header.stamp.nanosec);
+    RCLCPP_DEBUG(
       node_.get_logger(),
-      "[NitrosPublisher] Failed to update timestamps in a message entity (eid=%ld) as "
-      "no Timestamp component was found",
-      base_msg.handle);
+      "[NitrosPublisher] Updated buffer-based message timestamp to %u.%09u",
+      ros_header.stamp.sec, ros_header.stamp.nanosec);
   }
 
   publish(base_msg);

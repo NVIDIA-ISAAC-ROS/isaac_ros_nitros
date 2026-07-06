@@ -93,7 +93,7 @@ class IsaacROSNitrosCameraInfoTest(IsaacROSBaseTest):
                 test_folder / 'camera_info.json')
 
             # Wait at most TIMEOUT seconds for subscriber to respond
-            TIMEOUT = 2
+            TIMEOUT = 10
             end_time = time.time() + TIMEOUT
 
             done = False

@@ -18,6 +18,8 @@
 #ifndef ISAAC_ROS_NITROS_BRIDGE_ROS2__TENSOR_LIST_CONVERTER_NODE_HPP_
 #define ISAAC_ROS_NITROS_BRIDGE_ROS2__TENSOR_LIST_CONVERTER_NODE_HPP_
 
+#include <cuda_runtime_api.h>
+
 #include <map>
 #include <memory>
 #include <vector>
@@ -25,17 +27,12 @@
 #include "rclcpp/rclcpp.hpp"
 
 #include "isaac_ros_common/qos.hpp"
-#include "isaac_ros_managed_nitros/managed_nitros_publisher.hpp"
-#include "isaac_ros_managed_nitros/managed_nitros_subscriber.hpp"
 
 #include "ipc_buffer_manager.hpp"
 #include "sensor_msgs/msg/image.hpp"
 #include "isaac_ros_nitros_bridge_interfaces/msg/nitros_bridge_tensor_list.hpp"
 #include "isaac_ros_nitros_tensor_list_type/nitros_tensor_list.hpp"
-#include "isaac_ros_nitros_tensor_list_type/nitros_tensor_list_builder.hpp"
-#include "isaac_ros_nitros_tensor_list_type/nitros_tensor_list_view.hpp"
 #include "isaac_ros_nitros_tensor_list_type/nitros_tensor.hpp"
-#include "isaac_ros_nitros_tensor_list_type/nitros_tensor_builder.hpp"
 
 
 namespace nvidia
@@ -53,23 +50,21 @@ public:
   ~TensorListConverterNode();
 
 private:
-  // Convert stub message into managed NITROS message
+  // Convert stub message into NITROS tensor list message
   void BridgeToROSCallback(
     const isaac_ros_nitros_bridge_interfaces::msg::NitrosBridgeTensorList::SharedPtr msg);
 
-  // Copy managed NITROS message data into IPC memory pool and convert to bridge message
-  void ROSToBridgeCallback(const nvidia::isaac_ros::nitros::NitrosTensorListView msg);
+  // Copy NITROS tensor list data into IPC memory pool and convert to bridge message
+  void ROSToBridgeCallback(const nvidia::isaac_ros::nitros::NitrosTensorList::SharedPtr msg);
 
   // Publisher for output NitrosTensorList messages
-  std::shared_ptr<nvidia::isaac_ros::nitros::ManagedNitrosPublisher<
-      nvidia::isaac_ros::nitros::NitrosTensorList>> nitros_pub_;
+  rclcpp::Publisher<nvidia::isaac_ros::nitros::NitrosTensorList>::SharedPtr nitros_pub_;
   // Publisher for output bridge messages
   rclcpp::Publisher<isaac_ros_nitros_bridge_interfaces::msg::NitrosBridgeTensorList>::SharedPtr
     nitros_bridge_pub_;
 
   // Subscription to input NitrosTensorList messages
-  std::shared_ptr<nvidia::isaac_ros::nitros::ManagedNitrosSubscriber<
-      nvidia::isaac_ros::nitros::NitrosTensorListView>> nitros_sub_;
+  rclcpp::Subscription<nvidia::isaac_ros::nitros::NitrosTensorList>::SharedPtr nitros_sub_;
   // Subscription to input bridge messages
   rclcpp::Subscription<isaac_ros_nitros_bridge_interfaces::msg::NitrosBridgeTensorList>::SharedPtr
     nitros_bridge_sub_;
@@ -82,8 +77,6 @@ private:
   std::map<int32_t, CUdeviceptr> handle_ptr_map_;
   // CUDA IPC memory pool manager
   std::shared_ptr<IPCBufferManager> ipc_buffer_manager_;
-  // Shared memory based IPC buffer for refcount and UID
-  std::shared_ptr<HostIPCBuffer> host_ipc_buffer_;
   // If received the first message
   bool first_msg_received_ = false;
   // CUDA driver context
@@ -92,6 +85,7 @@ private:
   cudaIpcEventHandle_t ipc_event_handle_;
   // CUDA event export from IPC event to synchronize the upstream
   cudaEvent_t event_;
+  cudaStream_t cuda_stream_{nullptr};
   // QoS for NITROS publishers and subscribers
   rclcpp::QoS nitros_pub_qos_;
   rclcpp::QoS nitros_sub_qos_;

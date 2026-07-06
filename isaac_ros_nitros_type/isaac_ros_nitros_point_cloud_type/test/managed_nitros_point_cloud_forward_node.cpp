@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
-// Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+// Copyright (c) 2025-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -70,24 +70,20 @@ private:
     const bool has_color = view.HasColor();
     const float * gpu_data_ptr = view.GetPointsData();
 
-    // Calculate buffer size
-    const size_t point_size = has_color ? 4 : 3;  // xyzrgb or xyz
+    const size_t point_size = has_color ? 4 : 3;
     const size_t buffer_size = point_count * point_size * sizeof(float);
 
-    // Allocate output buffer
     float * output_buffer = nullptr;
     CHECK_CUDA_ERROR(
       cudaMallocAsync(&output_buffer, buffer_size, cuda_stream_),
       "Error allocating CUDA buffer for point cloud");
 
-    // Copy data
     CHECK_CUDA_ERROR(
       cudaMemcpyAsync(
         output_buffer, gpu_data_ptr, buffer_size,
         cudaMemcpyDeviceToDevice, cuda_stream_),
       "Error copying point cloud data to CUDA buffer");
 
-    // Wait for copy to complete
     CHECK_CUDA_ERROR(
       cudaStreamSynchronize(cuda_stream_),
       "Error synchronizing CUDA stream");
@@ -108,11 +104,9 @@ private:
     nitros_pub_->publish(nitros_pc);
   }
 
-  // Subscription to input NitrosPointCloud messages
   std::shared_ptr<nvidia::isaac_ros::nitros::ManagedNitrosSubscriber<
       nvidia::isaac_ros::nitros::NitrosPointCloudView>> nitros_sub_;
 
-  // Publisher for output NitrosPointCloud messages
   std::shared_ptr<nvidia::isaac_ros::nitros::ManagedNitrosPublisher<
       nvidia::isaac_ros::nitros::NitrosPointCloud>> nitros_pub_;
 
@@ -123,7 +117,6 @@ private:
 }  // namespace isaac_ros
 }  // namespace nvidia
 
-// Register as component
 #include "rclcpp_components/register_node_macro.hpp"
 RCLCPP_COMPONENTS_REGISTER_NODE(
   nvidia::isaac_ros::nitros::ManagedNitrosPointCloudForwardNode)

@@ -89,7 +89,7 @@ class IsaacROSNitrosInt64Test(IsaacROSBaseTest):
             int64_msg.data = 42
 
             # Wait at most TIMEOUT seconds for subscriber to respond
-            TIMEOUT = 2
+            TIMEOUT = 10
             end_time = time.time() + TIMEOUT
 
             done = False

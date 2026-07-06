@@ -14,390 +14,174 @@
 // limitations under the License.
 //
 // SPDX-License-Identifier: Apache-2.0
+
+#include "isaac_ros_nitros_flat_scan_type/nitros_flat_scan.hpp"
+
 #include <cuda_runtime.h>
 
+#include <climits>
 #include <cstdint>
+#include <memory>
+#include <stdexcept>
 #include <string>
-#include <unordered_map>
 #include <vector>
-
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wunused-parameter"
-#pragma GCC diagnostic ignored "-Wmissing-field-initializers"
-#pragma GCC diagnostic ignored "-Wpedantic"
-#include "messages/flat_scan_message.hpp"
-#include "gems/pose_tree/pose_tree.hpp"
-#include "extensions/atlas/pose_tree_frame.hpp"
-#pragma GCC diagnostic pop
-
-#include "isaac_ros_common/cuda_stream.hpp"
-#include "isaac_ros_nitros_flat_scan_type/nitros_flat_scan.hpp"
-#include "isaac_ros_nitros/types/type_adapter_nitros_context.hpp"
 
 #include "rclcpp/rclcpp.hpp"
 
+#include "isaac_ros_nitros/types/cuda_stream_pool.hpp"
+
 namespace
 {
-constexpr char kMemoryEntityName[] = "memory_pool";
-constexpr char kMemoryComponentName[] = "unbounded_allocator";
-constexpr char kMemoryComponentTypeName[] = "nvidia::gxf::UnboundedAllocator";
-constexpr char kPoseTreeEntityName[] = "global_pose_tree";
-constexpr char kPoseTreeComponentName[] = "pose_tree";
-constexpr char kPoseTreeComponentTypeName[] = "nvidia::isaac::PoseTree";
-constexpr char kNameBeamsDevice[] = "beams";
-constexpr int kFlatscanAngleIndx = 0;
-constexpr int kFlatscanRangeIndx = 2;
-constexpr int kNFieldsFlatscanMsg = 5;
+constexpr char kLogTag[] = "NitrosFlatScan";
 }  // namespace
 
-template<typename Deleter>
-using unique_p = std::unique_ptr<double[], Deleter>;
-
+// NitrosFlatScan (GPU buffer, SoA) -> ROS FlatScan (CPU vectors)
+// D2H copy: device buffer -> host angles + ranges vectors
 void rclcpp::TypeAdapter<
   nvidia::isaac_ros::nitros::NitrosFlatScan,
   isaac_ros_pointcloud_interfaces::msg::FlatScan>::convert_to_ros_message(
   const custom_type & source, ros_message_type & destination)
 {
-  nvidia::isaac_ros::nitros::nvtxRangePushWrapper(
-    "NitrosFlatScan::convert_to_ros_message",
-    nvidia::isaac_ros::nitros::CLR_PURPLE);
+  RCLCPP_DEBUG(rclcpp::get_logger(kLogTag), "[convert_to_ros_message] Conversion started");
 
-  RCLCPP_DEBUG(
-    rclcpp::get_logger("NitrosFlatScan"),
-    "[convert_to_ros_message] Conversion started for handle=%ld", source.handle);
+  const uint32_t n = source.num_beams;
+  destination.angles.resize(n);
+  destination.ranges.resize(n);
 
-  auto context = nvidia::isaac_ros::nitros::GetTypeAdapterNitrosContext().getContext();
-  auto msg_entity = nvidia::gxf::Entity::Shared(context, source.handle);
+  if (n > 0) {
+    auto stream_handle =
+      nvidia::isaac_ros::nitros::CudaStreamPool::instance().get_stream_handle();
+    cudaStream_t stream = stream_handle.get();
 
-  auto maybe_flatscan_parts = nvidia::isaac_ros::messages::GetFlatscanMessage(
-    msg_entity.value());
-  if (!maybe_flatscan_parts) {
-    std::stringstream error_msg;
-    error_msg <<
-      "[convert_to_ros_message] Failed to get flatscan message from message entity: " <<
-      GxfResultStr(maybe_flatscan_parts.error());
-    RCLCPP_ERROR(
-      rclcpp::get_logger("NitrosFlatScan"), error_msg.str().c_str());
-    throw std::runtime_error(error_msg.str().c_str());
-  }
-  auto flatscan_parts = maybe_flatscan_parts.value();
+    auto read_handle = source.get_read_handle(stream);
+    const uint8_t * gpu_ptr = read_handle.get_ptr();
+    if (gpu_ptr == nullptr) {
+      throw std::runtime_error("[convert_to_ros_message] NitrosFlatScan device pointer is nullptr");
+    }
 
-  // Extract GXF Tensor
-  auto beams_tensor = flatscan_parts.beams;
-  const auto & beams_tensor_shape = beams_tensor->shape();
+    // Stream-ordered D2H copies (buffer holds [angles | ranges] in SoA layout)
+    const size_t plane_bytes = n * sizeof(float);
 
-  // Tensor checks
-  if (beams_tensor->rank() != 2) {
-    std::stringstream error_msg;
-    error_msg <<
-      "[convert_to_ros_message] Flatscan tensor expected to be of rank 2, but got rank " <<
-      beams_tensor->rank();
-    RCLCPP_ERROR(
-      rclcpp::get_logger("NitrosFlatScan"), error_msg.str().c_str());
-    throw std::runtime_error(error_msg.str().c_str());
-  }
-  if (beams_tensor_shape.dimension(1) != kNFieldsFlatscanMsg) {
-    std::stringstream error_msg;
-    error_msg <<
-      "[convert_to_ros_message] Flatscan tensor shape dimension(1) expected to be" <<
-      kNFieldsFlatscanMsg <<
-      "but got" << beams_tensor_shape.dimension(1);
-    RCLCPP_ERROR(
-      rclcpp::get_logger("NitrosFlatScan"), error_msg.str().c_str());
-    throw std::runtime_error(error_msg.str().c_str());
+    cudaError_t err = cudaMemcpyAsync(
+      destination.angles.data(), gpu_ptr, plane_bytes, cudaMemcpyDeviceToHost, stream);
+    if (err != cudaSuccess) {
+      throw std::runtime_error(
+        std::string("[convert_to_ros_message] cudaMemcpyAsync angles failed: ") +
+        cudaGetErrorString(err));
+    }
+    err = cudaMemcpyAsync(
+      destination.ranges.data(), gpu_ptr + plane_bytes, plane_bytes,
+      cudaMemcpyDeviceToHost, stream);
+    if (err != cudaSuccess) {
+      throw std::runtime_error(
+        std::string("[convert_to_ros_message] cudaMemcpyAsync ranges failed: ") +
+        cudaGetErrorString(err));
+    }
+    err = cudaStreamSynchronize(stream);
+    if (err != cudaSuccess) {
+      throw std::runtime_error(
+        std::string("[convert_to_ros_message] cudaStreamSynchronize failed: ") +
+        cudaGetErrorString(err));
+    }
   }
 
-  // Tensor is assumed to be of shape (num_points,kNFieldsFlatscanMsg)
-  size_t num_points = beams_tensor_shape.dimension(0);
+  destination.range_max = source.range_max;
+  destination.range_min = source.range_min;
+  destination.header.stamp.sec = static_cast<int32_t>(source.timestamp_sec);
+  destination.header.stamp.nanosec = source.timestamp_nsec;
+  destination.header.frame_id = source.frame_id;
 
-  // allocate CPU memory in case tensor for use
-  // in case tensor is GPU based
-  // using char to represnt 1 byte pointer
-  auto deleter = [](double * ptr) {cudaFreeHost(ptr);};
-  auto pointerCudaMalloc = [](size_t mySize) {
-      void * ptr; cudaMallocHost(reinterpret_cast<void **>(&ptr), mySize); return ptr;
-    };
-  unique_p<decltype(deleter)> beams_cpu_pointer(
-    reinterpret_cast<double *>(pointerCudaMalloc(beams_tensor->size())), deleter);
-
-  ::nvidia::isaac::CpuTensorView2d beams_tensor_view;
-  switch (beams_tensor->storage_type()) {
-    case nvidia::gxf::MemoryStorageType::kHost:
-      {
-        // CPU based tensor
-        beams_tensor_view = ::nvidia::isaac::CreateCpuTensorViewFromData<double,
-            2>(
-          beams_tensor->data<double>().value(), beams_tensor_shape.size(),
-          ::nvidia::isaac::Vector2i(
-            beams_tensor_shape.dimension(0), beams_tensor_shape.dimension(1)));
-      }
-      break;
-    case nvidia::gxf::MemoryStorageType::kDevice:
-      {
-        // GPU based tensor
-        // Copy beams tensor off device to CPU memory
-        const cudaError_t cuda_error = cudaMemcpyAsync(
-          beams_cpu_pointer.get(), beams_tensor->pointer(),
-          beams_tensor->size(), cudaMemcpyDeviceToHost, source.cuda_stream);
-        if (cuda_error != cudaSuccess) {
-          std::stringstream error_msg;
-          error_msg <<
-            "[convert_to_ros_message] cudaMemcpyAsync failed for conversion from "
-            "gxf::Tensor to ROS FlatScan: " <<
-            cudaGetErrorName(cuda_error) <<
-            " (" << cudaGetErrorString(cuda_error) << ")";
-          RCLCPP_ERROR(
-            rclcpp::get_logger("NitrosFlatScan"), error_msg.str().c_str());
-          throw std::runtime_error(error_msg.str().c_str());
-        }
-        cudaError_t cuda_result = cudaStreamSynchronize(source.cuda_stream);
-        CHECK_CUDA_ERROR(cuda_result, "Stream was not able to be synchronized");
-        beams_tensor_view =
-          ::nvidia::isaac::CreateCpuTensorViewFromData<double, 2>(
-          beams_cpu_pointer.get(), beams_tensor_shape.size(),
-          ::nvidia::isaac::Vector2i(
-            beams_tensor_shape.dimension(0), beams_tensor_shape.dimension(1)));
-      }
-      break;
-    default:
-      std::string error_msg =
-        "[convert_to_ros_message] MemoryStorageType not supported: conversion from "
-        "gxf::Tensor to ROS FlatScan!";
-      RCLCPP_ERROR(
-        rclcpp::get_logger("NitrosFlatScan"), error_msg.c_str());
-      throw std::runtime_error(error_msg.c_str());
-  }
-
-  // iterate through each point and convert float64 beam range and intensity to float32
-  // This is required since the data is stored as a double in the isaac message but as a float32
-  // in the ros message
-  for (size_t i = 0; i < num_points; i += 1) {
-    // index 0 corresponds to angle refer flatscan_types.hpp
-    destination.ranges.push_back(static_cast<float>(beams_tensor_view(i, kFlatscanRangeIndx)));
-    // index 2 corresponds to range refer flatscan_types.hpp
-    destination.angles.push_back(static_cast<float>(beams_tensor_view(i, kFlatscanAngleIndx)));
-  }
-
-  destination.range_max = static_cast<float>(flatscan_parts.info->out_of_range);
-  destination.range_min = 0.0;  // range_min not present in gxf flatscan message
-
-  // Populate timestamp information back into ROS header
-  auto input_timestamp = flatscan_parts.timestamp;
-  if (input_timestamp) {
-    destination.header.stamp.sec = static_cast<int32_t>(
-      input_timestamp->acqtime / static_cast<uint64_t>(1e9));
-    destination.header.stamp.nanosec = static_cast<uint32_t>(
-      input_timestamp->acqtime % static_cast<uint64_t>(1e9));
-  }
-
-  // Get pointer to posetree component
-  gxf_uid_t cid;
-  nvidia::isaac_ros::nitros::GetTypeAdapterNitrosContext().getCid(
-    kPoseTreeEntityName, kPoseTreeComponentName, kPoseTreeComponentTypeName, cid);
-  auto maybe_pose_tree_handle =
-    nvidia::gxf::Handle<nvidia::isaac::PoseTree>::Create(context, cid);
-  if (!maybe_pose_tree_handle) {
-    std::stringstream error_msg;
-    error_msg <<
-      "[convert_to_custom] Failed to get pose tree's handle: " <<
-      GxfResultStr(maybe_pose_tree_handle.error());
-    RCLCPP_ERROR(
-      rclcpp::get_logger("NitrosFlatScan"), error_msg.str().c_str());
-    throw std::runtime_error(error_msg.str().c_str());
-  }
-  auto pose_tree_handle = maybe_pose_tree_handle.value();
-  auto frame_name = pose_tree_handle->getFrameName(flatscan_parts.pose_frame_uid->uid);
-  if (frame_name) {
-    destination.header.frame_id = frame_name.value();
-  } else {
-    RCLCPP_WARN(
-      rclcpp::get_logger("NitrosFlatScan"), "Setting frame if from NITROS msg");
-    // Set NITROS frame id as fallback method of populating frame_id
-    // Set frame ID
-    destination.header.frame_id = source.frame_id;
-  }
-
-  RCLCPP_DEBUG(
-    rclcpp::get_logger("NitrosFlatScan"),
-    "[convert_to_ros_message] Conversion completed");
-
-  nvidia::isaac_ros::nitros::nvtxRangePopWrapper();
+  RCLCPP_DEBUG(rclcpp::get_logger(kLogTag), "[convert_to_ros_message] Conversion completed");
 }
 
+// ROS FlatScan (CPU vectors) -> NitrosFlatScan (GPU buffer, SoA)
+// H2D copy: host angles + ranges -> device buffer
 void rclcpp::TypeAdapter<
   nvidia::isaac_ros::nitros::NitrosFlatScan,
   isaac_ros_pointcloud_interfaces::msg::FlatScan>::convert_to_custom(
   const ros_message_type & source,
   custom_type & destination)
 {
-  nvidia::isaac_ros::nitros::nvtxRangePushWrapper(
-    "NitrosFlatScan::convert_to_custom",
-    nvidia::isaac_ros::nitros::CLR_PURPLE);
+  RCLCPP_DEBUG(rclcpp::get_logger(kLogTag), "[convert_to_custom] Conversion started");
 
-  RCLCPP_DEBUG(
-    rclcpp::get_logger("NitrosFlatScan"),
-    "[convert_to_custom] Conversion started");
-
-  auto context = nvidia::isaac_ros::nitros::GetTypeAdapterNitrosContext().getContext();
-
-  // Get pointer to allocator component
-  gxf_uid_t cid;
-  nvidia::isaac_ros::nitros::GetTypeAdapterNitrosContext().getCid(
-    kMemoryEntityName, kMemoryComponentName, kMemoryComponentTypeName, cid);
-  auto maybe_allocator_handle =
-    nvidia::gxf::Handle<nvidia::gxf::Allocator>::Create(context, cid);
-  if (!maybe_allocator_handle) {
-    std::stringstream error_msg;
-    error_msg <<
-      "[convert_to_custom] Failed to get allocator's handle: " <<
-      GxfResultStr(maybe_allocator_handle.error());
+  if (source.angles.size() != source.ranges.size()) {
     RCLCPP_ERROR(
-      rclcpp::get_logger("NitrosFlatScan"), error_msg.str().c_str());
-    throw std::runtime_error(error_msg.str().c_str());
+      rclcpp::get_logger(kLogTag),
+      "[convert_to_custom] angles size (%zu) != ranges size (%zu)",
+      source.angles.size(), source.ranges.size());
+    throw std::runtime_error("[convert_to_custom] angles/ranges size mismatch");
   }
-  auto allocator_handle = maybe_allocator_handle.value();
-
-  if (source.ranges.size() != source.angles.size()) {
-    std::stringstream error_msg;
-    error_msg <<
-      "[convert_to_custom] Ranges and Angles array do not have the same size" <<
-      "Ranges array size " << source.ranges.size() <<
-      "Angles array size " << source.angles.size();
-    RCLCPP_ERROR(
-      rclcpp::get_logger("NitrosFlatScan"), error_msg.str().c_str());
-    throw std::runtime_error(error_msg.str().c_str());
+  if (source.angles.size() > UINT32_MAX) {
+    throw std::length_error(
+      "[convert_to_custom] FlatScan angles size exceeds uint32_t range");
   }
-  const int n_points = source.ranges.size();
+  const uint32_t n = static_cast<uint32_t>(source.angles.size());
+  const size_t plane_bytes = n * sizeof(float);
+  const size_t total_bytes = plane_bytes * 2;
 
-  auto maybe_flatscan_parts = nvidia::isaac_ros::messages::CreateFlatscanMessage(
-    context, allocator_handle, n_points, false);
-  if (!maybe_flatscan_parts) {
-    std::stringstream error_msg;
-    error_msg <<
-      "[convert_to_ros_message] Failed to create CreatePointCloudMessage " << GxfResultStr(
-      maybe_flatscan_parts.error());
-    RCLCPP_ERROR(
-      rclcpp::get_logger("NitrosFlatScan"), error_msg.str().c_str());
-    throw std::runtime_error(error_msg.str().c_str());
-  }
-  auto flatscan_parts = maybe_flatscan_parts.value();
+  nvidia::isaac_ros::nitros::NitrosFlatScan msg_temp;
+  msg_temp.num_beams = n;
+  msg_temp.range_max = source.range_max;
+  msg_temp.range_min = source.range_min;
 
-  auto beams_tensor = flatscan_parts.beams;
+  if (n > 0) {
+    auto & stream_pool = nvidia::isaac_ros::nitros::CudaStreamPool::instance();
+    cudaStream_t stream = stream_pool.acquire();
 
-  // allocate CPU memory in case tensor for use
-  // in case tensor is GPU based
-  // using char to represnt 1 byte pointer
-  size_t beams_size_bytes = n_points * sizeof(double) * kNFieldsFlatscanMsg;
-  auto deleter = [](double * ptr) {cudaFreeHost(ptr);};
-  unique_p<decltype(deleter)> beams_cpu_pointer(new double[n_points], deleter);
-  cudaMallocHost(reinterpret_cast<void **>(&beams_cpu_pointer), beams_size_bytes);
-  ::nvidia::isaac::CpuTensorView2d beams_tensor_view =
-    ::nvidia::isaac::CreateCpuTensorViewFromData<double, 2>(
-    beams_cpu_pointer.get(), beams_size_bytes,
-    ::nvidia::isaac::Vector2i(n_points, kNFieldsFlatscanMsg));
-  for (int point_index = 0; point_index < n_points; point_index++) {
-    beams_tensor_view(point_index, kFlatscanAngleIndx) = source.angles[point_index];
-    beams_tensor_view(point_index, kFlatscanRangeIndx) = source.ranges[point_index];
-  }
-  auto nitros_cuda_stream =
-    nvidia::isaac_ros::nitros::GetTypeAdapterNitrosContext()
-    .getCudaStreamFromNitrosGraph();
-  switch (beams_tensor->storage_type()) {
-    case nvidia::gxf::MemoryStorageType::kHost:
-      {
-        // CPU based tensor
-        // Copy data from CPU to CPU backed gxf tensor.
-        const cudaError_t cuda_error = cudaMemcpyAsync(
-          beams_tensor->data<double>().value(),
-          beams_cpu_pointer.get(),
-          beams_size_bytes, cudaMemcpyHostToHost, nitros_cuda_stream);
-        if (cuda_error != cudaSuccess) {
-          std::stringstream error_msg;
-          error_msg <<
-            "[convert_to_custom] cudaMemcpyAsync failed for copying data from "
-            "CPU to CPU: " <<
-            cudaGetErrorName(cuda_error) <<
-            " (" << cudaGetErrorString(cuda_error) << ")";
-          cudaError_t cuda_result = cudaStreamSynchronize(nitros_cuda_stream);
-          CHECK_CUDA_ERROR(cuda_result, "Stream was not able to be synchronized");
-          RCLCPP_ERROR(
-            rclcpp::get_logger("NitrosFlatScan"), error_msg.str().c_str());
-          throw std::runtime_error(error_msg.str().c_str());
+    uint8_t * d_ptr = nullptr;
+    cudaError_t err = cudaMallocAsync(
+      reinterpret_cast<void **>(&d_ptr), total_bytes, stream);
+    if (err != cudaSuccess) {
+      stream_pool.release(stream);
+      throw std::runtime_error(
+        std::string("[convert_to_custom] cudaMallocAsync failed: ") +
+        cudaGetErrorString(err));
+    }
+
+    auto deleter = [&stream_pool, stream](uint8_t * p) {
+        if (p) {
+          cudaFreeAsync(p, stream);
         }
-      }
-      break;
-    case nvidia::gxf::MemoryStorageType::kDevice:
-      {
-        // GPU based tensor
-        // Copy data from CPU to GPU backed gxf tensor.
-        const cudaError_t cuda_error = cudaMemcpyAsync(
-          beams_tensor->data<double>().value(),
-          beams_cpu_pointer.get(),
-          beams_size_bytes, cudaMemcpyHostToDevice, nitros_cuda_stream);
-        if (cuda_error != cudaSuccess) {
-          std::stringstream error_msg;
-          error_msg <<
-            "[convert_to_custom] cudaMemcpyAsync failed for copying data from "
-            "CPU to GPU: " <<
-            cudaGetErrorName(cuda_error) <<
-            " (" << cudaGetErrorString(cuda_error) << ")";
-          RCLCPP_ERROR(
-            rclcpp::get_logger("NitrosFlatScan"), error_msg.str().c_str());
-          throw std::runtime_error(error_msg.str().c_str());
-        }
-      }
-      break;
-    default:
-      std::string error_msg =
-        "[convert_to_ros_message] MemoryStorageType not supported: conversion from "
-        "ROS FlatScan to gxf::Tensor failed!";
-      RCLCPP_ERROR(
-        rclcpp::get_logger("NitrosFlatScan"), error_msg.c_str());
-      throw std::runtime_error(error_msg.c_str());
+        stream_pool.release(stream);
+      };
+
+    // RAII guard owns (d_ptr, stream) until from_external takes over. If
+    // from_external throws (e.g. bad_alloc in make_shared<NitrosBuffer>),
+    // the guard runs the same cleanup the NitrosBuffer deleter would have.
+    std::unique_ptr<uint8_t, decltype(deleter)> guard(d_ptr, deleter);
+
+    // from_external binds the device buffer to msg_temp and returns a WriteHandle;
+    // its dtor records a write event on `stream` that the next get_read_handle() waits on.
+    auto write_handle = msg_temp.from_external(
+      d_ptr, total_bytes, n, source.range_max, source.range_min, stream, deleter);
+
+    // NitrosBuffer now owns (d_ptr, stream); its embedded deleter is the sole
+    // cleanup owner from this point on. Release the guard without running it.
+    (void)guard.release();
+
+    // Stream-ordered H2D copies (angles then ranges, SoA layout)
+    err = cudaMemcpyAsync(
+      write_handle.get_ptr(), source.angles.data(), plane_bytes,
+      cudaMemcpyHostToDevice, stream);
+    if (err != cudaSuccess) {
+      throw std::runtime_error(
+        std::string("[convert_to_custom] cudaMemcpyAsync angles failed: ") +
+        cudaGetErrorString(err));
+    }
+    err = cudaMemcpyAsync(
+      write_handle.get_ptr() + plane_bytes, source.ranges.data(), plane_bytes,
+      cudaMemcpyHostToDevice, stream);
+    if (err != cudaSuccess) {
+      throw std::runtime_error(
+        std::string("[convert_to_custom] cudaMemcpyAsync ranges failed: ") +
+        cudaGetErrorString(err));
+    }
   }
 
-  flatscan_parts.info->out_of_range = source.range_max;
-
-  // Add timestamp to the message
-  uint64_t input_timestamp =
-    source.header.stamp.sec * static_cast<uint64_t>(1e9) +
-    source.header.stamp.nanosec;
-  flatscan_parts.timestamp->acqtime = input_timestamp;
-
-  // Get pointer to posetree component
-  nvidia::isaac_ros::nitros::GetTypeAdapterNitrosContext().getCid(
-    kPoseTreeEntityName, kPoseTreeComponentName, kPoseTreeComponentTypeName, cid);
-  auto maybe_pose_tree_handle =
-    nvidia::gxf::Handle<nvidia::isaac::PoseTree>::Create(context, cid);
-  if (!maybe_pose_tree_handle) {
-    std::stringstream error_msg;
-    error_msg <<
-      "[convert_to_custom] Failed to get pose tree's handle: " <<
-      GxfResultStr(maybe_pose_tree_handle.error());
-    RCLCPP_ERROR(
-      rclcpp::get_logger("NitrosFlatScan"), error_msg.str().c_str());
-    throw std::runtime_error(error_msg.str().c_str());
-  }
-  auto pose_tree_handle = maybe_pose_tree_handle.value();
-  auto maybe_flat_scan_frame_uid = pose_tree_handle->findOrCreateFrame(
-    source.header.frame_id.c_str());
-  if (maybe_flat_scan_frame_uid) {
-    flatscan_parts.pose_frame_uid->uid = maybe_flat_scan_frame_uid.value();
-  } else {
-    RCLCPP_WARN(
-      rclcpp::get_logger("NitrosFlatScan"), "Could not create Pose Tree Frame");
-  }
-
-  // Set NITROS frame id as fallback method of populating frame_id
+  destination = std::move(msg_temp);
+  destination.timestamp_sec = static_cast<uint32_t>(source.header.stamp.sec);
+  destination.timestamp_nsec = source.header.stamp.nanosec;
   destination.frame_id = source.header.frame_id;
 
-  // Set Entity Id
-  destination.handle = flatscan_parts.entity.eid();
-  GxfEntityRefCountInc(context, flatscan_parts.entity.eid());
-
-  RCLCPP_DEBUG(
-    rclcpp::get_logger("NitrosFlatScan"),
-    "[convert_to_custom] Conversion completed");
-
-  nvidia::isaac_ros::nitros::nvtxRangePopWrapper();
+  RCLCPP_DEBUG(rclcpp::get_logger(kLogTag), "[convert_to_custom] Conversion completed");
 }

@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
-// Copyright (c) 2022-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+// Copyright (c) 2022-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -17,29 +17,78 @@
 
 #include <cuda_runtime.h>
 
+#include <sstream>
 #include <string>
 #include <vector>
 
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wunused-parameter"
-#pragma GCC diagnostic ignored "-Wmissing-field-initializers"
-#pragma GCC diagnostic ignored "-Wpedantic"
-#include "gxf/core/entity.hpp"
-#include "gxf/core/gxf.h"
-#include "gxf/std/tensor.hpp"
-#include "gxf/std/timestamp.hpp"
-#pragma GCC diagnostic pop
-
 #include "isaac_ros_common/cuda_stream.hpp"
+#include "isaac_ros_nitros/types/cuda_stream_pool.hpp"
 #include "isaac_ros_nitros_tensor_list_type/nitros_tensor_list.hpp"
-#include "isaac_ros_nitros/types/type_adapter_nitros_context.hpp"
-
+#include "isaac_ros_nitros_tensor_list_type/nitros_tensor_shape.hpp"
 #include "rclcpp/rclcpp.hpp"
 
+size_t nitros_compute_tensor_size(const nvidia::isaac_ros::nitros::NitrosTensor & tensor)
+{
+  return tensor.bytes_per_element() * tensor.element_count();
+}
 
-constexpr char kEntityName[] = "memory_pool";
-constexpr char kComponentName[] = "unbounded_allocator";
-constexpr char kComponentTypeName[] = "nvidia::gxf::UnboundedAllocator";
+nvidia::isaac_ros::nitros::NitrosDataType
+nvidia::isaac_ros::nitros::convert_to_nitros_data_type(int32_t data_type)
+{
+  switch (data_type) {
+    case 1:
+      return nvidia::isaac_ros::nitros::NitrosDataType::kInt8;
+    case 2:
+      return nvidia::isaac_ros::nitros::NitrosDataType::kUnsigned8;
+    case 3:
+      return nvidia::isaac_ros::nitros::NitrosDataType::kInt16;
+    case 4:
+      return nvidia::isaac_ros::nitros::NitrosDataType::kUnsigned16;
+    case 5:
+      return nvidia::isaac_ros::nitros::NitrosDataType::kInt32;
+    case 6:
+      return nvidia::isaac_ros::nitros::NitrosDataType::kUnsigned32;
+    case 7:
+      return nvidia::isaac_ros::nitros::NitrosDataType::kInt64;
+    case 8:
+      return nvidia::isaac_ros::nitros::NitrosDataType::kUnsigned64;
+    case 9:
+      return nvidia::isaac_ros::nitros::NitrosDataType::kFloat32;
+    case 10:
+      return nvidia::isaac_ros::nitros::NitrosDataType::kFloat64;
+    default:
+      return nvidia::isaac_ros::nitros::NitrosDataType::kUnknown;
+  }
+}
+
+int32_t nvidia::isaac_ros::nitros::convert_to_ros_data_type(
+  nvidia::isaac_ros::nitros::NitrosDataType nitros_data_type)
+{
+  switch (nitros_data_type) {
+    case nvidia::isaac_ros::nitros::NitrosDataType::kInt8:
+      return 1;
+    case nvidia::isaac_ros::nitros::NitrosDataType::kUnsigned8:
+      return 2;
+    case nvidia::isaac_ros::nitros::NitrosDataType::kInt16:
+      return 3;
+    case nvidia::isaac_ros::nitros::NitrosDataType::kUnsigned16:
+      return 4;
+    case nvidia::isaac_ros::nitros::NitrosDataType::kInt32:
+      return 5;
+    case nvidia::isaac_ros::nitros::NitrosDataType::kUnsigned32:
+      return 6;
+    case nvidia::isaac_ros::nitros::NitrosDataType::kInt64:
+      return 7;
+    case nvidia::isaac_ros::nitros::NitrosDataType::kUnsigned64:
+      return 8;
+    case nvidia::isaac_ros::nitros::NitrosDataType::kFloat32:
+      return 9;
+    case nvidia::isaac_ros::nitros::NitrosDataType::kFloat64:
+      return 10;
+    default:
+      return 0;
+  }
+}
 
 void rclcpp::TypeAdapter<
   nvidia::isaac_ros::nitros::NitrosTensorList,
@@ -53,90 +102,85 @@ void rclcpp::TypeAdapter<
 
   RCLCPP_DEBUG(
     rclcpp::get_logger("NitrosTensorList"),
-    "[convert_to_ros_message] Conversion started for handle = %ld", source.handle);
+    "[convert_to_ros_message] Conversion started for NitrosTensorList");
 
-  auto msg_entity = nvidia::gxf::Entity::Shared(
-    nvidia::isaac_ros::nitros::GetTypeAdapterNitrosContext().getContext(), source.handle);
-
-  auto gxf_tensors = msg_entity->findAll<nvidia::gxf::Tensor>();
-  if (!gxf_tensors) {
-    std::stringstream error_msg;
-    error_msg <<
-      "[convert_to_ros_message] failed to get all GXF tensors: " <<
-      GxfResultStr(gxf_tensors.error());
-    RCLCPP_ERROR(
-      rclcpp::get_logger("NitrosTensorList"), error_msg.str().c_str());
-    throw std::runtime_error(error_msg.str().c_str());
+  auto stream_handle = nvidia::isaac_ros::nitros::CudaStreamPool::instance().get_stream_handle();
+  cudaStream_t stream = stream_handle.get();
+  if (stream == nullptr) {
+    throw std::runtime_error("NitrosTensorList stream is nullptr");
   }
-  for (auto gxf_tensor_handle : gxf_tensors.value()) {
-    auto gxf_tensor = gxf_tensor_handle.value();
-    // Create ROS 2 Tensor and populate the message object's fields
+
+  for (auto nitros_tensor : source.get_tensors()) {
     auto ros_tensor = isaac_ros_tensor_list_interfaces::msg::Tensor();
-    ros_tensor.name = gxf_tensor.name();
-    ros_tensor.data_type = static_cast<int32_t>(gxf_tensor->element_type());
-    ros_tensor.shape.rank = gxf_tensor->shape().rank();
+    ros_tensor.name = nitros_tensor.get_name();
+    ros_tensor.data_type = nvidia::isaac_ros::nitros::convert_to_ros_data_type(
+      nitros_tensor.data_type());
+    ros_tensor.shape.rank = nitros_tensor.shape().rank();
+    for (size_t i = 0; i < nitros_tensor.shape().rank(); i++) {
+      ros_tensor.shape.dims.push_back(nitros_tensor.shape().dims()[i]);
+      ros_tensor.strides.push_back(nitros_tensor.strides()[i]);
+    }
 
-    // Moving data from GXF tensor to ROS tensor message
-    ros_tensor.data.resize(gxf_tensor->size());
-
-    switch (gxf_tensor->storage_type()) {
-      case nvidia::gxf::MemoryStorageType::kHost:
+    switch (source.get_storage_type()) {
+      case cudaMemoryTypeHost:
         {
-          // This is using non pinned memory, so not need for synchronization inside the same
-          // stream
-          std::memcpy(ros_tensor.data.data(), gxf_tensor->pointer(), gxf_tensor->size());
+          nvidia::isaac_ros::nitros::ReadHandle read_handle = nitros_tensor.get_read_handle(stream);
+          size_t size = nitros_compute_tensor_size(nitros_tensor);
+          ros_tensor.data.resize(size);
+          std::memcpy(ros_tensor.data.data(), read_handle.get_ptr(), size);
         }
         break;
-      case nvidia::gxf::MemoryStorageType::kDevice:
+      case cudaMemoryTypeDevice:
         {
+          nvidia::isaac_ros::nitros::ReadHandle read_handle =
+            nitros_tensor.get_read_handle(stream);
+          size_t size = nitros_compute_tensor_size(nitros_tensor);
+          const uint8_t * dev_ptr = read_handle.get_ptr();
+          if (dev_ptr == nullptr) {
+            throw std::runtime_error("NitrosTensor device pointer is nullptr");
+          }
+          ros_tensor.data.resize(size);
           cudaError_t cuda_error = cudaMemcpyAsync(
-            ros_tensor.data.data(), gxf_tensor->pointer(),
-            gxf_tensor->size(), cudaMemcpyDeviceToHost, source.cuda_stream);
+            ros_tensor.data.data(), dev_ptr,
+            size, cudaMemcpyDeviceToHost, stream);
           if (cuda_error != cudaSuccess) {
             std::stringstream error_msg;
             error_msg <<
               "[convert_to_ros_message] cudaMemcpy failed for conversion from "
-              "gxf::Tensor to ROS Tensor: " <<
+              "NitrosTensor to ROS Tensor: " <<
               cudaGetErrorName(cuda_error) <<
               " (" << cudaGetErrorString(cuda_error) << ")";
             RCLCPP_ERROR(
               rclcpp::get_logger("NitrosTensorList"), error_msg.str().c_str());
             throw std::runtime_error(error_msg.str().c_str());
           }
-          cudaError_t cuda_result = cudaStreamSynchronize(source.cuda_stream);
-          CHECK_CUDA_ERROR(cuda_result, "Stream was not able to be synchronized");
+          cuda_error = cudaStreamSynchronize(stream);
+          if (cuda_error != cudaSuccess) {
+            std::stringstream error_msg;
+            error_msg <<
+              "[convert_to_ros_message] cudaStreamSynchronize failed: " <<
+              cudaGetErrorName(cuda_error) << " (" << cudaGetErrorString(cuda_error) << ")";
+            RCLCPP_ERROR(rclcpp::get_logger("NitrosTensorList"), error_msg.str().c_str());
+            throw std::runtime_error(error_msg.str().c_str());
+          }
         }
         break;
       default:
         std::string error_msg =
           "[convert_to_ros_message] MemoryStorageType not supported: conversion from "
-          "gxf::Tensor to ROS Tensor failed!";
+          "Tensor to ROS Tensor failed!";
         RCLCPP_ERROR(
           rclcpp::get_logger("NitrosTensorList"), error_msg.c_str());
         throw std::runtime_error(error_msg.c_str());
     }
-
-    for (size_t i = 0; i < gxf_tensor->shape().rank(); i++) {
-      ros_tensor.shape.dims.push_back(gxf_tensor->shape().dimension(i));
-      ros_tensor.strides.push_back(gxf_tensor->stride(i));
-    }
     destination.tensors.push_back(ros_tensor);
   }
 
-  // Populate timestamp information back into ROS header
-  auto input_timestamp = msg_entity->get<nvidia::gxf::Timestamp>("timestamp");
-  if (!input_timestamp) {    // Fallback to label 'timestamp'
-    input_timestamp = msg_entity->get<nvidia::gxf::Timestamp>();
-  }
-  if (input_timestamp) {
-    destination.header.stamp.sec = static_cast<int32_t>(
-      input_timestamp.value()->acqtime / static_cast<uint64_t>(1e9));
-    destination.header.stamp.nanosec = static_cast<uint32_t>(
-      input_timestamp.value()->acqtime % static_cast<uint64_t>(1e9));
-  }
-
-  // Set frame ID
-  destination.header.frame_id = source.frame_id;
+  destination.header.stamp.sec = static_cast<int32_t>(
+    source.get_timestamp_sec());
+  destination.header.stamp.nanosec = static_cast<uint32_t>(
+    source.get_timestamp_nsec());
+  destination.header.frame_id = source.get_frame_id();
 
   RCLCPP_DEBUG(
     rclcpp::get_logger("NitrosTensorList"),
@@ -158,159 +202,68 @@ void rclcpp::TypeAdapter<
     rclcpp::get_logger("NitrosTensorList"),
     "[convert_to_custom] Conversion started");
 
-  // Get pointer to allocator component
-  gxf_uid_t cid;
-  nvidia::isaac_ros::nitros::GetTypeAdapterNitrosContext().getCid(
-    kEntityName, kComponentName, kComponentTypeName, cid);
+  auto & stream_pool = nvidia::isaac_ros::nitros::CudaStreamPool::instance();
+  cudaStream_t stream = stream_pool.acquire();
 
-  auto maybe_allocator_handle =
-    nvidia::gxf::Handle<nvidia::gxf::Allocator>::Create(
-    nvidia::isaac_ros::nitros::GetTypeAdapterNitrosContext().getContext(), cid);
-  if (!maybe_allocator_handle) {
-    std::stringstream error_msg;
-    error_msg <<
-      "[convert_to_custom] Failed to get allocator's handle: " <<
-      GxfResultStr(maybe_allocator_handle.error());
-    RCLCPP_ERROR(
-      rclcpp::get_logger("NitrosTensorList"), error_msg.str().c_str());
-    throw std::runtime_error(error_msg.str().c_str());
-  }
-  auto allocator_handle = maybe_allocator_handle.value();
+  destination.set_storage_type(cudaMemoryTypeDevice);
 
-  auto message = nvidia::gxf::Entity::New(
-    nvidia::isaac_ros::nitros::GetTypeAdapterNitrosContext().getContext());
-  if (!message) {
-    std::stringstream error_msg;
-    error_msg <<
-      "[convert_to_custom] Error initializing new message entity: " <<
-      GxfResultStr(message.error());
-    RCLCPP_ERROR(
-      rclcpp::get_logger("NitrosTensorList"), error_msg.str().c_str());
-    throw std::runtime_error(error_msg.str().c_str());
-  }
-  for (size_t i = 0; i < source.tensors.size(); i++) {
-    auto ros_tensor = source.tensors[i];
-    auto gxf_tensor = message->add<nvidia::gxf::Tensor>(ros_tensor.name.c_str());
-    std::array<int32_t, nvidia::gxf::Shape::kMaxRank> dims;
-    std::copy(
-      std::begin(ros_tensor.shape.dims), std::end(ros_tensor.shape.dims),
-      std::begin(dims));
+  auto stream_releaser = std::shared_ptr<void>(nullptr, [&stream_pool, stream](void *) {
+        stream_pool.release(stream);
+      });
 
-    nvidia::gxf::Expected<void> result;
-    nvidia::gxf::MemoryStorageType storage_type = nvidia::gxf::MemoryStorageType::kDevice;
-    // Initializing GXF tensor
-    nvidia::gxf::PrimitiveType type =
-      static_cast<nvidia::gxf::PrimitiveType>(ros_tensor.data_type);
-    RCLCPP_DEBUG(
-      rclcpp::get_logger("NitrosTensorList"),
-      "[convert_to_custom] dims[0]=%d, rank=%d, storage_type=%d",
-      dims[0], ros_tensor.shape.rank, (int)storage_type);
-    switch (type) {
-      case nvidia::gxf::PrimitiveType::kUnsigned8:
-        result = gxf_tensor.value()->reshape<uint8_t>(
-          nvidia::gxf::Shape(dims, ros_tensor.shape.rank), storage_type, allocator_handle);
-        break;
-      case nvidia::gxf::PrimitiveType::kInt8:
-        result = gxf_tensor.value()->reshape<int8_t>(
-          nvidia::gxf::Shape(dims, ros_tensor.shape.rank), storage_type, allocator_handle);
-        break;
-      case nvidia::gxf::PrimitiveType::kUnsigned16:
-        result = gxf_tensor.value()->reshape<uint16_t>(
-          nvidia::gxf::Shape(dims, ros_tensor.shape.rank), storage_type, allocator_handle);
-        break;
-      case nvidia::gxf::PrimitiveType::kInt16:
-        result = gxf_tensor.value()->reshape<int16_t>(
-          nvidia::gxf::Shape(dims, ros_tensor.shape.rank), storage_type, allocator_handle);
-        break;
-      case nvidia::gxf::PrimitiveType::kUnsigned32:
-        result = gxf_tensor.value()->reshape<uint32_t>(
-          nvidia::gxf::Shape(dims, ros_tensor.shape.rank), storage_type, allocator_handle);
-        break;
-      case nvidia::gxf::PrimitiveType::kInt32:
-        result = gxf_tensor.value()->reshape<int32_t>(
-          nvidia::gxf::Shape(dims, ros_tensor.shape.rank), storage_type, allocator_handle);
-        break;
-      case nvidia::gxf::PrimitiveType::kUnsigned64:
-        result = gxf_tensor.value()->reshape<uint64_t>(
-          nvidia::gxf::Shape(dims, ros_tensor.shape.rank), storage_type, allocator_handle);
-        break;
-      case nvidia::gxf::PrimitiveType::kInt64:
-        result = gxf_tensor.value()->reshape<int64_t>(
-          nvidia::gxf::Shape(dims, ros_tensor.shape.rank), storage_type, allocator_handle);
-        break;
-      case nvidia::gxf::PrimitiveType::kFloat32:
-        result = gxf_tensor.value()->reshape<float>(
-          nvidia::gxf::Shape(dims, ros_tensor.shape.rank), storage_type, allocator_handle);
-        break;
-      case nvidia::gxf::PrimitiveType::kFloat64:
-        result = gxf_tensor.value()->reshape<double>(
-          nvidia::gxf::Shape(dims, ros_tensor.shape.rank), storage_type, allocator_handle);
-        break;
-      default:
-        std::string error_msg = "[convert_to_custom] Tensor data type not supported.";
-        RCLCPP_ERROR(
-          rclcpp::get_logger("NitrosTensorList"), error_msg.c_str());
-        throw std::runtime_error(error_msg.c_str());
+  for (const auto & ros_tensor : source.tensors) {
+    nvidia::isaac_ros::nitros::NitrosTensorShape shape{ros_tensor.shape.dims};
+    nvidia::isaac_ros::nitros::NitrosDataType data_type =
+      nvidia::isaac_ros::nitros::convert_to_nitros_data_type(
+        static_cast<int32_t>(ros_tensor.data_type));
+    if (data_type == nvidia::isaac_ros::nitros::NitrosDataType::kUnknown) {
+      throw std::invalid_argument("[convert_to_custom] Unknown data type: " +
+        std::to_string(ros_tensor.data_type));
     }
-    if (!result) {
+
+    nvidia::isaac_ros::nitros::NitrosTensor nitros_tensor(shape, data_type);
+    nitros_tensor.set_name(ros_tensor.name);
+    size_t data_size = nitros_compute_tensor_size(nitros_tensor);
+    if (data_size == 0) {
+      throw std::invalid_argument("[convert_to_custom] Data size is 0; cannot allocate buffer.");
+    }
+
+    uint8_t * dptr = nullptr;
+    cudaError_t cuda_err = cudaMallocAsync(reinterpret_cast<void **>(&dptr), data_size, stream);
+    if (cuda_err != cudaSuccess) {
       std::stringstream error_msg;
       error_msg <<
-        "[convert_to_custom] Error initializing GXF tensor of type " <<
-        static_cast<int>(type) << ": " <<
-        GxfResultStr(result.error());
-      RCLCPP_ERROR(
-        rclcpp::get_logger("NitrosTensorList"), error_msg.str().c_str());
+        "[convert_to_custom] cudaMallocAsync failed: " <<
+        cudaGetErrorName(cuda_err) << " (" << cudaGetErrorString(cuda_err) << ")";
+      RCLCPP_ERROR(rclcpp::get_logger("NitrosTensorList"), error_msg.str().c_str());
       throw std::runtime_error(error_msg.str().c_str());
     }
 
-    const cudaMemcpyKind operation = cudaMemcpyHostToDevice;
-    auto nitros_cuda_stream =
-      nvidia::isaac_ros::nitros::GetTypeAdapterNitrosContext()
-      .getCudaStreamFromNitrosGraph();
-    const cudaError_t cuda_error = cudaMemcpyAsync(
-      gxf_tensor.value()->pointer(),
-      ros_tensor.data.data(),
-      gxf_tensor.value()->size(),
-      operation,
-      nitros_cuda_stream);
+    auto deleter = [stream, stream_releaser](uint8_t * p){
+        if (p) {
+          cudaFreeAsync(p, stream);
+        }
+      };
 
-    if (cuda_error != cudaSuccess) {
+    auto write_handle = nitros_tensor.from_external(
+      ros_tensor.name, dptr, data_size, shape, data_type, stream, deleter);
+
+    cuda_err = cudaMemcpyAsync(write_handle.get_ptr(), ros_tensor.data.data(), data_size,
+      cudaMemcpyHostToDevice, stream);
+    if (cuda_err != cudaSuccess) {
       std::stringstream error_msg;
       error_msg <<
-        "[convert_to_custom] cudaMemcpy failed for copying data from "
-        "ROS Tensor to GXF Tensor: " <<
-        cudaGetErrorName(cuda_error) <<
-        " (" << cudaGetErrorString(cuda_error) << ")";
-      RCLCPP_ERROR(
-        rclcpp::get_logger("NitrosTensorList"), error_msg.str().c_str());
+        "[convert_to_custom] cudaMemcpyAsync H2D failed: " <<
+        cudaGetErrorName(cuda_err) << " (" << cudaGetErrorString(cuda_err) << ")";
+      RCLCPP_ERROR(rclcpp::get_logger("NitrosTensorList"), error_msg.str().c_str());
       throw std::runtime_error(error_msg.str().c_str());
     }
-    cudaError_t cuda_result = cudaStreamSynchronize(nitros_cuda_stream);
-    CHECK_CUDA_ERROR(cuda_result, "Stream was not able to be synchronized");
+
+    destination.tensors_.push_back(nitros_tensor);
   }
-
-  // Add timestamp to the message
-  uint64_t input_timestamp =
-    source.header.stamp.sec * static_cast<uint64_t>(1e9) +
-    source.header.stamp.nanosec;
-  auto output_timestamp = message->add<nvidia::gxf::Timestamp>("timestamp");
-  if (!output_timestamp) {
-    std::stringstream error_msg;
-    error_msg << "[convert_to_custom] Failed to add a timestamp component to message: " <<
-      GxfResultStr(output_timestamp.error());
-    RCLCPP_ERROR(
-      rclcpp::get_logger("NitrosTensorList"), error_msg.str().c_str());
-    throw std::runtime_error(error_msg.str().c_str());
-  }
-  output_timestamp.value()->acqtime = input_timestamp;
-
-  // Set frame ID
-  destination.frame_id = source.header.frame_id;
-
-  // Set message entity
-  destination.handle = message->eid();
-  GxfEntityRefCountInc(
-    nvidia::isaac_ros::nitros::GetTypeAdapterNitrosContext().getContext(), message->eid());
+  destination.set_timestamp_sec(source.header.stamp.sec);
+  destination.set_timestamp_nsec(source.header.stamp.nanosec);
+  destination.set_frame_id(source.header.frame_id);
 
   RCLCPP_DEBUG(
     rclcpp::get_logger("NitrosTensorList"),

@@ -28,12 +28,10 @@
 #include <sensor_msgs/msg/camera_info.hpp>
 #include <sensor_msgs/msg/image.hpp>
 
-#include "isaac_ros_managed_nitros/managed_nitros_message_filters_subscriber.hpp"
 #include "isaac_ros_managed_nitros/managed_nitros_publisher.hpp"
-#include "isaac_ros_managed_nitros/managed_nitros_subscriber.hpp"
+#include "isaac_ros_nitros/types/nitros_type_message_filter_traits.hpp"
 #include "isaac_ros_nitros_camera_info_type/nitros_camera_info.hpp"
 #include "isaac_ros_nitros_image_type/nitros_image.hpp"
-#include "isaac_ros_nitros_image_type/nitros_image_view.hpp"
 
 namespace nvidia
 {
@@ -65,14 +63,11 @@ public:
 
 private:
   // Subscribers
-  nvidia::isaac_ros::nitros::message_filters::Subscriber<nvidia::isaac_ros::nitros::NitrosImageView>
-  image_sub_1_;
+  ::message_filters::Subscriber<nvidia::isaac_ros::nitros::NitrosImage> image_sub_1_;
   ::message_filters::Subscriber<sensor_msgs::msg::CameraInfo> camera_info_sub_1_;
-  nvidia::isaac_ros::nitros::message_filters::Subscriber<nvidia::isaac_ros::nitros::NitrosImageView>
-  image_sub_2_;
+  ::message_filters::Subscriber<nvidia::isaac_ros::nitros::NitrosImage> image_sub_2_;
   ::message_filters::Subscriber<sensor_msgs::msg::CameraInfo> camera_info_sub_2_;
-  nvidia::isaac_ros::nitros::message_filters::Subscriber<nvidia::isaac_ros::nitros::NitrosImageView>
-  depth_sub_;
+  ::message_filters::Subscriber<nvidia::isaac_ros::nitros::NitrosImage> depth_sub_;
 
   std::shared_ptr<
     nvidia::isaac_ros::nitros::ManagedNitrosPublisher<nvidia::isaac_ros::nitros::NitrosImage>>

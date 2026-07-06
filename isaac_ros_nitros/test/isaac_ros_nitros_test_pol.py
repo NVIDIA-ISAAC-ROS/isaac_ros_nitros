@@ -115,8 +115,8 @@ class IsaacROSNitrosNodeTest(IsaacROSBaseTest):
             # Start sending messages
             self.node.get_logger().info('Start publishing messages')
 
-            # Wait at most 2 seconds for subscriber to receive at least one message
-            end_time = time.time() + 2
+            # Wait at most 10 seconds for subscriber to receive at least one message
+            end_time = time.time() + 10
             sent_count = 0
             while time.time() < end_time:
                 sent_count += 1

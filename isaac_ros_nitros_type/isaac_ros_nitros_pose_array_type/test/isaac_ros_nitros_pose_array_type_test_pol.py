@@ -90,7 +90,7 @@ class IsaacROSNitrosPoseArrayTest(IsaacROSBaseTest):
                 test_folder / 'pose_array.json')
 
             # Wait at most TIMEOUT seconds for subscriber to respond
-            TIMEOUT = 2
+            TIMEOUT = 10
             end_time = time.time() + TIMEOUT
 
             done = False

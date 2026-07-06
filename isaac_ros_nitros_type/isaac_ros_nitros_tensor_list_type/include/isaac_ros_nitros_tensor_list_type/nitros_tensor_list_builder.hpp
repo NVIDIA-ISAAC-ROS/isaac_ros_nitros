@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
-// Copyright (c) 2022-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+// Copyright (c) 2022-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -41,7 +41,9 @@ public:
 
   NitrosTensorListBuilder & WithHeader(std_msgs::msg::Header header);
 
-  NitrosTensorListBuilder & AddTensor(std::string name, NitrosTensor tensor);
+  NitrosTensorListBuilder & AddTensor(NitrosTensor tensor);
+
+  NitrosTensorListBuilder & AddTensor(const std::string & name, NitrosTensor tensor);
 
   NitrosTensorList Build();
 

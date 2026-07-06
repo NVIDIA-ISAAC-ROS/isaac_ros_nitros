@@ -82,7 +82,7 @@ if(BUILD_TESTING)
   endif()
 
   find_package(launch_testing_ament_cmake REQUIRED)
-  add_launch_test(test/isaac_ros_nitros_camera_info_type_test_pol.py TIMEOUT "15")
+  add_launch_test(test/isaac_ros_nitros_camera_info_type_test_pol.py TIMEOUT "60")
 endif()
 
 

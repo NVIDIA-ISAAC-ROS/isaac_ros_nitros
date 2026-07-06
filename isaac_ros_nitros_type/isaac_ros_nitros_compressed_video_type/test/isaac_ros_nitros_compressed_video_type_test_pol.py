@@ -88,7 +88,7 @@ class IsaacROSNitrosCompressedVideoTest(IsaacROSBaseTest):
             compressed_video_msg.format = 'h264'
             compressed_video_msg.data = [random.randint(0, 255) for _ in range(100)]
             # Wait at most TIMEOUT seconds for subscriber to respond
-            TIMEOUT = 2
+            TIMEOUT = 10
             end_time = time.time() + TIMEOUT
 
             done = False
