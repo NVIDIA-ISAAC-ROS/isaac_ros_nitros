@@ -60,13 +60,13 @@ public:
   template<typename T>
   void registerSupportedType()
   {
-    auto type_name = typeid(T).name();
+    const std::string type_name(typeid(T).name());
 
     if (type_format_map_.count(type_name) != 0) {
       RCLCPP_INFO(
         get_logger(),
         "[NitrosTypeManager] Skipped registering duplicate type \"%s\"",
-        type_name);
+        type_name.c_str());
       return;
     }
 
@@ -76,11 +76,10 @@ public:
       type_format_callback_map.begin(), type_format_callback_map.end());
 
     // Register formats to the type
-    if (type_format_map_.count(type_name) == 0) {
-      type_format_map_.insert({type_name, {}});
-    }
+    type_format_map_[type_name] = {};
+    std::vector<std::string> & format_list = type_format_map_.at(type_name);
     for (auto const & it : type_format_callback_map) {
-      type_format_map_.at(type_name).push_back(it.first);
+      format_list.push_back(it.first);
     }
 
     // Register the type's required extensions

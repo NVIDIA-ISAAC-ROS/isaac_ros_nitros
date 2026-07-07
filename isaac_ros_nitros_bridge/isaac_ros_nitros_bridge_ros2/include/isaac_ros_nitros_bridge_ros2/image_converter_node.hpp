@@ -18,6 +18,8 @@
 #ifndef ISAAC_ROS_NITROS_BRIDGE_ROS2__IMAGE_CONVERTER_NODE_HPP_
 #define ISAAC_ROS_NITROS_BRIDGE_ROS2__IMAGE_CONVERTER_NODE_HPP_
 
+#include <cuda_runtime_api.h>
+
 #include <map>
 #include <memory>
 #include <string>
@@ -26,15 +28,11 @@
 #include "rclcpp/rclcpp.hpp"
 
 #include "isaac_ros_common/qos.hpp"
-#include "isaac_ros_managed_nitros/managed_nitros_publisher.hpp"
-#include "isaac_ros_managed_nitros/managed_nitros_subscriber.hpp"
 
 #include "ipc_buffer_manager.hpp"
 #include "sensor_msgs/msg/image.hpp"
 #include "isaac_ros_nitros_bridge_interfaces/msg/nitros_bridge_image.hpp"
 #include "isaac_ros_nitros_image_type/nitros_image.hpp"
-#include "isaac_ros_nitros_image_type/nitros_image_builder.hpp"
-#include "isaac_ros_nitros_image_type/nitros_image_view.hpp"
 
 
 namespace nvidia
@@ -52,30 +50,23 @@ public:
   ~ImageConverterNode();
 
 private:
-  // Convert stub message into managed NITROS message
+  // Convert stub message into NITROS image message
   void BridgeToROSCallback(
     const isaac_ros_nitros_bridge_interfaces::msg::NitrosBridgeImage::SharedPtr msg);
 
-  // Copy managed NITROS message data into IPC memory pool and convert to bridge message
-  void ROSToBridgeCallback(const nvidia::isaac_ros::nitros::NitrosImageView msg);
+  // Copy NITROS image data into IPC memory pool and convert to bridge message
+  void ROSToBridgeCallback(const nvidia::isaac_ros::nitros::NitrosImage::SharedPtr msg);
 
   // Publisher for output NitrosImage messages
-  std::shared_ptr<nvidia::isaac_ros::nitros::ManagedNitrosPublisher<
-      nvidia::isaac_ros::nitros::NitrosImage>> nitros_pub_;
+  rclcpp::Publisher<nvidia::isaac_ros::nitros::NitrosImage>::SharedPtr nitros_pub_;
   // Publisher for output bridge messages
   rclcpp::Publisher<isaac_ros_nitros_bridge_interfaces::msg::NitrosBridgeImage>::SharedPtr
     bridge_image_pub_;
   // Subscription to input NitrosImage messages
-  std::shared_ptr<nvidia::isaac_ros::nitros::ManagedNitrosSubscriber<
-      nvidia::isaac_ros::nitros::NitrosImageView>> nitros_sub_;
+  rclcpp::Subscription<nvidia::isaac_ros::nitros::NitrosImage>::SharedPtr nitros_sub_;
   // Subscription to input bridge messages
   rclcpp::Subscription<isaac_ros_nitros_bridge_interfaces::msg::NitrosBridgeImage>::SharedPtr
     bridge_image_sub_;
-
-  // Type of NITROS image to publish
-  std::string pub_nitros_image_type_;
-  // Type of NITROS image to subscribe
-  std::string sub_nitros_image_type_;
 
   // Number of blocks of the device memory pool
   int64_t num_blocks_;
@@ -85,8 +76,6 @@ private:
   std::map<int32_t, CUdeviceptr> handle_ptr_map_;
   // CUDA IPC memory pool manager
   std::shared_ptr<IPCBufferManager> ipc_buffer_manager_;
-  // Shared memory based IPC buffer for refcount and UID
-  std::shared_ptr<HostIPCBuffer> host_ipc_buffer_;
   // If received the first message
   bool first_msg_received_ = false;
   // CUDA driver context
@@ -95,6 +84,7 @@ private:
   cudaIpcEventHandle_t ipc_event_handle_;
   // CUDA event export from IPC event to synchronize the upstream
   cudaEvent_t event_;
+  cudaStream_t cuda_stream_{nullptr};
   // QoS for NITROS bridge publishers and subscribers
   rclcpp::QoS bridge_pub_qos_;
   rclcpp::QoS bridge_sub_qos_;

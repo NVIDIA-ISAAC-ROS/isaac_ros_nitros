@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
-// Copyright (c) 2023-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+// Copyright (c) 2023-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -20,6 +20,7 @@
 #include <sys/un.h>
 #include <string>
 #include <atomic>
+#include <utility>
 
 #include "isaac_ros_nitros_bridge_ros2/tensor_list_converter_node.hpp"
 
@@ -46,22 +47,26 @@ TensorListConverterNode::TensorListConverterNode(const rclcpp::NodeOptions optio
 {
   cudaSetDevice(0);
   cuDevicePrimaryCtxRetain(&ctx_, 0);
+  auto cuda_runtime_err = cudaStreamCreateWithFlags(&cuda_stream_, cudaStreamNonBlocking);
+  if (cuda_runtime_err != cudaSuccess) {
+    throw std::runtime_error("[NITROS Bridge] cudaStreamCreateWithFlags Error");
+  }
 
   cudaEventCreateWithFlags(&event_, cudaEventInterprocess | cudaEventDisableTiming);
   cudaIpcGetEventHandle(reinterpret_cast<cudaIpcEventHandle_t *>(&ipc_event_handle_), event_);
 
-  nitros_pub_ = std::make_shared<nvidia::isaac_ros::nitros::ManagedNitrosPublisher<
-        nvidia::isaac_ros::nitros::NitrosTensorList>>(
-    this, "ros2_output_tensor_list",
-    nvidia::isaac_ros::nitros::nitros_tensor_list_nhwc_t::supported_type_name,
-    nvidia::isaac_ros::nitros::NitrosDiagnosticsConfig{}, nitros_pub_qos_);
+  rclcpp::PublisherOptions nitros_pub_options;
+  nitros_pub_options.use_intra_process_comm = rclcpp::IntraProcessSetting::Enable;
+  rclcpp::SubscriptionOptions nitros_sub_options;
+  nitros_sub_options.use_intra_process_comm = rclcpp::IntraProcessSetting::Enable;
 
-  nitros_sub_ = std::make_shared<nvidia::isaac_ros::nitros::ManagedNitrosSubscriber<
-        nvidia::isaac_ros::nitros::NitrosTensorListView>>(
-    this, "ros2_input_tensor_list",
-    nvidia::isaac_ros::nitros::nitros_tensor_list_nhwc_t::supported_type_name,
+  nitros_pub_ = create_publisher<nvidia::isaac_ros::nitros::NitrosTensorList>(
+    "ros2_output_tensor_list", nitros_pub_qos_, nitros_pub_options);
+
+  nitros_sub_ = create_subscription<nvidia::isaac_ros::nitros::NitrosTensorList>(
+    "ros2_input_tensor_list", nitros_sub_qos_,
     std::bind(&TensorListConverterNode::ROSToBridgeCallback, this, std::placeholders::_1),
-    nvidia::isaac_ros::nitros::NitrosDiagnosticsConfig{}, nitros_sub_qos_);
+    nitros_sub_options);
 
   nitros_bridge_pub_ = create_publisher<
     isaac_ros_nitros_bridge_interfaces::msg::NitrosBridgeTensorList>(
@@ -72,7 +77,12 @@ TensorListConverterNode::TensorListConverterNode(const rclcpp::NodeOptions optio
     std::bind(&TensorListConverterNode::BridgeToROSCallback, this, std::placeholders::_1));
 }
 
-TensorListConverterNode::~TensorListConverterNode() = default;
+TensorListConverterNode::~TensorListConverterNode()
+{
+  if (cuda_stream_ != nullptr) {
+    cudaStreamDestroy(cuda_stream_);
+  }
+}
 
 void TensorListConverterNode::BridgeToROSCallback(
   const isaac_ros_nitros_bridge_interfaces::msg::NitrosBridgeTensorList::SharedPtr msg)
@@ -129,10 +139,11 @@ void TensorListConverterNode::BridgeToROSCallback(
   }
 
   // Compare UID if exists
+  std::shared_ptr<HostIPCBuffer> host_ipc_buffer;
   if (!msg_uid.empty()) {
     std::string shm_name = std::to_string(msg_pid) + std::to_string(msg_fd);
-    host_ipc_buffer_ = std::make_shared<HostIPCBuffer>(shm_name, HostIPCBuffer::Mode::OPEN);
-    if (!host_ipc_buffer_->refcoun_inc_if_uid_match(msg_uid)) {
+    host_ipc_buffer = std::make_shared<HostIPCBuffer>(shm_name, HostIPCBuffer::Mode::OPEN);
+    if (!host_ipc_buffer->refcoun_inc_if_uid_match(msg_uid)) {
       RCLCPP_WARN(this->get_logger(), "Failed to match UID, skip.");
       return;
     }
@@ -220,38 +231,50 @@ void TensorListConverterNode::BridgeToROSCallback(
     handle_ptr_map_[msg_fd] = gpu_buffer;
   }
 
-  auto nitros_tensor_list_builder =
-    nvidia::isaac_ros::nitros::NitrosTensorListBuilder()
-    .WithHeader(msg->header);
+  nvidia::isaac_ros::nitros::NitrosTensorList nitros_tensor_list;
+  nitros_tensor_list.set_timestamp_sec(msg->header.stamp.sec);
+  nitros_tensor_list.set_timestamp_nsec(msg->header.stamp.nanosec);
+  nitros_tensor_list.set_frame_id(msg->header.frame_id);
 
   // Create a shared counter for all tensors from this message
   auto tensor_list_counter = std::make_shared<std::atomic<int>>(msg->tensors.size());
 
-  int offset = 0;
-  auto host_ipc_buffer_ptr = host_ipc_buffer_;
+  size_t offset = 0;
+  auto host_ipc_buffer_ptr = host_ipc_buffer;
   for (size_t i = 0; i < msg->tensors.size(); i++) {
     auto ros_tensor = msg->tensors[i];
+    const size_t tensor_size = ros_tensor.strides[0] * ros_tensor.shape.dims[0];
     auto tensor_shape = std::vector<int32_t>{
       ros_tensor.shape.dims.begin(), ros_tensor.shape.dims.end()};
 
-    auto cur_tensor = nvidia::isaac_ros::nitros::NitrosTensorBuilder()
-      .WithShape(nvidia::isaac_ros::nitros::NitrosTensorShape(tensor_shape))
-      .WithDataType(nvidia::isaac_ros::nitros::NitrosDataType::kFloat32)
-      .WithData(reinterpret_cast<void *>(gpu_buffer + offset))
-      .WithReleaseCallback(
-      [host_ipc_buffer_ptr, tensor_list_counter]() {
+    auto deleter = [host_ipc_buffer_ptr, tensor_list_counter](uint8_t * p) {
+        (void)p;
         if (host_ipc_buffer_ptr) {
           if (tensor_list_counter->fetch_sub(1) == 1) {
             host_ipc_buffer_ptr->refcount_dec();
           }
         }
-      })
-      .Build();
-    nitros_tensor_list_builder.AddTensor(ros_tensor.name.c_str(), cur_tensor);
-    offset += ros_tensor.data.size();
+      };
+    nvidia::isaac_ros::nitros::NitrosTensor cur_tensor;
+    const auto data_type = nvidia::isaac_ros::nitros::convert_to_nitros_data_type(
+      static_cast<int32_t>(ros_tensor.data_type));
+    if (data_type == nvidia::isaac_ros::nitros::NitrosDataType::kUnknown) {
+      throw std::invalid_argument("[NITROS Bridge] Unknown tensor data type: " +
+        std::to_string(ros_tensor.data_type));
+    }
+    {
+      [[maybe_unused]] auto write_handle = cur_tensor.from_external(
+        ros_tensor.name,
+        reinterpret_cast<void *>(gpu_buffer + offset),
+        tensor_size,
+        nvidia::isaac_ros::nitros::NitrosTensorShape(tensor_shape),
+        data_type,
+        cuda_stream_,
+        deleter);
+    }
+    nitros_tensor_list.add_tensor(std::move(cur_tensor));
+    offset += tensor_size;
   }
-
-  auto nitros_tensor_list = nitros_tensor_list_builder.Build();
 
   nitros_pub_->publish(nitros_tensor_list);
 
@@ -259,25 +282,21 @@ void TensorListConverterNode::BridgeToROSCallback(
 }
 
 void TensorListConverterNode::ROSToBridgeCallback(
-  const nvidia::isaac_ros::nitros::NitrosTensorListView view)
+  const nvidia::isaac_ros::nitros::NitrosTensorList::SharedPtr msg)
 {
   cuCtxSetCurrent(ctx_);
 
-  auto tensor_count = view.GetTensorCount();
+  auto tensor_count = msg->num_tensors();
   // Get total size first
   if (tensor_count == 0) {
     RCLCPP_INFO(this->get_logger(), "No tensor found in the list.");
     return;
   }
-  auto tensor_list = view.GetAllTensor();
   size_t total_size = 0;
 
   // Get total size of all tensors
   for (size_t i = 0; i < tensor_count; i++) {
-    auto tensor = tensor_list[i];
-    auto tensor_bytes_per_element = tensor.GetBytesPerElement();
-    auto tensor_element_count = tensor.GetElementCount();
-    total_size += tensor_element_count * tensor_bytes_per_element;
+    total_size += msg->get_tensor(i).tensor_size();
   }
 
   // Create IPC buffer manager
@@ -289,45 +308,53 @@ void TensorListConverterNode::ROSToBridgeCallback(
 
   auto ipc_buffer = ipc_buffer_manager_->find_next_available_buffer();
   isaac_ros_nitros_bridge_interfaces::msg::NitrosBridgeTensorList tensor_list_msg;
-  tensor_list_msg.header.frame_id = view.GetFrameId();
-  tensor_list_msg.header.stamp.sec = view.GetTimestampSeconds();
-  tensor_list_msg.header.stamp.nanosec = view.GetTimestampNanoseconds();
+  tensor_list_msg.header.frame_id = msg->get_frame_id();
+  tensor_list_msg.header.stamp.sec = static_cast<int32_t>(msg->get_timestamp_sec());
+  tensor_list_msg.header.stamp.nanosec = msg->get_timestamp_nsec();
 
   size_t offset = 0;
   for (size_t i = 0; i < tensor_count; i++) {
-    auto tensor = tensor_list[i];
-    auto tensor_shape = tensor.GetShape().shape();
-    auto tensor_rank = tensor.GetRank();
-    auto tensor_element_type = tensor.GetElementType();
-    auto tensor_name = tensor.GetName();
-    auto tensor_bytes_per_element = tensor.GetBytesPerElement();
-    auto tensor_element_count = tensor.GetElementCount();
+    const auto & tensor = msg->get_tensor(i);
+    const auto tensor_shape = tensor.shape();
+    const auto tensor_rank = tensor_shape.rank();
+    const auto tensor_element_type = tensor.data_type();
+    const auto tensor_name = tensor.get_name();
+    const auto tensor_size = tensor.tensor_size();
     std::vector<uint32_t> tensor_dims;
-    std::vector<uint64_t> tensor_strides;
-    for (uint32_t i = 0; i < tensor_rank; ++i) {
-      tensor_dims.push_back(tensor_shape.dimension(i));
+    const auto tensor_shape_dims = tensor_shape.dims();
+    for (uint32_t d = 0; d < tensor_rank; ++d) {
+      tensor_dims.push_back(static_cast<uint32_t>(tensor_shape_dims[d]));
     }
 
     isaac_ros_tensor_list_interfaces::msg::Tensor ros2_tensor;
     ros2_tensor.name = tensor_name;
     ros2_tensor.shape.dims = tensor_dims;
-    ros2_tensor.data_type = static_cast<uint8_t>(tensor_element_type);
+    ros2_tensor.data_type = static_cast<int32_t>(tensor_element_type);
     ros2_tensor.shape.rank = tensor_rank;
-    ros2_tensor.strides = tensor.GetStrides();
+    ros2_tensor.strides = tensor.strides();
+
+    auto read_handle = tensor.get_read_handle(cuda_stream_);
+    auto cuda_runtime_err = cudaStreamSynchronize(cuda_stream_);
+    if (cuda_runtime_err != cudaSuccess) {
+      RCLCPP_ERROR(
+        this->get_logger(), "cudaStreamSynchronize failed: %s",
+        cudaGetErrorString(cuda_runtime_err));
+      throw std::runtime_error("[NITROS Bridge] cudaStreamSynchronize Error");
+    }
 
     auto cuda_err = cuMemcpyDtoD(
       ipc_buffer->d_ptr + offset,
-      (CUdeviceptr)(tensor.GetBuffer()),
-      tensor_element_count * tensor_bytes_per_element);
+      reinterpret_cast<CUdeviceptr>(read_handle.get_ptr()),
+      tensor_size);
     if (CUDA_SUCCESS != cuda_err) {
       const char * error_str = NULL;
       cuGetErrorString(cuda_err, &error_str);
       RCLCPP_ERROR(
-        rclcpp::get_logger(""), "Failed to call cuMemcpyDtoD %s",
+        this->get_logger(), "Failed to call cuMemcpyDtoD %s",
         error_str);
       throw std::runtime_error("[NITROS Bridge] cuMemcpyDtoD Error");
     }
-    offset += tensor_element_count * tensor_bytes_per_element;
+    offset += tensor_size;
 
     tensor_list_msg.tensors.push_back(ros2_tensor);
   }

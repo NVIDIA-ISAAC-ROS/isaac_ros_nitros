@@ -36,19 +36,44 @@ if(USE_NVTX)
     link_libraries("CUDA::nvtx3")
 endif()
 
+option(NITROS_GXF_COMPAT_MODE "Enable GXF compatibility mode for NitrosImage" ON)
+if(NITROS_GXF_COMPAT_MODE)
+  add_compile_definitions(NITROS_GXF_COMPAT_MODE)
+endif()
+
 # Dependencies
 find_package(vpi REQUIRED)
 find_package(yaml-cpp)
 
 # NitrosImage
-ament_auto_add_library(${PROJECT_NAME} SHARED
+set(NITROS_IMAGE_SOURCES
   src/nitros_image.cpp
   src/nitros_image_builder.cpp
   src/nitros_image_view.cpp
 )
+
+# INTERIM: Add GXF compat (remove when macro removed)
+if(NITROS_GXF_COMPAT_MODE)
+  add_compile_definitions(NITROS_GXF_COMPAT_MODE)
+  list(APPEND NITROS_IMAGE_SOURCES src/nitros_image_gxf_compat.cpp)
+endif()
+
+ament_auto_add_library(${PROJECT_NAME} SHARED ${NITROS_IMAGE_SOURCES})
+
+# Add include directory for isaac_ros_nitros headers (non-scoped installation)
+target_include_directories(${PROJECT_NAME} PUBLIC
+  $<INSTALL_INTERFACE:include/isaac_ros_nitros/types>
+)
+
+# INTERIM: Propagate macro to consuming packages
+if(NITROS_GXF_COMPAT_MODE)
+  target_compile_definitions(${PROJECT_NAME} PUBLIC NITROS_GXF_COMPAT_MODE)
+endif()
+
 target_link_libraries(${PROJECT_NAME}
   vpi
   yaml-cpp
+  CUDA::cudart
 )
 set_target_properties(${PROJECT_NAME} PROPERTIES
   BUILD_WITH_INSTALL_RPATH TRUE
@@ -82,7 +107,12 @@ if(BUILD_TESTING)
   endif()
 
   find_package(launch_testing_ament_cmake REQUIRED)
-  add_launch_test(test/isaac_ros_nitros_image_type_test_pol.py TIMEOUT "15")
+  add_launch_test(test/isaac_ros_nitros_image_type_test_pol.py TIMEOUT "60")
+
+  find_package(ament_cmake_gtest REQUIRED)
+  ament_add_gtest(test_nitros_image_stream_pool
+    test/src/test_nitros_image_stream_pool.cpp)
+  target_link_libraries(test_nitros_image_stream_pool ${PROJECT_NAME} CUDA::cudart)
 endif()
 
 

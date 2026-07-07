@@ -35,10 +35,6 @@ namespace nitros_bridge
 
 ImageConverterNode::ImageConverterNode(const rclcpp::NodeOptions options)
 : rclcpp::Node("image_converter_node", options),
-  pub_nitros_image_type_(
-    declare_parameter<std::string>("pub_nitros_image_type", "nitros_image_rgb8")),
-  sub_nitros_image_type_(
-    declare_parameter<std::string>("sub_nitros_image_type", "nitros_image_rgb8")),
   num_blocks_(declare_parameter<int64_t>("num_blocks", 40)),
   // Timeout in microseconds: duration to wait after refcount reaches 0 before recycling the buffer
   timeout_(declare_parameter<int64_t>("timeout", 500)),
@@ -49,9 +45,18 @@ ImageConverterNode::ImageConverterNode(const rclcpp::NodeOptions options)
 {
   cudaSetDevice(0);
   cuDevicePrimaryCtxRetain(&ctx_, 0);
+  auto cuda_err = cudaStreamCreateWithFlags(&cuda_stream_, cudaStreamNonBlocking);
+  if (cuda_err != cudaSuccess) {
+    throw std::runtime_error("[NITROS Bridge] cudaStreamCreateWithFlags Error");
+  }
 
   cudaEventCreateWithFlags(&event_, cudaEventInterprocess | cudaEventDisableTiming);
   cudaIpcGetEventHandle(reinterpret_cast<cudaIpcEventHandle_t *>(&ipc_event_handle_), event_);
+
+  rclcpp::PublisherOptions nitros_pub_options;
+  nitros_pub_options.use_intra_process_comm = rclcpp::IntraProcessSetting::Enable;
+  rclcpp::SubscriptionOptions nitros_sub_options;
+  nitros_sub_options.use_intra_process_comm = rclcpp::IntraProcessSetting::Enable;
 
   bridge_image_pub_ = create_publisher<isaac_ros_nitros_bridge_interfaces::msg::NitrosBridgeImage>(
     "ros2_output_bridge_image", bridge_pub_qos_);
@@ -61,19 +66,21 @@ ImageConverterNode::ImageConverterNode(const rclcpp::NodeOptions options)
     "ros2_input_bridge_image", bridge_sub_qos_,
     std::bind(&ImageConverterNode::BridgeToROSCallback, this, std::placeholders::_1));
 
-  nitros_pub_ = std::make_shared<nvidia::isaac_ros::nitros::ManagedNitrosPublisher<
-        nvidia::isaac_ros::nitros::NitrosImage>>(
-    this, "ros2_output_image", pub_nitros_image_type_,
-    nvidia::isaac_ros::nitros::NitrosDiagnosticsConfig{}, nitros_pub_qos_);
+  nitros_pub_ = create_publisher<nvidia::isaac_ros::nitros::NitrosImage>(
+    "ros2_output_image", nitros_pub_qos_, nitros_pub_options);
 
-  nitros_sub_ = std::make_shared<nvidia::isaac_ros::nitros::ManagedNitrosSubscriber<
-        nvidia::isaac_ros::nitros::NitrosImageView>>(
-    this, "ros2_input_image", sub_nitros_image_type_,
+  nitros_sub_ = create_subscription<nvidia::isaac_ros::nitros::NitrosImage>(
+    "ros2_input_image", nitros_sub_qos_,
     std::bind(&ImageConverterNode::ROSToBridgeCallback, this, std::placeholders::_1),
-    nvidia::isaac_ros::nitros::NitrosDiagnosticsConfig{}, nitros_sub_qos_);
+    nitros_sub_options);
 }
 
-ImageConverterNode::~ImageConverterNode() = default;
+ImageConverterNode::~ImageConverterNode()
+{
+  if (cuda_stream_ != nullptr) {
+    cudaStreamDestroy(cuda_stream_);
+  }
+}
 
 void ImageConverterNode::BridgeToROSCallback(
   const isaac_ros_nitros_bridge_interfaces::msg::NitrosBridgeImage::SharedPtr msg)
@@ -116,10 +123,11 @@ void ImageConverterNode::BridgeToROSCallback(
   }
 
   // Compare UID if exists
+  std::shared_ptr<HostIPCBuffer> host_ipc_buffer;
   if (!msg_uid.empty()) {
     std::string shm_name = std::to_string(pid) + std::to_string(fd);
-    host_ipc_buffer_ = std::make_shared<HostIPCBuffer>(shm_name, HostIPCBuffer::Mode::OPEN);
-    if (!host_ipc_buffer_->refcoun_inc_if_uid_match(msg_uid)) {
+    host_ipc_buffer = std::make_shared<HostIPCBuffer>(shm_name, HostIPCBuffer::Mode::OPEN);
+    if (!host_ipc_buffer->refcoun_inc_if_uid_match(msg_uid)) {
       RCLCPP_WARN(this->get_logger(), "Failed to match UID, skip.");
       return;
     }
@@ -204,62 +212,75 @@ void ImageConverterNode::BridgeToROSCallback(
     handle_ptr_map_[msg->data.data()[1]] = gpu_buffer;
   }
 
-  auto host_ipc_buffer_ptr = host_ipc_buffer_;
-  nvidia::isaac_ros::nitros::NitrosImage nitros_image =
-    nvidia::isaac_ros::nitros::NitrosImageBuilder()
-    .WithHeader(msg->header)
-    .WithEncoding(msg->encoding)
-    .WithDimensions(msg->height, msg->width)
-    .WithGpuData(reinterpret_cast<void *>(gpu_buffer))
-    .WithReleaseCallback(
-    [host_ipc_buffer_ptr]() {
+  auto host_ipc_buffer_ptr = host_ipc_buffer;
+  auto deleter = [host_ipc_buffer_ptr](uint8_t * p) {
+      (void)p;
       if (host_ipc_buffer_ptr) {
         host_ipc_buffer_ptr->refcount_dec();
       }
-    })
-    .Build();
+    };
+
+  nvidia::isaac_ros::nitros::NitrosImage nitros_image;
+  {
+    [[maybe_unused]] auto write_handle = nitros_image.from_external(
+      reinterpret_cast<void *>(gpu_buffer),
+      msg->height * msg->step,
+      msg->width, msg->height, msg->step, msg->encoding, cuda_stream_, deleter);
+  }
+  nitros_image.timestamp_sec = msg->header.stamp.sec;
+  nitros_image.timestamp_nsec = msg->header.stamp.nanosec;
+  nitros_image.frame_id = msg->header.frame_id;
 
   nitros_pub_->publish(nitros_image);
 
   RCLCPP_DEBUG(this->get_logger(), "NITROS Image is Published from NITROS Bridge.");
 }
 
-void ImageConverterNode::ROSToBridgeCallback(const nvidia::isaac_ros::nitros::NitrosImageView view)
+void ImageConverterNode::ROSToBridgeCallback(
+  const nvidia::isaac_ros::nitros::NitrosImage::SharedPtr msg)
 {
   cuCtxSetCurrent(ctx_);
 
+  const size_t image_size_bytes = msg->get_data_size();
+
   if (first_msg_received_ == false) {
     ipc_buffer_manager_ = std::make_shared<IPCBufferManager>(
-      num_blocks_, view.GetSizeInBytes(), timeout_);
+      num_blocks_, image_size_bytes, timeout_);
     first_msg_received_ = true;
   }
 
   auto ipc_buffer = ipc_buffer_manager_->find_next_available_buffer();
 
   isaac_ros_nitros_bridge_interfaces::msg::NitrosBridgeImage img_msg;
-  img_msg.header.frame_id = view.GetFrameId();
-  img_msg.header.stamp.sec = view.GetTimestampSeconds();
-  img_msg.header.stamp.nanosec = view.GetTimestampNanoseconds();
-  img_msg.height = view.GetHeight();
-  img_msg.width = view.GetWidth();
-  img_msg.encoding = view.GetEncoding();
-  img_msg.step = view.GetSizeInBytes() / view.GetHeight();
+  img_msg.header.frame_id = msg->get_frame_id();
+  img_msg.header.stamp.sec = msg->get_timestamp_sec();
+  img_msg.header.stamp.nanosec = msg->get_timestamp_nsec();
+  img_msg.height = msg->height;
+  img_msg.width = msg->width;
+  img_msg.encoding = msg->encoding;
+  img_msg.step = msg->step;
 
-  auto cuda_err = cuMemcpyDtoD(
-    ipc_buffer->d_ptr,
-    (CUdeviceptr)(view.GetGpuData()),
-    view.GetSizeInBytes());
-  if (CUDA_SUCCESS != cuda_err) {
-    const char * error_str = NULL;
-    cuGetErrorString(cuda_err, &error_str);
+  auto read_handle = msg->get_read_handle(cuda_stream_);
+  auto cuda_err = cudaMemcpyAsync(
+    reinterpret_cast<void *>(ipc_buffer->d_ptr),
+    read_handle.get_ptr(),
+    image_size_bytes,
+    cudaMemcpyDeviceToDevice,
+    cuda_stream_);
+  if (cudaSuccess != cuda_err) {
     RCLCPP_ERROR(
-      this->get_logger(), "Failed to call cuMemcpyDtoD %s",
-      error_str);
-    throw std::runtime_error("[NITROS Bridge] cuMemcpyDtoD Error");
+      this->get_logger(), "Failed to call cudaMemcpyAsync %s",
+      cudaGetErrorString(cuda_err));
+    throw std::runtime_error("[NITROS Bridge] cudaMemcpyAsync Error");
   }
 
-  // cuMemcpyDtoD is an aysnchronize call, wait until it complete.
-  cuCtxSynchronize();
+  cuda_err = cudaStreamSynchronize(cuda_stream_);
+  if (cudaSuccess != cuda_err) {
+    RCLCPP_ERROR(
+      this->get_logger(), "Failed to synchronize CUDA stream %s",
+      cudaGetErrorString(cuda_err));
+    throw std::runtime_error("[NITROS Bridge] cudaStreamSynchronize Error");
+  }
 
   img_msg.data.push_back(ipc_buffer->pid);
   img_msg.data.push_back(ipc_buffer->fd);

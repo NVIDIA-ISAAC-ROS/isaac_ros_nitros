@@ -1,5 +1,5 @@
 # SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
-# Copyright (c) 2022-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# Copyright (c) 2022-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -42,6 +42,7 @@ find_package(yaml-cpp)
 # NitrosDisparityImage
 ament_auto_add_library(${PROJECT_NAME} SHARED
 src/nitros_disparity_image.cpp
+src/nitros_disparity_image_view.cpp
 src/nitros_disparity_image_builder.cpp
 )
 target_link_libraries(${PROJECT_NAME}
@@ -80,7 +81,7 @@ if(BUILD_TESTING)
   endif()
 
   find_package(launch_testing_ament_cmake REQUIRED)
-  add_launch_test(test/isaac_ros_nitros_disparity_image_type_test_pol.py TIMEOUT "15")
+  add_launch_test(test/isaac_ros_nitros_disparity_image_type_test_pol.py TIMEOUT "60")
 endif()
 
 

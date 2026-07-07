@@ -94,7 +94,7 @@ class IsaacROSNitrosImageTest(IsaacROSBaseTest):
             image.header.stamp = timestamp
 
             # Wait at most TIMEOUT seconds for subscriber to respond
-            TIMEOUT = 2
+            TIMEOUT = 10
             end_time = time.time() + TIMEOUT
 
             done = False

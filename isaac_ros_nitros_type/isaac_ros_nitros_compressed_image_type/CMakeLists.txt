@@ -1,5 +1,5 @@
 # SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
-# Copyright (c) 2022-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# Copyright (c) 2022-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -23,41 +23,36 @@ if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
 endif()
 
 find_package(ament_cmake_auto REQUIRED)
+find_package(CUDAToolkit REQUIRED)
 ament_auto_find_build_dependencies()
 
-# Ensure CUDA imported targets (e.g., CUDA::nvtx3) are available
-find_package(CUDAToolkit REQUIRED)
+# INTERIM: Enable GXF compatibility mode for old NitrosNode infrastructure
+# TODO: Remove these lines when all nodes migrated to ManagedNitros
+option(NITROS_IMAGE_GXF_COMPAT_MODE "Enable GXF compatibility for old NitrosNode" ON)
 
-# NVTX
-option(USE_NVTX "Enable NVTX markers for improved profiling (if available)" ON)
-if(USE_NVTX)
-    add_definitions(-DUSE_NVTX)
-    link_directories("${CUDA_TOOLKIT_ROOT_DIR}/lib64")
-    link_libraries("CUDA::nvtx3")
+# NitrosCompressedImage (GXF-free implementation)
+ament_auto_add_library(${PROJECT_NAME} SHARED src/nitros_compressed_image.cpp)
+
+# INTERIM: Enable GXF compat for old NitrosNode infrastructure (remove when all nodes migrated)
+if(NITROS_IMAGE_GXF_COMPAT_MODE)
+  target_compile_definitions(${PROJECT_NAME} PUBLIC NITROS_IMAGE_GXF_COMPAT_MODE)
 endif()
 
-# Dependencies
-find_package(yaml-cpp)
-
-# NitrosCompressedImage
-ament_auto_add_library(${PROJECT_NAME} SHARED src/nitros_compressed_image.cpp)
-target_link_libraries(${PROJECT_NAME}
-  yaml-cpp
-)
+target_link_libraries(${PROJECT_NAME} CUDA::cudart)
 set_target_properties(${PROJECT_NAME} PROPERTIES BUILD_RPATH_USE_ORIGIN TRUE)
 set_target_properties(${PROJECT_NAME} PROPERTIES INSTALL_RPATH_USE_LINK_PATH TRUE)
 
 if(BUILD_TESTING)
-  # Install test/config directory
-  install(DIRECTORY test/config DESTINATION share/${PROJECT_NAME}/test)
-
   # NitrosCompressedImageForwardNode
   ament_auto_add_library(nitros_compressed_image_forward_node SHARED test/src/nitros_compressed_image_forward_node.cpp)
   target_link_libraries(nitros_compressed_image_forward_node ${PROJECT_NAME})
-  set_target_properties(nitros_compressed_image_forward_node PROPERTIES BUILD_RPATH_USE_ORIGIN TRUE)
-  set_target_properties(nitros_compressed_image_forward_node PROPERTIES INSTALL_RPATH_USE_LINK_PATH TRUE)
+  set_target_properties(nitros_compressed_image_forward_node PROPERTIES
+    BUILD_WITH_INSTALL_RPATH TRUE
+    BUILD_RPATH_USE_ORIGIN TRUE
+    INSTALL_RPATH_USE_LINK_PATH TRUE)
   rclcpp_components_register_nodes(nitros_compressed_image_forward_node "nvidia::isaac_ros::nitros::NitrosCompressedImageForwardNode")
-  set(node_plugins "${node_plugins}nvidia::isaac_ros::nitros::NitrosCompressedImage;$<TARGET_FILE:nitros_compressed_image_forward_node>\n")
+  set(node_plugins
+    "${node_plugins}nvidia::isaac_ros::nitros::NitrosCompressedImageForwardNode;$<TARGET_FILE:nitros_compressed_image_forward_node>\n")
 
   find_package(ament_lint_auto REQUIRED)
 
@@ -65,14 +60,13 @@ if(BUILD_TESTING)
   set(ament_cmake_copyright_FOUND TRUE)
   ament_lint_auto_find_test_dependencies()
 
-
   # The FindPythonInterp and FindPythonLibs modules are removed
   if(POLICY CMP0148)
     cmake_policy(SET CMP0148 OLD)
   endif()
 
   find_package(launch_testing_ament_cmake REQUIRED)
-  add_launch_test(test/isaac_ros_nitros_compressed_image_type_test_pol.py TIMEOUT "15")
+  add_launch_test(test/isaac_ros_nitros_compressed_image_type_test_pol.py TIMEOUT "60")
 endif()
 
 

@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
-// Copyright (c) 2022-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+// Copyright (c) 2022-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -15,6 +15,9 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
+#include "isaac_ros_nitros_tensor_list_type/nitros_data_type.hpp"
+
+#ifdef NITROS_GXF_COMPAT_MODE
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wunused-parameter"
 #pragma GCC diagnostic ignored "-Wmissing-field-initializers"
@@ -25,15 +28,12 @@
 #include "gxf/std/timestamp.hpp"
 #pragma GCC diagnostic pop
 
-#include "isaac_ros_nitros_tensor_list_type/nitros_data_type.hpp"
-
 namespace nvidia
 {
 namespace isaac_ros
 {
 namespace nitros
 {
-
 namespace
 {
 using PrimitiveType = nvidia::gxf::PrimitiveType;
@@ -48,9 +48,7 @@ std::unordered_map<NitrosDataType, PrimitiveType> data_type_map{
   {NitrosDataType::kInt64, PrimitiveType::kInt64},
   {NitrosDataType::kUnsigned64, PrimitiveType::kUnsigned64},
   {NitrosDataType::kFloat32, PrimitiveType::kFloat32},
-  {NitrosDataType::kFloat64, PrimitiveType::kFloat64},
-  {NitrosDataType::kComplex64, PrimitiveType::kComplex64},
-  {NitrosDataType::kComplex128, PrimitiveType::kComplex128},
+  {NitrosDataType::kFloat64, PrimitiveType::kFloat64}
 };
 }  // namespace
 
@@ -62,3 +60,5 @@ nvidia::gxf::PrimitiveType GetPrimitiveType(NitrosDataType nitros_data_type)
 }  // namespace nitros
 }  // namespace isaac_ros
 }  // namespace nvidia
+
+#endif  // NITROS_GXF_COMPAT_MODE

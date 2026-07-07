@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
-// Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+// Copyright (c) 2025-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -21,6 +21,7 @@
 #include <vector>
 #include <array>
 
+#ifdef NITROS_GXF_COMPAT_MODE
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wunused-parameter"
 #pragma GCC diagnostic ignored "-Wmissing-field-initializers"
@@ -34,11 +35,17 @@
 
 #include "isaac_ros_nitros_disparity_image_type/nitros_disparity_image_builder.hpp"
 #include "isaac_ros_nitros/types/type_adapter_nitros_context.hpp"
+#else
+#include "isaac_ros_nitros_disparity_image_type/nitros_disparity_image_builder.hpp"
+#endif
+
+#include "isaac_ros_nitros/types/cuda_stream_pool.hpp"
 
 namespace
 {
 constexpr uint64_t kNanosecondsInSeconds = 1e9;
 
+#ifdef NITROS_GXF_COMPAT_MODE
 // NoPaddingColorPlanes specialization for D32F format
 template<nvidia::gxf::VideoFormat T>
 struct NoPaddingColorPlanes {};
@@ -114,6 +121,7 @@ nvidia::gxf::Expected<nvidia::isaac::CameraMessageParts> CreateDisparityImage(
 
   return camera_message;
 }
+#endif
 }  // namespace
 
 namespace nvidia
@@ -253,7 +261,7 @@ NitrosDisparityImage NitrosDisparityImageBuilder::Build()
 {
   // Validate all data is present before building the NitrosDisparityImage
   Validate();
-
+#ifdef NITROS_GXF_COMPAT_MODE
   auto context = GetTypeAdapterNitrosContext().getContext();
 
   // Create the CameraMessage structure with proper components
@@ -290,13 +298,49 @@ NitrosDisparityImage NitrosDisparityImageBuilder::Build()
   // Set the handle and frame_id
   nitros_disparity_image_.handle = camera_message.entity.eid();
   GxfEntityRefCountInc(context, camera_message.entity.eid());
+#else
+  nitros_disparity_image_.width = width_;
+  nitros_disparity_image_.height = height_;
+  nitros_disparity_image_.step = sizeof(float) * width_;
+  nitros_disparity_image_.f = f_;
+  nitros_disparity_image_.t = t_;
+  nitros_disparity_image_.min_disparity = min_disparity_;
+  nitros_disparity_image_.max_disparity = max_disparity_;
+  nitros_disparity_image_.roi = {0, 0, static_cast<uint32_t>(width_),
+    static_cast<uint32_t>(height_)};
+
+  const size_t buffer_size = nitros_disparity_image_.step * height_;
+  auto & stream_pool = nvidia::isaac_ros::nitros::CudaStreamPool::instance();
+  cudaStream_t stream = stream_pool.acquire();
+  auto deleter = [stream, &stream_pool, cb = release_callback_](uint8_t * p){
+      if (cb) {
+        cb();
+      } else if (p) {
+        cudaFreeAsync(p, stream);
+      }
+      stream_pool.release(stream);
+    };
+
+  nitros_disparity_image_.from_external(
+      data_, buffer_size, width_, height_, nitros_disparity_image_.step,
+      "32FC1", stream, deleter);
+  data_ = nullptr;  // ownership transferred
+
+  // Set timestamp from header if provided
+  if (header_.stamp.sec != 0 || header_.stamp.nanosec != 0) {
+    nitros_disparity_image_.timestamp_sec = header_.stamp.sec;
+    nitros_disparity_image_.timestamp_nsec = header_.stamp.nanosec;
+  } else {
+    nitros_disparity_image_.timestamp_sec = 0;
+    nitros_disparity_image_.timestamp_nsec = 0;
+  }
+  nitros_disparity_image_.frame_id = header_.frame_id;
+#endif
 
   RCLCPP_DEBUG(
     rclcpp::get_logger("NitrosDisparityImageBuilder"),
     "[Build] Disparity image built");
 
-  // Resetting data after it is done building
-  data_ = nullptr;
   return nitros_disparity_image_;
 }
 

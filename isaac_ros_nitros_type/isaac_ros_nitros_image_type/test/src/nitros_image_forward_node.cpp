@@ -16,7 +16,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include "isaac_ros_nitros_image_type/nitros_image.hpp"
-#include "isaac_ros_nitros/nitros_node.hpp"
 
 #include "rclcpp_components/register_node_macro.hpp"
 
@@ -30,60 +29,29 @@ namespace nitros
 constexpr char PACKAGE_NAME[] = "isaac_ros_nitros_image_type";
 constexpr char FORWARD_FORMAT[] = "nitros_image_bgr8";
 
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wpedantic"
-class NitrosImageForwardNode : public NitrosNode
+class NitrosImageForwardNode : public rclcpp::Node
 {
 public:
   explicit NitrosImageForwardNode(const rclcpp::NodeOptions & options)
-  : NitrosNode(
-      options,
-      // Application graph filename
-      "test/config/test_forward_node.yaml",
-      // I/O configuration map
-        {
-          {"forward/input",
-            {
-              .type = NitrosPublisherSubscriberType::NEGOTIATED,
-              .qos = rclcpp::QoS(1),
-              .compatible_data_format = FORWARD_FORMAT,
-              .topic_name = "topic_forward_input",
-              .use_compatible_format_only = true,
-            }
-          },
-          {"sink/sink",
-            {
-              .type = NitrosPublisherSubscriberType::NEGOTIATED,
-              .qos = rclcpp::QoS(1),
-              .compatible_data_format = FORWARD_FORMAT,
-              .topic_name = "topic_forward_output",
-              .use_compatible_format_only = true,
-            }
-          }
-        },
-      // Extension specs
-      {},
-      // Optimizer's rule filenames
-      {},
-      // Extension so file list
-        {
-          {"gxf_isaac_message_compositor", "gxf/lib/libgxf_isaac_message_compositor.so"}
-        },
-      // Test node package name
-      PACKAGE_NAME)
+  : rclcpp::Node("NitrosImageForwardNode", options)
   {
-    std::string compatible_format = declare_parameter<std::string>("compatible_format", "");
-    if (!compatible_format.empty()) {
-      config_map_["forward/input"].compatible_data_format = compatible_format;
-      config_map_["sink/sink"].compatible_data_format = compatible_format;
-    }
-
-    registerSupportedType<nvidia::isaac_ros::nitros::NitrosImage>();
-
-    startNitrosNode();
+    auto qos = rclcpp::QoS(1);
+    sub_ = create_subscription<nvidia::isaac_ros::nitros::NitrosImage>(
+      "topic_forward_input", qos,
+      std::bind(&NitrosImageForwardNode::on_image, this, std::placeholders::_1));
+    pub_ = create_publisher<nvidia::isaac_ros::nitros::NitrosImage>(
+      "topic_forward_output", qos);
   }
+
+private:
+  void on_image(const nvidia::isaac_ros::nitros::NitrosImage & msg)
+  {
+    pub_->publish(msg);
+  }
+
+  rclcpp::Subscription<nvidia::isaac_ros::nitros::NitrosImage>::SharedPtr sub_;
+  rclcpp::Publisher<nvidia::isaac_ros::nitros::NitrosImage>::SharedPtr pub_;
 };
-#pragma GCC diagnostic pop
 
 }  // namespace nitros
 }  // namespace isaac_ros

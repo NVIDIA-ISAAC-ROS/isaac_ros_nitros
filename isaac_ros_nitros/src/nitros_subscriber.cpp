@@ -18,6 +18,9 @@
 #include "gxf/core/gxf.h"
 
 #include "isaac_ros_nitros/nitros_subscriber.hpp"
+#ifdef NITROS_GXF_COMPAT_MODE
+#include "isaac_ros_nitros/types/nitros_gxf_compat_traits.hpp"
+#endif
 
 #include "rclcpp/logger.hpp"
 #include "rclcpp/rclcpp.hpp"
@@ -157,7 +160,7 @@ void NitrosSubscriber::addSupportedDataFormat(
       "topic_name=\"%s\", data_format=\"%s\"",
       compatible_sub_->get_topic_name(), config_.compatible_data_format.c_str());
   } else {
-    std::function<void(NitrosTypeBase &, const std::string data_format_name)>
+    std::function<void(std::shared_ptr<NitrosTypeBase>, const std::string data_format_name)>
     subscriber_callback =
       std::bind(
       &NitrosSubscriber::subscriberCallback,
@@ -211,7 +214,7 @@ void NitrosSubscriber::createCompatibleSubscriber()
     throw std::runtime_error(error_msg.str().c_str());
   }
 
-  std::function<void(NitrosTypeBase &, const std::string)>
+  std::function<void(std::shared_ptr<NitrosTypeBase>, const std::string)>
   subscriber_callback =
     std::bind(
     &NitrosSubscriber::subscriberCallback,
@@ -379,15 +382,33 @@ bool NitrosSubscriber::pushEntity(const int64_t eid, bool should_block)
 }
 
 void NitrosSubscriber::subscriberCallback(
-  NitrosTypeBase & msg_base,
+  std::shared_ptr<NitrosTypeBase> msg_base,
   const std::string data_format_name)
 {
+  auto & msg_ref = *msg_base;
+
   std::stringstream nvtx_tag_name;
   nvtx_tag_name <<
     "[" << node_.get_name() << "] NitrosSubscriber::subscriberCallback(" <<
     config_.topic_name << ", t=" <<
-    getTimestamp(msg_base) << ")";
+    getTimestamp(msg_ref) << ")";
   nvtxRangePushWrapper(nvtx_tag_name.str().c_str(), CLR_PURPLE);
+
+  int64_t handle = msg_base->handle;
+
+#ifdef NITROS_GXF_COMPAT_MODE
+  if (msg_base->handle == -1 && use_gxf_receiver_) {
+    int64_t eid = CreateGxfEntityFromNitros(context_, msg_ref);
+    if (eid >= 0) {
+      handle = eid;
+      // Expose the synthesized eid so legacy user callbacks that read msg.handle
+      // to inspect the GXF entity (e.g. get<PoseFrameUid>) see a valid entity.
+      // ~NitrosTypeBase() will Dec this eid, balancing the Inc done inside
+      // CreateGxfEntity — so no explicit Dec is needed after pushEntity.
+      msg_base->handle = eid;
+    }
+  }
+#endif
 
   // Only enable diagnostics if the ROS parameter flag is enabled and
   // the topic has been specified in the topics_list ROS parameter
@@ -396,17 +417,17 @@ void NitrosSubscriber::subscriberCallback(
     diagnostics_config_.topic_name_expected_dt_map.find(config_.topic_name) !=
     diagnostics_config_.topic_name_expected_dt_map.end()))
   {
-    updateDiagnostics(getTimestamp(msg_base));
+    updateDiagnostics(getTimestamp(msg_ref));
   }
 
   RCLCPP_DEBUG(node_.get_logger(), "[NitrosSubscriber] Received a Nitros-typed messgae");
-  RCLCPP_DEBUG(node_.get_logger(), "[NitrosSubscriber] \teid: %ld", msg_base.handle);
+  RCLCPP_DEBUG(node_.get_logger(), "[NitrosSubscriber] \teid: %ld", handle);
   RCLCPP_DEBUG(
     node_.get_logger(), "[NitrosSubscriber] \tdata_format_name: %s",
     data_format_name.c_str());
   RCLCPP_DEBUG(
     node_.get_logger(), "[NitrosSubscriber] \tmsg_base: %s",
-    msg_base.data_format_name.c_str());
+    msg_base->data_format_name.c_str());
   RCLCPP_DEBUG(
     node_.get_logger(), "[NitrosSubscriber] \tReceiver's pointer: %p",
     (void *)gxf_receiver_ptr_);
@@ -423,7 +444,7 @@ void NitrosSubscriber::subscriberCallback(
   if (frame_id_map_ptr_ != nullptr) {
     std::string frame_id_source_key = config_.frame_id_source_key.empty() ?
       GenerateComponentKey(gxf_component_info_) : config_.frame_id_source_key;
-    (*frame_id_map_ptr_.get())[frame_id_source_key] = msg_base.frame_id;
+    (*frame_id_map_ptr_.get())[frame_id_source_key] = msg_base->get_frame_id();
 
     RCLCPP_DEBUG(
       node_.get_logger(),
@@ -435,13 +456,13 @@ void NitrosSubscriber::subscriberCallback(
     RCLCPP_DEBUG(
       node_.get_logger(),
       "[NitrosSubscriber] Calling user-defined callback for an Nitros-typed "
-      "message (eid=%ld)", msg_base.handle);
-    config_.callback(context_, msg_base);
+      "message (eid=%ld)", handle);
+    config_.callback(context_, msg_ref);
   }
 
   if (use_gxf_receiver_ && gxf_receiver_ptr_ != nullptr && is_gxf_running_) {
     // Push the message to the associated gxf receiver if existed
-    pushEntity(msg_base.handle, false);
+    pushEntity(handle, false);
   }
 
   nvtxRangePopWrapper();

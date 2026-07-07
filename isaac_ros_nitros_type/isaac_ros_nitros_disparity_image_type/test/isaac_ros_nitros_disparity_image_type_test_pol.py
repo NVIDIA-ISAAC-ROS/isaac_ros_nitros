@@ -50,9 +50,6 @@ def generate_test_description():
                 plugin='nvidia::isaac_ros::nitros::NitrosDisparityImageForwardNode',
                 name='NitrosDisparityImageForwardNode',
                 namespace=test_ns,
-                parameters=[{
-                    'compatible_format': 'nitros_disparity_image_32FC1'
-                }],
                 remappings=[
                     (test_ns+'/topic_forward_input', test_ns+'/input'),
                     (test_ns+'/topic_forward_output', test_ns+'/output'),
@@ -60,7 +57,7 @@ def generate_test_description():
             ),
         ],
         output='both',
-        arguments=['--ros-args', '--log-level', 'error'],
+        arguments=['--ros-args', '--log-level', 'info'],
     )
 
     return IsaacROSDisparityImageTest.generate_test_description([

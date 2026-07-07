@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
-// Copyright (c) 2022-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+// Copyright (c) 2022-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -20,6 +20,8 @@
 
 #include <cuda_runtime.h>
 
+#include <string>
+
 #include "isaac_ros_nitros_tensor_list_type/nitros_tensor.hpp"
 #include "isaac_ros_nitros_tensor_list_type/nitros_tensor_shape.hpp"
 #include "isaac_ros_nitros_tensor_list_type/nitros_data_type.hpp"
@@ -36,6 +38,8 @@ class NitrosTensorBuilder
 public:
   NitrosTensorBuilder();
 
+  NitrosTensorBuilder & WithName(std::string name);
+
   NitrosTensorBuilder & WithShape(NitrosTensorShape tensor_shape);
 
   NitrosTensorBuilder & WithDataType(NitrosDataType data_type);
@@ -49,6 +53,10 @@ public:
   NitrosTensor Build();
 
 private:
+  void Validate();
+
+  std::string name_{};
+
   NitrosTensor nitros_tensor_{};
 
   NitrosTensorShape shape_{};

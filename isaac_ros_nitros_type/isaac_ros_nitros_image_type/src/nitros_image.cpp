@@ -15,559 +15,264 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-#include <cuda_runtime.h>
-
-#include <string>
-#include <unordered_map>
-#include <vector>
-
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wunused-parameter"
-#pragma GCC diagnostic ignored "-Wmissing-field-initializers"
-#pragma GCC diagnostic ignored "-Wpedantic"
-#include "gxf/core/entity.hpp"
-#include "gxf/core/gxf.h"
-#include "gxf/multimedia/video.hpp"
-#include "gxf/std/timestamp.hpp"
-#pragma GCC diagnostic pop
-
 #include "isaac_ros_nitros_image_type/nitros_image.hpp"
-#include "isaac_ros_nitros_image_type/nitros_image_details.hpp"
-#include "isaac_ros_nitros/types/type_adapter_nitros_context.hpp"
+
+#include <cuda_runtime.h>
+#include <vpi/CUDAInterop.h>
+#include <vpi/Image.h>
+#include <vpi/Stream.h>
+#include <vpi/algo/ConvertImageFormat.h>
+
+#include <sstream>
+
 #include "rclcpp/rclcpp.hpp"
-#include "sensor_msgs/image_encodings.hpp"
-#include "vpi/Image.h"
-#include "vpi/algo/ConvertImageFormat.h"
-
-#include "isaac_ros_vpi_utils/vpi_utilities.hpp"
-#include "isaac_ros_common/cuda_stream.hpp"
-
-constexpr char kEntityName[] = "memory_pool";
-constexpr char kComponentName[] = "unbounded_allocator";
-constexpr char kComponentTypeName[] = "nvidia::gxf::UnboundedAllocator";
+#include "isaac_ros_nitros/types/cuda_stream_pool.hpp"
 
 namespace
 {
-namespace nitros = nvidia::isaac_ros::nitros;
-
-// Get step size for ROS Image
-uint32_t get_step_size(const nvidia::gxf::VideoBufferInfo & video_buff_info)
+// Compute total bytes for various encodings, including multi-plane formats
+static size_t nitros_compute_total_image_bytes(
+  const std::string & encoding, uint32_t width, uint32_t height, uint32_t step)
 {
-  return video_buff_info.width * video_buff_info.color_planes[0].bytes_per_pixel;
+  // Multi-plane encodings treated as contiguous Y plane followed by chroma plane
+  // NV12: Y plane WxH, UV plane interleaved with size WxH/2
+  if (encoding == "nv12") {
+    const size_t y_bytes = static_cast<size_t>(step) * height;  // step is Y pitch
+    const size_t uv_bytes = y_bytes / 2;
+    return y_bytes + uv_bytes;
+  }
+  // NV24: Y plane WxH, UV plane interleaved with full resolution (2 bytes per pixel)
+  if (encoding == "nv24") {
+    const size_t y_bytes = static_cast<size_t>(step) * height;  // step is Y pitch
+    const size_t uv_bytes = static_cast<size_t>(width) * height * 2;
+    return y_bytes + uv_bytes;
+  }
+  // Fallback: assume tightly packed single-plane using provided step
+  return static_cast<size_t>(step) * height;
 }
 
-uint32_t get_step_size(const VPIImageData & vpi_img_data)
+// Convert multi-plane NV12/NV24 device memory to interleaved RGB8 host memory using VPI
+static void convert_nv_to_rgb8(
+  const nvidia::isaac_ros::nitros::NitrosImage & source,
+  const uint8_t * dev_ptr,
+  sensor_msgs::msg::Image & destination,
+  cudaStream_t stream)
 {
-  return vpi_img_data.buffer.pitch.planes[0].pitchBytes;
-}
+  const bool is_nv12 = (destination.encoding == "nv12");
 
-template<VideoFormat T>
-void allocate_video_buffer_no_padding(
-  const uint32_t width,
-  const uint32_t height,
-  const nvidia::gxf::Handle<nvidia::gxf::VideoBuffer> & video_buff,
-  const nvidia::gxf::Handle<nvidia::gxf::Allocator> & allocator_handle)
-{
-  constexpr auto surface_layout = nvidia::gxf::SurfaceLayout::GXF_SURFACE_LAYOUT_PITCH_LINEAR;
-  constexpr auto storage_type = nvidia::gxf::MemoryStorageType::kDevice;
-  if (width % 2 != 0 || height % 2 != 0) {
-    RCLCPP_ERROR(
-      rclcpp::get_logger("NitrosImage"),
-      "[convert_to_custom] Image width/height must be even for creation of gxf::VideoBuffer");
-    throw std::runtime_error("[convert_to_custom] Odd Image width or height.");
-  }
-  NoPaddingColorPlanes<T> nopadding_planes(width);
-  nvidia::gxf::VideoFormatSize<T> format_size;
-  uint64_t size = format_size.size(width, height, nopadding_planes.planes);
-  RCLCPP_DEBUG(
-    rclcpp::get_logger("NitrosImage"),
-    "[image size]  [%ld].", size);
-  std::vector<nvidia::gxf::ColorPlane> color_planes{nopadding_planes.planes.begin(),
-    nopadding_planes.planes.end()};
-  nvidia::gxf::VideoBufferInfo buffer_info{static_cast<uint32_t>(width),
-    static_cast<uint32_t>(height),
-    T, color_planes,
-    surface_layout};
-
-  video_buff->resizeCustom(buffer_info, size, storage_type, allocator_handle);
-}
-
-void allocate_video_buffer(
-  const sensor_msgs::msg::Image & source,
-  const nvidia::gxf::Handle<nvidia::gxf::VideoBuffer> & video_buff,
-  const nvidia::gxf::Handle<nvidia::gxf::Allocator> & allocator_handle)
-{
-  auto color_fmt = g_ros_to_gxf_video_format.find(source.encoding);
-  if (color_fmt == std::end(g_ros_to_gxf_video_format)) {
-    RCLCPP_ERROR(
-      rclcpp::get_logger("NitrosImage"),
-      "[convert_to_custom] Unsupported encoding from ROS [%s].", source.encoding.c_str());
-    throw std::runtime_error("[convert_to_custom] Unsupported encoding from ROS.");
-  }
-
-  switch (color_fmt->second) {
-    case VideoFormat::GXF_VIDEO_FORMAT_RGB:
-      allocate_video_buffer_no_padding<VideoFormat::GXF_VIDEO_FORMAT_RGB>(
-        source.width, source.height, video_buff, allocator_handle);
-      break;
-
-    case VideoFormat::GXF_VIDEO_FORMAT_RGBA:
-      allocate_video_buffer_no_padding<VideoFormat::GXF_VIDEO_FORMAT_RGBA>(
-        source.width, source.height, video_buff, allocator_handle);
-      break;
-
-    case VideoFormat::GXF_VIDEO_FORMAT_RGB16:
-      allocate_video_buffer_no_padding<VideoFormat::GXF_VIDEO_FORMAT_RGB16>(
-        source.width, source.height, video_buff, allocator_handle);
-      break;
-
-    case VideoFormat::GXF_VIDEO_FORMAT_BGR:
-      allocate_video_buffer_no_padding<VideoFormat::GXF_VIDEO_FORMAT_BGR>(
-        source.width, source.height, video_buff, allocator_handle);
-      break;
-
-    case VideoFormat::GXF_VIDEO_FORMAT_BGRA:
-      allocate_video_buffer_no_padding<VideoFormat::GXF_VIDEO_FORMAT_BGRA>(
-        source.width, source.height, video_buff, allocator_handle);
-      break;
-
-    case VideoFormat::GXF_VIDEO_FORMAT_BGR16:
-      allocate_video_buffer_no_padding<VideoFormat::GXF_VIDEO_FORMAT_BGR16>(
-        source.width, source.height, video_buff, allocator_handle);
-      break;
-
-    case VideoFormat::GXF_VIDEO_FORMAT_GRAY:
-      allocate_video_buffer_no_padding<VideoFormat::GXF_VIDEO_FORMAT_GRAY>(
-        source.width, source.height, video_buff, allocator_handle);
-      break;
-
-    case VideoFormat::GXF_VIDEO_FORMAT_GRAY16:
-      allocate_video_buffer_no_padding<VideoFormat::GXF_VIDEO_FORMAT_GRAY16>(
-        source.width, source.height, video_buff, allocator_handle);
-      break;
-
-    case VideoFormat::GXF_VIDEO_FORMAT_GRAY32:
-      allocate_video_buffer_no_padding<VideoFormat::GXF_VIDEO_FORMAT_GRAY32>(
-        source.width, source.height, video_buff, allocator_handle);
-      break;
-
-    case VideoFormat::GXF_VIDEO_FORMAT_NV24:
-      allocate_video_buffer_no_padding<VideoFormat::GXF_VIDEO_FORMAT_NV24>(
-        source.width, source.height, video_buff, allocator_handle);
-      break;
-
-    case VideoFormat::GXF_VIDEO_FORMAT_NV12:
-      allocate_video_buffer_no_padding<VideoFormat::GXF_VIDEO_FORMAT_NV12>(
-        source.width, source.height, video_buff, allocator_handle);
-      break;
-    case VideoFormat::GXF_VIDEO_FORMAT_RGB32:
-      allocate_video_buffer_no_padding<VideoFormat::GXF_VIDEO_FORMAT_RGB32>(
-        source.width, source.height, video_buff, allocator_handle);
-      break;
-
-    case VideoFormat::GXF_VIDEO_FORMAT_RGBD32:
-      allocate_video_buffer_no_padding<VideoFormat::GXF_VIDEO_FORMAT_RGBD32>(
-        source.width, source.height, video_buff, allocator_handle);
-      break;
-
-    default:
-      RCLCPP_ERROR(
-        rclcpp::get_logger("NitrosImage"),
-        "[convert_to_custom] Unsupported encoding from ROS [%s].", source.encoding.c_str());
-      throw std::runtime_error("[convert_to_custom] Unsupported encoding from ROS.");
-      break;
-  }
-}
-
-VPIStatus CreateVPIImageWrapper(
-  VPIImage & vpi_image, VPIImageData & img_data, uint64_t flags,
-  const nvidia::gxf::Handle<nvidia::gxf::VideoBuffer> & video_buff)
-{
-  nvidia::gxf::VideoBufferInfo image_info = video_buff->video_frame_info();
-  nvidia::isaac_ros::vpi_utils::VPIFormat vpi_format =
-    nvidia::isaac_ros::vpi_utils::ToVpiFormat(image_info.color_format);
-  img_data.bufferType = VPI_IMAGE_BUFFER_CUDA_PITCH_LINEAR;
-  img_data.buffer.pitch.format = vpi_format.image_format;
-  img_data.buffer.pitch.numPlanes = image_info.color_planes.size();
-  auto data_ptr_offset = 0;
-  for (size_t i = 0; i < image_info.color_planes.size(); ++i) {
-    img_data.buffer.pitch.planes[i].pBase = video_buff->pointer() + data_ptr_offset;
-    img_data.buffer.pitch.planes[i].height = image_info.color_planes[i].height;
-    img_data.buffer.pitch.planes[i].width = image_info.color_planes[i].width;
-    img_data.buffer.pitch.planes[i].pixelType = vpi_format.pixel_type[i];
-    img_data.buffer.pitch.planes[i].pitchBytes = image_info.color_planes[i].stride;
-
-    data_ptr_offset = image_info.color_planes[i].size;
-  }
-  return vpiImageCreateWrapper(&img_data, nullptr, flags, &vpi_image);
-}
-}  // namespace
-
-
-void rclcpp::TypeAdapter<nitros::NitrosImage, sensor_msgs::msg::Image>::convert_to_ros_message(
-  const custom_type & source, ros_message_type & destination)
-{
-  nitros::nvtxRangePushWrapper("NitrosImage::convert_to_ros_message", nitros::CLR_PURPLE);
-
-  RCLCPP_DEBUG(
-    rclcpp::get_logger("NitrosImage"),
-    "[convert_to_ros_message] Conversion started for handle=%ld", source.handle);
-
-  auto context = nitros::GetTypeAdapterNitrosContext().getContext();
-  auto msg_entity = nvidia::gxf::Entity::Shared(context, source.handle);
-
-  auto gxf_video_buffer = msg_entity->get<nvidia::gxf::VideoBuffer>();
-  if (!gxf_video_buffer) {
-    std::string error_msg =
-      "[convert_to_ros_message] Failed to get the existing VideoBuffer object";
-    RCLCPP_ERROR(
-      rclcpp::get_logger("NitrosImage"), error_msg.c_str());
-    throw std::runtime_error(error_msg.c_str());
-  }
-
-  // Setting Image date from gxf VideoBuffer
-  auto video_buffer_info = gxf_video_buffer.value()->video_frame_info();
-  destination.height = video_buffer_info.height;
-  destination.width = video_buffer_info.width;
-  const auto encoding = g_gxf_to_ros_video_format.find(video_buffer_info.color_format);
-  if (encoding == std::end(g_gxf_to_ros_video_format)) {
-    RCLCPP_ERROR(
-      rclcpp::get_logger("NitrosImage"),
-      "[convert_to_ros_message] Unsupported encoding from gxf [%d].",
-      (int)video_buffer_info.color_format);
-    throw std::runtime_error("[convert_to_custom] Unsupported encoding from gxf .");
-  } else {
-    destination.encoding = encoding->second;
-  }
-
-  void * src_ptr;
-  size_t src_pitch{0};
-  uint32_t step_size{0};
   VPIStream vpi_stream{};
-  uint64_t vpi_flags{VPI_BACKEND_CUDA};
+  VPIStatus st = vpiStreamCreateWrapperCUDA(stream, VPI_BACKEND_CUDA, &vpi_stream);
+  if (st != VPI_SUCCESS) {
+    throw std::runtime_error("vpiStreamCreateWrapperCUDA failed");
+  }
+
   VPIImage input{}, output{};
-  VPIImageData input_data{}, output_data{};
+  VPIImageData imgdata{};
+  std::memset(&imgdata, 0, sizeof(VPIImageData));
+  imgdata.bufferType = VPI_IMAGE_BUFFER_CUDA_PITCH_LINEAR;
+  imgdata.buffer.pitch.numPlanes = 2;
+  imgdata.buffer.pitch.format = is_nv12 ? VPI_IMAGE_FORMAT_NV12_ER : VPI_IMAGE_FORMAT_NV24_ER;
 
-  if (destination.encoding == "nv12" || destination.encoding == "nv24") {
-    // Convert multiplanar to interleaved rgb
-    RCLCPP_DEBUG(
-      rclcpp::get_logger("NitrosImage"),
-      "[convert_to_ros_message] Multiplanar to interleaved started");
+  const auto & planes = source.get_color_planes();
+  imgdata.buffer.pitch.planes[0].pBase = const_cast<uint8_t *>(dev_ptr + planes[0].offset);
+  imgdata.buffer.pitch.planes[0].height = planes[0].height;
+  imgdata.buffer.pitch.planes[0].width = planes[0].width;
+  imgdata.buffer.pitch.planes[0].pixelType = VPI_PIXEL_TYPE_U8;
+  imgdata.buffer.pitch.planes[0].offsetBytes = 0;
+  imgdata.buffer.pitch.planes[0].pitchBytes = planes[0].stride;
+  imgdata.buffer.pitch.planes[1].pBase = const_cast<uint8_t *>(dev_ptr + planes[1].offset);
+  imgdata.buffer.pitch.planes[1].height = planes[1].height;
+  imgdata.buffer.pitch.planes[1].width = planes[1].width;
+  imgdata.buffer.pitch.planes[1].pixelType = VPI_PIXEL_TYPE_2U8;
+  imgdata.buffer.pitch.planes[1].offsetBytes = 0;
+  imgdata.buffer.pitch.planes[1].pitchBytes = planes[1].stride;
 
-    // Create VPI stream
-    CHECK_VPI_STATUS(vpiStreamCreate(vpi_flags, &vpi_stream));
-
-    // VPI input image
-    CHECK_VPI_STATUS(CreateVPIImageWrapper(input, input_data, vpi_flags, gxf_video_buffer.value()));
-    // VPI output image
-    CHECK_VPI_STATUS(
-      vpiImageCreate(
-        destination.width, destination.height, VPI_IMAGE_FORMAT_RGB8, vpi_flags, &output));
-
-    // Call for color format conversion
-    CHECK_VPI_STATUS(vpiSubmitConvertImageFormat(vpi_stream, vpi_flags, input, output, nullptr));
-
-    // Wait for operations to complete
-    CHECK_VPI_STATUS(vpiStreamSync(vpi_stream));
-
-    // Copy data
-    CHECK_VPI_STATUS(
-      vpiImageLockData(output, VPI_LOCK_READ, VPI_IMAGE_BUFFER_CUDA_PITCH_LINEAR, &output_data));
-    // Release lock
-    CHECK_VPI_STATUS(vpiImageUnlock(output));
-
-    destination.encoding = img_encodings::RGB8;
-    src_ptr = output_data.buffer.pitch.planes[0].pBase;
-    src_pitch = get_step_size(output_data);
-    step_size = get_step_size(output_data);
-
-    RCLCPP_DEBUG(
-      rclcpp::get_logger("NitrosImage"),
-      "[convert_to_ros_message] Multiplanar to interleaved finished");
-  } else {
-    src_ptr = gxf_video_buffer.value()->pointer();
-    src_pitch = video_buffer_info.color_planes[0].stride;
-    step_size = get_step_size(video_buffer_info);
+  st = vpiImageCreateWrapper(&imgdata, nullptr, VPI_BACKEND_CUDA, &input);
+  if (st != VPI_SUCCESS) {
+    vpiStreamDestroy(vpi_stream);
+    throw std::runtime_error("VPI image wrapper create failed");
   }
 
-  destination.is_bigendian = 0;
+  st = vpiImageCreate(destination.width, destination.height, VPI_IMAGE_FORMAT_RGB8,
+      VPI_BACKEND_CUDA, &output);
+  if (st != VPI_SUCCESS) {
+    vpiImageDestroy(input);
+    vpiStreamDestroy(vpi_stream);
+    throw std::runtime_error("VPI image create failed");
+  }
 
-  // Full row length in bytes
-  destination.step = step_size;
+  st = vpiSubmitConvertImageFormat(vpi_stream, VPI_BACKEND_CUDA, input, output, nullptr);
+  if (st != VPI_SUCCESS) {
+    vpiImageDestroy(output);
+    vpiImageDestroy(input);
+    vpiStreamDestroy(vpi_stream);
+    throw std::runtime_error("VPI convert image format failed");
+  }
 
-  // Resize the ROS image buffer to the right size
-  destination.data.resize(destination.step * destination.height);
+  st = vpiStreamSync(vpi_stream);
+  if (st != VPI_SUCCESS) {
+    vpiImageDestroy(output);
+    vpiImageDestroy(input);
+    vpiStreamDestroy(vpi_stream);
+    throw std::runtime_error("VPI stream sync failed");
+  }
 
-  // Copy data from Device to Host
-  const cudaError_t cuda_error = cudaMemcpy2DAsync(
-    destination.data.data(),
-    destination.step,
-    src_ptr,
-    src_pitch,
-    destination.step,
-    destination.height,
-    cudaMemcpyDeviceToHost,
-    source.cuda_stream
-  );
-  if (cuda_error != cudaSuccess) {
+  VPIImageData outdata{};
+  st = vpiImageLockData(output, VPI_LOCK_READ, VPI_IMAGE_BUFFER_CUDA_PITCH_LINEAR, &outdata);
+  if (st != VPI_SUCCESS) {
+    vpiImageDestroy(output);
+    vpiImageDestroy(input);
+    vpiStreamDestroy(vpi_stream);
+    throw std::runtime_error("VPI image lock failed");
+  }
+
+  destination.encoding = sensor_msgs::image_encodings::RGB8;
+  destination.step = destination.width * 3;  // Tight packing for ROS message
+  destination.data.resize(static_cast<size_t>(destination.step) * destination.height);
+
+  const void * src_ptr = outdata.buffer.pitch.planes[0].pBase;
+  size_t src_pitch = outdata.buffer.pitch.planes[0].pitchBytes;
+  cudaError_t cuda_err = cudaMemcpy2DAsync(
+    destination.data.data(), destination.step,
+    src_ptr, src_pitch,
+    destination.width * 3, destination.height,
+    cudaMemcpyDeviceToHost, stream);
+  if (cuda_err != cudaSuccess) {
+    vpiImageUnlock(output);
+    vpiImageDestroy(output);
+    vpiImageDestroy(input);
+    vpiStreamDestroy(vpi_stream);
     std::stringstream error_msg;
     error_msg <<
-      "[convert_to_ros_message] cudaMemcpy2D failed for conversion from "
-      "NitrosImage to sensor_msgs::msg::Image: " <<
-      cudaGetErrorName(cuda_error) <<
-      " (" << cudaGetErrorString(cuda_error) << ")";
-    RCLCPP_ERROR(
-      rclcpp::get_logger("NitrosImage"), error_msg.str().c_str());
-    throw std::runtime_error(error_msg.str().c_str());
-  }
-
-  // since this is meant to be synced right away, we should sync the stream
-  cudaError_t cuda_result = cudaStreamSynchronize(source.cuda_stream);
-  CHECK_CUDA_ERROR(cuda_result, "Stream was not able to be synchronized");
-
-  vpiImageDestroy(input);
-  vpiImageDestroy(output);
-  vpiStreamDestroy(vpi_stream);
-
-  // Populate timestamp information back into ROS header
-  auto input_timestamp = msg_entity->get<nvidia::gxf::Timestamp>();
-  if (input_timestamp) {
-    destination.header.stamp.sec = static_cast<int32_t>(
-      input_timestamp.value()->acqtime / static_cast<uint64_t>(1e9));
-    destination.header.stamp.nanosec = static_cast<uint32_t>(
-      input_timestamp.value()->acqtime % static_cast<uint64_t>(1e9));
-  }
-
-  // Set frame ID
-  destination.header.frame_id = source.frame_id;
-
-  RCLCPP_DEBUG(
-    rclcpp::get_logger("NitrosImage"),
-    "[convert_to_ros_message] Conversion completed for handle=%ld", source.handle);
-
-  nitros::nvtxRangePopWrapper();
-}
-
-
-void rclcpp::TypeAdapter<nitros::NitrosImage, sensor_msgs::msg::Image>::convert_to_custom(
-  const ros_message_type & source, custom_type & destination)
-{
-  nitros::nvtxRangePushWrapper("NitrosImage::convert_to_custom", nitros::CLR_PURPLE);
-
-  RCLCPP_DEBUG(rclcpp::get_logger("NitrosImage"), "[convert_to_custom] Conversion started");
-
-  auto context = nitros::GetTypeAdapterNitrosContext().getContext();
-
-  // Get pointer to allocator component
-  gxf_uid_t cid;
-  nitros::GetTypeAdapterNitrosContext().getCid(
-    kEntityName, kComponentName, kComponentTypeName, cid);
-
-  auto maybe_allocator_handle =
-    nvidia::gxf::Handle<nvidia::gxf::Allocator>::Create(context, cid);
-  if (!maybe_allocator_handle) {
-    std::stringstream error_msg;
-    error_msg <<
-      "[convert_to_custom] Failed to get allocator's handle: " <<
-      GxfResultStr(maybe_allocator_handle.error());
+      "[convert_to_ros_message] cudaMemcpy2DAsync D2H failed: " <<
+      cudaGetErrorName(cuda_err) << " (" << cudaGetErrorString(cuda_err) << ")";
     RCLCPP_ERROR(rclcpp::get_logger("NitrosImage"), error_msg.str().c_str());
     throw std::runtime_error(error_msg.str().c_str());
   }
-  auto allocator_handle = maybe_allocator_handle.value();
-
-  auto message = nvidia::gxf::Entity::New(context);
-  if (!message) {
-    std::stringstream error_msg;
-    error_msg << "[convert_to_custom] Error initializing new message entity: " <<
-      GxfResultStr(message.error());
-    RCLCPP_ERROR(
-      rclcpp::get_logger("NitrosImage"), error_msg.str().c_str());
-    throw std::runtime_error(error_msg.str().c_str());
-  }
-
-  auto gxf_video_buffer = message->add<nvidia::gxf::VideoBuffer>(source.header.frame_id.c_str());
-  if (!gxf_video_buffer) {
-    std::stringstream error_msg;
-    error_msg << "[convert_to_custom] Failed to create a VideoBuffer object: " <<
-      GxfResultStr(gxf_video_buffer.error());
-    RCLCPP_ERROR(
-      rclcpp::get_logger("NitrosImage"), error_msg.str().c_str());
-    throw std::runtime_error(error_msg.str().c_str());
-  }
-
-  // The uint64_t component which represents as sequential frame number
-  // is required by gxf camera_message
-  auto uint64_t_buffer = message->add<uint64_t>();
-  if (!uint64_t_buffer) {
-    std::stringstream error_msg;
-    error_msg << "[convert_to_custom] Failed to create a uint64_t object: " <<
-      GxfResultStr(uint64_t_buffer.error());
-    RCLCPP_ERROR(
-      rclcpp::get_logger("NitrosImage"), error_msg.str().c_str());
-    throw std::runtime_error(error_msg.str().c_str());
-  }
-
-  // Allocate buffer
-  allocate_video_buffer(source, gxf_video_buffer.value(), allocator_handle);
-
-  auto video_buffer_info = gxf_video_buffer.value()->video_frame_info();
-  auto nitros_cuda_stream =
-    nvidia::isaac_ros::nitros::GetTypeAdapterNitrosContext()
-    .getCudaStreamFromNitrosGraph();
-  // Copy data from Host to Device
-  auto width = get_step_size(video_buffer_info);
-  const cudaError_t cuda_error = cudaMemcpy2DAsync(
-    gxf_video_buffer.value()->pointer(),
-    video_buffer_info.color_planes[0].stride,
-    source.data.data(),
-    source.step,
-    width,
-    video_buffer_info.height,
-    cudaMemcpyHostToDevice,
-    nitros_cuda_stream);
-
-  if (cuda_error != cudaSuccess) {
+  cuda_err = cudaStreamSynchronize(stream);
+  if (cuda_err != cudaSuccess) {
     std::stringstream error_msg;
     error_msg <<
-      "[convert_to_custom] cudaMemcpy2D failed for conversion from "
-      "sensor_msgs::msg::Image to NitrosImage: " <<
-      cudaGetErrorName(cuda_error) <<
-      " (" << cudaGetErrorString(cuda_error) << ")";
-    RCLCPP_ERROR(
-      rclcpp::get_logger("NitrosImage"), error_msg.str().c_str());
+      "[convert_to_ros_message] cudaStreamSynchronize failed: " <<
+      cudaGetErrorName(cuda_err) << " (" << cudaGetErrorString(cuda_err) << ")";
+    RCLCPP_ERROR(rclcpp::get_logger("NitrosImage"), error_msg.str().c_str());
     throw std::runtime_error(error_msg.str().c_str());
   }
-  cudaError_t cuda_result = cudaStreamSynchronize(nitros_cuda_stream);
-  CHECK_CUDA_ERROR(cuda_result, "Stream was not able to be synchronized");
-  // Add timestamp to the message
-  uint64_t input_timestamp =
-    source.header.stamp.sec * static_cast<uint64_t>(1e9) +
-    source.header.stamp.nanosec;
-  auto output_timestamp = message->add<nvidia::gxf::Timestamp>("timestamp");
-  if (!output_timestamp) {
-    std::stringstream error_msg;
-    error_msg << "[convert_to_custom] Failed to add a timestamp component to Image message: " <<
-      GxfResultStr(output_timestamp.error());
-    RCLCPP_ERROR(
-      rclcpp::get_logger("NitrosImage"), error_msg.str().c_str());
-    throw std::runtime_error(error_msg.str().c_str());
+
+  (void)vpiImageUnlock(output);
+  vpiImageDestroy(output);
+  vpiImageDestroy(input);
+  vpiStreamDestroy(vpi_stream);
+}
+}  // namespace
+
+void rclcpp::TypeAdapter<
+  nvidia::isaac_ros::nitros::NitrosImage, sensor_msgs::msg::Image>::convert_to_ros_message(
+  const custom_type & source, ros_message_type & destination)
+{
+  destination.height = source.height;
+  destination.width = source.width;
+  destination.encoding = source.encoding;
+  destination.is_bigendian = 0;
+  destination.step = source.step;
+  const bool is_nv12 = (destination.encoding == "nv12");
+  const bool is_nv24 = (destination.encoding == "nv24");
+
+  auto stream_handle = nvidia::isaac_ros::nitros::CudaStreamPool::instance().get_stream_handle();
+  cudaStream_t stream = stream_handle.get();
+
+  auto read_handle = source.get_read_handle(stream);
+  const uint8_t * dev_ptr = read_handle.get_ptr();
+
+  if (dev_ptr == nullptr) {
+    throw std::runtime_error("NitrosImage device pointer is nullptr");
   }
-  output_timestamp.value()->acqtime = input_timestamp;
 
-  // Set frame ID
-  destination.frame_id = source.header.frame_id;
+  if (is_nv12 || is_nv24) {
+    convert_nv_to_rgb8(source, dev_ptr, destination, stream);
+  } else {
+    const size_t total_bytes = nitros_compute_total_image_bytes(
+      destination.encoding, destination.width, destination.height, destination.step);
+    destination.data.resize(total_bytes);
+    cudaError_t cuda_err = cudaMemcpyAsync(
+      destination.data.data(), dev_ptr, total_bytes,
+      cudaMemcpyDeviceToHost, stream);
+    if (cuda_err != cudaSuccess) {
+      std::stringstream error_msg;
+      error_msg <<
+        "[convert_to_ros_message] cudaMemcpyAsync D2H failed: " <<
+        cudaGetErrorName(cuda_err) << " (" << cudaGetErrorString(cuda_err) << ")";
+      RCLCPP_ERROR(rclcpp::get_logger("NitrosImage"), error_msg.str().c_str());
+      throw std::runtime_error(error_msg.str().c_str());
+    }
+    cuda_err = cudaStreamSynchronize(stream);
+    if (cuda_err != cudaSuccess) {
+      std::stringstream error_msg;
+      error_msg <<
+        "[convert_to_ros_message] cudaStreamSynchronize failed: " <<
+        cudaGetErrorName(cuda_err) << " (" << cudaGetErrorString(cuda_err) << ")";
+      RCLCPP_ERROR(rclcpp::get_logger("NitrosImage"), error_msg.str().c_str());
+      throw std::runtime_error(error_msg.str().c_str());
+    }
+  }
 
-  // Set Entity Id
-  destination.handle = message->eid();
-  GxfEntityRefCountInc(context, message->eid());
-
-  RCLCPP_DEBUG(
-    rclcpp::get_logger("NitrosImage"),
-    "[convert_to_custom] Conversion completed (resulting handle=%ld)", message->eid());
-
-  nitros::nvtxRangePopWrapper();
+  destination.header.stamp.sec = source.timestamp_sec;
+  destination.header.stamp.nanosec = source.timestamp_nsec;
+  destination.header.frame_id = source.frame_id;
 }
 
-// Map to store the Nitros image format encoding to Video buffer format
-const std::unordered_map<std::string, VideoFormat> g_nitros_to_gxf_video_format({
-  {"nitros_image_rgb8", VideoFormat::GXF_VIDEO_FORMAT_RGB},
-  {"nitros_image_rgba8", VideoFormat::GXF_VIDEO_FORMAT_RGBA},
-  {"nitros_image_rgb16", VideoFormat::GXF_VIDEO_FORMAT_RGB16},
-  {"nitros_image_bgr8", VideoFormat::GXF_VIDEO_FORMAT_BGR},
-  {"nitros_image_bgra8", VideoFormat::GXF_VIDEO_FORMAT_BGRA},
-  {"nitros_image_bgr16", VideoFormat::GXF_VIDEO_FORMAT_BGR16},
-  {"nitros_image_mono8", VideoFormat::GXF_VIDEO_FORMAT_GRAY},
-  {"nitros_image_mono16", VideoFormat::GXF_VIDEO_FORMAT_GRAY16},
-  {"nitros_image_32FC1", VideoFormat::GXF_VIDEO_FORMAT_GRAY32},
-  {"nitros_image_nv12", VideoFormat::GXF_VIDEO_FORMAT_NV12},
-  {"nitros_image_nv24", VideoFormat::GXF_VIDEO_FORMAT_NV24},
-  {"nitros_image_32FC3", VideoFormat::GXF_VIDEO_FORMAT_RGB32},
-  {"nitros_image_32FC4", VideoFormat::GXF_VIDEO_FORMAT_RGBD32}
-});
-
-uint64_t calculate_image_size(const std::string image_type, uint32_t width, uint32_t height)
+void rclcpp::TypeAdapter<
+  nvidia::isaac_ros::nitros::NitrosImage, sensor_msgs::msg::Image>::convert_to_custom(
+  const ros_message_type & source, custom_type & destination)
 {
-  auto color_fmt = g_nitros_to_gxf_video_format.find(image_type);
-  if (color_fmt == std::end(g_nitros_to_gxf_video_format)) {
-    throw std::runtime_error("[calculate_image_size] Unsupported encoding from ROS.");
+  const size_t bytes = nitros_compute_total_image_bytes(
+    source.encoding, source.width, source.height, source.step);
+
+  auto & stream_pool = nvidia::isaac_ros::nitros::CudaStreamPool::instance();
+  cudaStream_t stream = stream_pool.acquire();
+
+  nvidia::isaac_ros::nitros::NitrosImage msg_temp;
+  uint8_t * dptr = nullptr;
+  cudaError_t cuda_err = cudaMallocAsync(reinterpret_cast<void **>(&dptr), bytes, stream);
+  if (cuda_err != cudaSuccess) {
+    stream_pool.release(stream);
+    std::stringstream error_msg;
+    error_msg <<
+      "[convert_to_custom] cudaMallocAsync failed: " <<
+      cudaGetErrorName(cuda_err) << " (" << cudaGetErrorString(cuda_err) << ")";
+    RCLCPP_ERROR(rclcpp::get_logger("NitrosImage"), error_msg.str().c_str());
+    throw std::runtime_error(error_msg.str().c_str());
   }
 
-  uint64_t image_size = 0;
-  switch (color_fmt->second) {
-    case VideoFormat::GXF_VIDEO_FORMAT_RGB:
-      nvidia::gxf::VideoFormatSize<VideoFormat::GXF_VIDEO_FORMAT_RGB> format_size_rgb8;
-      image_size = format_size_rgb8.size(width, height);
-      break;
-
-    case VideoFormat::GXF_VIDEO_FORMAT_RGBA:
-      nvidia::gxf::VideoFormatSize<VideoFormat::GXF_VIDEO_FORMAT_RGBA> format_size_rgba;
-      image_size = format_size_rgba.size(width, height);
-      break;
-
-    case VideoFormat::GXF_VIDEO_FORMAT_RGB16:
-      nvidia::gxf::VideoFormatSize<VideoFormat::GXF_VIDEO_FORMAT_RGB16> format_size_rgb16;
-      image_size = format_size_rgb16.size(width, height);
-      break;
-
-    case VideoFormat::GXF_VIDEO_FORMAT_BGR:
-      nvidia::gxf::VideoFormatSize<VideoFormat::GXF_VIDEO_FORMAT_BGR> format_size_bgr8;
-      image_size = format_size_bgr8.size(width, height);
-      break;
-
-    case VideoFormat::GXF_VIDEO_FORMAT_BGRA:
-      nvidia::gxf::VideoFormatSize<VideoFormat::GXF_VIDEO_FORMAT_BGRA> format_size_bgra;
-      image_size = format_size_bgra.size(width, height);
-      break;
-
-    case VideoFormat::GXF_VIDEO_FORMAT_BGR16:
-      nvidia::gxf::VideoFormatSize<VideoFormat::GXF_VIDEO_FORMAT_BGR16> format_size_bgr16;
-      image_size = format_size_bgr16.size(width, height);
-      break;
-
-    case VideoFormat::GXF_VIDEO_FORMAT_GRAY:
-      nvidia::gxf::VideoFormatSize<VideoFormat::GXF_VIDEO_FORMAT_GRAY> format_size_gray;
-      image_size = format_size_gray.size(width, height);
-      break;
-
-    case VideoFormat::GXF_VIDEO_FORMAT_GRAY16:
-      nvidia::gxf::VideoFormatSize<VideoFormat::GXF_VIDEO_FORMAT_GRAY16> format_size_gray16;
-      image_size = format_size_gray16.size(width, height);
-      break;
-
-    case VideoFormat::GXF_VIDEO_FORMAT_GRAY32:
-      nvidia::gxf::VideoFormatSize<VideoFormat::GXF_VIDEO_FORMAT_GRAY32> format_size_gray32;
-      image_size = format_size_gray32.size(width, height);
-      break;
-
-    case VideoFormat::GXF_VIDEO_FORMAT_NV12:
-      {
-        nvidia::gxf::VideoFormatSize<VideoFormat::GXF_VIDEO_FORMAT_NV12> format_size_nv12;
-        image_size = format_size_nv12.size(width, height);
-        break;
+  auto deleter = [&stream_pool, stream](uint8_t * p){
+      if (p) {
+        cudaFreeAsync(p, stream);
       }
+      stream_pool.release(stream);
+    };
 
-    case VideoFormat::GXF_VIDEO_FORMAT_NV24:
-      {
-        nvidia::gxf::VideoFormatSize<VideoFormat::GXF_VIDEO_FORMAT_NV24> format_size_nv24;
-        image_size = format_size_nv24.size(width, height);
-        break;
-      }
+  auto write_handle = msg_temp.from_external(
+    dptr, bytes, source.width, source.height, source.step, source.encoding, stream, deleter);
 
-    case VideoFormat::GXF_VIDEO_FORMAT_RGB32:
-      {
-        nvidia::gxf::VideoFormatSize<VideoFormat::GXF_VIDEO_FORMAT_RGB32> format_size_rgb32;
-        image_size = format_size_rgb32.size(width, height);
-        break;
-      }
-    case VideoFormat::GXF_VIDEO_FORMAT_RGBD32:
-      {
-        nvidia::gxf::VideoFormatSize<VideoFormat::GXF_VIDEO_FORMAT_RGBD32> format_size_rgbd32;
-        image_size = format_size_rgbd32.size(width, height);
-        break;
-      }
-
-    default:
-      break;
+  cuda_err = cudaMemcpyAsync(write_handle.get_ptr(), source.data.data(), bytes,
+    cudaMemcpyHostToDevice, stream);
+  if (cuda_err != cudaSuccess) {
+    std::stringstream error_msg;
+    error_msg <<
+      "[convert_to_custom] cudaMemcpyAsync H2D failed: " <<
+      cudaGetErrorName(cuda_err) << " (" << cudaGetErrorString(cuda_err) << ")";
+    RCLCPP_ERROR(rclcpp::get_logger("NitrosImage"), error_msg.str().c_str());
+    throw std::runtime_error(error_msg.str().c_str());
   }
-  return image_size;
+
+  destination = std::move(msg_temp);
+  destination.width = source.width;
+  destination.height = source.height;
+  destination.step = source.step;
+  destination.encoding = source.encoding;
+  destination.timestamp_sec = source.header.stamp.sec;
+  destination.timestamp_nsec = source.header.stamp.nanosec;
+  destination.frame_id = source.header.frame_id;
+  static_cast<nvidia::isaac_ros::nitros::NitrosTypeBase &>(destination)
+  .frame_id = source.header.frame_id;
 }

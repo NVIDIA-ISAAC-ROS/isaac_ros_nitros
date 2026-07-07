@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
-// Copyright (c) 2022-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+// Copyright (c) 2022-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -20,6 +20,7 @@
 
 #include "isaac_ros_nitros/types/nitros_type_base.hpp"
 
+#ifdef NITROS_GXF_COMPAT_MODE
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wunused-parameter"
 #pragma GCC diagnostic ignored "-Wmissing-field-initializers"
@@ -29,6 +30,7 @@
 #include "gxf/std/tensor.hpp"
 #include "gxf/std/timestamp.hpp"
 #pragma GCC diagnostic pop
+#endif
 
 namespace nvidia
 {
@@ -36,10 +38,22 @@ namespace isaac_ros
 {
 namespace nitros
 {
-
+/* ROS Tensor data type mapping
+  # -  1: "int8"
+  # -  2: "uint8"
+  # -  3: "int16"
+  # -  4: "uint16"
+  # -  5: "int32"
+  # -  6: "uint32"
+  # -  7: "int64"
+  # -  8: "uint64"
+  # -  9: "float32"
+  # - 10: "float64"
+  int32 data_type
+*/
 enum class NitrosDataType
 {
-  kCustom,
+  kUnknown,
   kInt8,
   kUnsigned8,
   kInt16,
@@ -50,12 +64,12 @@ enum class NitrosDataType
   kUnsigned64,
   kFloat32,
   kFloat64,
-  kComplex64,
-  kComplex128,
+  kCustom,
 };
 
+#ifdef NITROS_GXF_COMPAT_MODE
 nvidia::gxf::PrimitiveType GetPrimitiveType(NitrosDataType nitros_data_type);
-
+#endif
 
 }  // namespace nitros
 }  // namespace isaac_ros

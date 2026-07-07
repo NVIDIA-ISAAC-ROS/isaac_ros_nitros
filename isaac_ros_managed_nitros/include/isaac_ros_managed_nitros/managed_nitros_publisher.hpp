@@ -21,7 +21,6 @@
 #include <memory>
 #include <string>
 #include <vector>
-
 #include "message_compositor/message_relay.hpp"
 
 #pragma GCC diagnostic push
@@ -37,6 +36,7 @@
 #include "isaac_ros_nitros/types/nitros_type_manager.hpp"
 #include "isaac_ros_nitros/nitros_publisher_subscriber_group.hpp"
 #include "isaac_ros_nitros/nitros_context.hpp"
+#include "isaac_ros_nitros/types/nitros_type_view_factory.hpp"
 #include "rclcpp/rclcpp.hpp"
 
 
@@ -57,36 +57,50 @@ public:
     const std::string & format,
     const NitrosDiagnosticsConfig & diagnostics_config = {},
     const rclcpp::QoS qos = rclcpp::QoS(1))
-  : node_{node},
-    context_{GetTypeAdapterNitrosContext()},
-    nitros_type_manager_{std::make_shared<NitrosTypeManager>(node_)}
+  : node_{node}
   {
-    nitros_type_manager_->registerSupportedType<T>();
-    nitros_type_manager_->loadExtensions(format);
+    if constexpr (IsNitrosBufferBased<T>::value) {
+      rclcpp::PublisherOptions pub_options;
+      pub_options.use_intra_process_comm = rclcpp::IntraProcessSetting::Enable;
+      ros_pub_ = node_->template create_publisher<T>(topic, qos, pub_options);
 
-    std::vector<std::string> supported_data_formats{format};
+      RCLCPP_INFO(
+        node_->get_logger().get_child("ManagedNitrosPublisher"),
+        "Starting Managed Nitros Publisher (GXF-free)");
+    } else {
+      context_ = GetTypeAdapterNitrosContext();
+      nitros_type_manager_ = std::make_shared<NitrosTypeManager>(node_);
+      nitros_type_manager_->registerSupportedType<T>();
+      nitros_type_manager_->loadExtensions(format);
 
-    NitrosPublisherSubscriberConfig component_config{
-      .type = nitros::NitrosPublisherSubscriberType::NEGOTIATED,
-      .qos = qos,
-      .compatible_data_format = format,
-      .topic_name = topic
-    };
+      std::vector<std::string> supported_data_formats{format};
 
-    nitros_pub_ = std::make_shared<NitrosPublisher>(
-      *node_, GetTypeAdapterNitrosContext().getContext(), nitros_type_manager_,
-      supported_data_formats, component_config, diagnostics_config);
+      NitrosPublisherSubscriberConfig component_config{
+        .type = nitros::NitrosPublisherSubscriberType::NEGOTIATED,
+        .qos = qos,
+        .compatible_data_format = format,
+        .topic_name = topic
+      };
 
-    nitros_pub_->start();
+      nitros_pub_ = std::make_shared<NitrosPublisher>(
+        *node_, GetTypeAdapterNitrosContext().getContext(), nitros_type_manager_,
+        supported_data_formats, component_config, diagnostics_config);
 
-    RCLCPP_INFO(
-      node_->get_logger().get_child("ManagedNitrosPublisher"),
-      "Starting Managed Nitros Publisher");
+      nitros_pub_->start();
+
+      RCLCPP_INFO(
+        node_->get_logger().get_child("ManagedNitrosPublisher"),
+        "Starting Managed Nitros Publisher (GXF-based for legacy type)");
+    }
   }
 
   void publish(T msg)
   {
-    nitros_pub_->publish(msg);
+    if constexpr (IsNitrosBufferBased<T>::value) {
+      ros_pub_->publish(msg);
+    } else {
+      nitros_pub_->publish(msg);
+    }
   }
 
 private:
@@ -94,6 +108,7 @@ private:
   NitrosContext context_;
   std::shared_ptr<NitrosTypeManager> nitros_type_manager_;
   std::shared_ptr<NitrosPublisher> nitros_pub_;
+  std::shared_ptr<rclcpp::Publisher<T>> ros_pub_;
 };
 
 }  // namespace nitros

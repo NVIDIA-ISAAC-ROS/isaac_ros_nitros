@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
-// Copyright (c) 2022-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+// Copyright (c) 2022-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -16,9 +16,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include "isaac_ros_nitros_disparity_image_type/nitros_disparity_image.hpp"
-#include "isaac_ros_nitros/nitros_node.hpp"
-
-#include "rclcpp_components/register_node_macro.hpp"
 
 namespace nvidia
 {
@@ -26,67 +23,35 @@ namespace isaac_ros
 {
 namespace nitros
 {
-
-constexpr char PACKAGE_NAME[] = "isaac_ros_nitros_disparity_image_type";
-constexpr char FORWARD_FORMAT[] = "nitros_disparity_image_32FC1";
-
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wpedantic"
-class NitrosDisparityImageForwardNode : public NitrosNode
+class NitrosDisparityImageForwardNode : public rclcpp::Node
 {
 public:
   explicit NitrosDisparityImageForwardNode(const rclcpp::NodeOptions & options)
-  : NitrosNode(
-      options,
-      // Application graph filename
-      "test/config/test_forward_node.yaml",
-      // I/O configuration map
-        {
-          {"forward/input",
-            {
-              .type = NitrosPublisherSubscriberType::NEGOTIATED,
-              .qos = rclcpp::QoS(1),
-              .compatible_data_format = FORWARD_FORMAT,
-              .topic_name = "topic_forward_input",
-              .use_compatible_format_only = true,
-            }
-          },
-          {"sink/sink",
-            {
-              .type = NitrosPublisherSubscriberType::NEGOTIATED,
-              .qos = rclcpp::QoS(1),
-              .compatible_data_format = FORWARD_FORMAT,
-              .topic_name = "topic_forward_output",
-              .use_compatible_format_only = true,
-            }
-          }
-        },
-      // Extension specs
-      {},
-      // Optimizer's rule filenames
-      {},
-      // Extension so file list
-        {
-          {"gxf_isaac_message_compositor", "gxf/lib/libgxf_isaac_message_compositor.so"}
-        },
-      // Test node package name
-      PACKAGE_NAME)
+  : rclcpp::Node("NitrosDisparityImageForwardNode", options)
   {
-    std::string compatible_format = declare_parameter<std::string>("compatible_format", "");
-    if (!compatible_format.empty()) {
-      config_map_["forward/input"].compatible_data_format = compatible_format;
-      config_map_["sink/sink"].compatible_data_format = compatible_format;
-    }
+    RCLCPP_INFO(get_logger(), "NitrosDisparityImageForwardNode constructor");
 
-    registerSupportedType<nvidia::isaac_ros::nitros::NitrosDisparityImage>();
-
-    startNitrosNode();
+    subscriber_ = create_subscription<nvidia::isaac_ros::nitros::NitrosDisparityImage>(
+      "topic_forward_input", rclcpp::QoS(1), std::bind(&NitrosDisparityImageForwardNode::callback,
+        this, std::placeholders::_1));
+    publisher_ = create_publisher<nvidia::isaac_ros::nitros::NitrosDisparityImage>(
+      "topic_forward_output", rclcpp::QoS(1));
   }
+
+private:
+  void callback(const nvidia::isaac_ros::nitros::NitrosDisparityImage & msg)
+  {
+    publisher_->publish(msg);
+  }
+
+  rclcpp::Subscription<nvidia::isaac_ros::nitros::NitrosDisparityImage>::SharedPtr subscriber_;
+  rclcpp::Publisher<nvidia::isaac_ros::nitros::NitrosDisparityImage>::SharedPtr publisher_;
 };
-#pragma GCC diagnostic pop
+
 
 }  // namespace nitros
 }  // namespace isaac_ros
 }  // namespace nvidia
 
+#include "rclcpp_components/register_node_macro.hpp"
 RCLCPP_COMPONENTS_REGISTER_NODE(nvidia::isaac_ros::nitros::NitrosDisparityImageForwardNode)

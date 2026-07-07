@@ -196,6 +196,15 @@ public:
 
   uint64_t getTimestamp(NitrosTypeBase & base_msg) const
   {
+    // GXF-free messages (handle < 0):
+    // Get timestamp from message fields via virtual accessors
+    if (base_msg.handle < 0) {
+      uint64_t timestamp_ns = static_cast<uint64_t>(base_msg.get_timestamp_sec()) * 1000000000UL +
+        static_cast<uint64_t>(base_msg.get_timestamp_nsec());
+      return timestamp_ns;
+    }
+
+    // GXF-based messages (handle >= 0): Get timestamp from GXF entity
     auto msg_entity = nvidia::gxf::Entity::Shared(context_, base_msg.handle);
     if (msg_entity) {
       auto timestamp = msg_entity->get<nvidia::gxf::Timestamp>();

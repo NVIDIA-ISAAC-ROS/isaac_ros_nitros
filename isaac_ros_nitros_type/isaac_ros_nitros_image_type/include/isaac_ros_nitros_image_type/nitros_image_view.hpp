@@ -20,13 +20,6 @@
 
 #include <string>
 
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wunused-parameter"
-#pragma GCC diagnostic ignored "-Wmissing-field-initializers"
-#pragma GCC diagnostic ignored "-Wpedantic"
-#include "gxf/multimedia/video.hpp"
-#pragma GCC diagnostic pop
-
 #include "isaac_ros_nitros/types/nitros_type_view_factory.hpp"
 #include "isaac_ros_nitros_image_type/nitros_image.hpp"
 
@@ -38,24 +31,43 @@ namespace isaac_ros
 namespace nitros
 {
 
-NITROS_TYPE_VIEW_FACTORY_BEGIN(NitrosImage)
+NITROS_TYPE_VIEW_FACTORY_BEGIN_NO_GXF(NitrosImage)
 
 MARK_PUBLIC_SECTION()
-// Public methods
-inline uint64_t GetSizeInBytes() const {return image_->size();}
-inline uint32_t GetWidth() const {return image_->video_frame_info().width;}
-inline uint32_t GetHeight() const {return image_->video_frame_info().height;}
+// Public methods - backward compatible API using new class-based NitrosImage
+inline uint32_t GetWidth() const {return msg_.width;}
+inline uint32_t GetHeight() const {return msg_.height;}
 inline uint32_t GetStride(const size_t plane_idx = 0) const
 {
-  return image_->video_frame_info().color_planes[plane_idx].stride;
+  if (plane_idx < msg_.num_planes()) {
+    return msg_.get_plane(plane_idx).stride;
+  }
+  return msg_.step;
 }
-inline const unsigned char * GetGpuData() const {return image_->pointer();}
-const std::string GetEncoding() const;
+inline const std::string & GetEncoding() const {return msg_.encoding;}
+inline size_t GetNumPlanes() const {return msg_.num_planes();}
+inline const NitrosImage::ColorPlane & GetPlane(size_t i) const {return msg_.get_plane(i);}
+inline size_t GetSizeInBytes() const
+{
+  // ROS image messages represent NV12/NV24 as compact buffers with no gap
+  // between planes. Hardware-specific padding must be removed before
+  // constructing the message.
+  size_t total = static_cast<size_t>(msg_.step) * msg_.height;
+  if (msg_.encoding == "nv12") {
+    total = total * 3 / 2;
+  } else if (msg_.encoding == "nv24") {
+    total = total * 3;
+  }
+  return total;
+}
 
-MARK_PUBLIC_SECTION()
-gxf::VideoBuffer * image_{nullptr};
+inline const uint8_t * GetGpuData() const
+{
+  auto buffer = NitrosBufferAccessor<NitrosImage>::get_buffer(msg_);
+  return buffer->get_data();
+}
 
-NITROS_TYPE_VIEW_FACTORY_END(NitrosImage)
+NITROS_TYPE_VIEW_FACTORY_END_NO_GXF(NitrosImage)
 
 }  // namespace nitros
 }  // namespace isaac_ros

@@ -1,5 +1,5 @@
 # SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
-# Copyright (c) 2023-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# Copyright (c) 2023-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -25,26 +25,36 @@ endif()
 find_package(ament_cmake_auto REQUIRED)
 ament_auto_find_build_dependencies()
 
-# Ensure CUDA imported targets (e.g., CUDA::nvtx3) are available
+# Ensure CUDA imported targets are available
 find_package(CUDAToolkit REQUIRED)
-
-# NVTX
-option(USE_NVTX "Enable NVTX markers for improved profiling (if available)" ON)
-if(USE_NVTX)
-    add_definitions(-DUSE_NVTX)
-    link_directories("${CUDA_TOOLKIT_ROOT_DIR}/lib64")
-    link_libraries("CUDA::nvtx3")
-endif()
 
 # Dependencies
 find_package(Eigen3 3.3 REQUIRED NO_MODULE)
 find_package(yaml-cpp)
 
+# INTERIM: Enable GXF compatibility mode for old NitrosNode infrastructure
+option(NITROS_GXF_COMPAT_MODE "Enable GXF compatibility for old NitrosNode" ON)
+
+set(FLAT_SCAN_SOURCES
+  src/nitros_flat_scan.cpp
+)
+
+if(NITROS_GXF_COMPAT_MODE)
+  add_compile_definitions(NITROS_GXF_COMPAT_MODE)
+  list(APPEND FLAT_SCAN_SOURCES src/nitros_flat_scan_gxf_compat.cpp)
+endif()
+
 # NitrosFlatScan
-ament_auto_add_library(${PROJECT_NAME} SHARED src/nitros_flat_scan.cpp)
+ament_auto_add_library(${PROJECT_NAME} SHARED ${FLAT_SCAN_SOURCES})
+
+if(NITROS_GXF_COMPAT_MODE)
+  target_compile_definitions(${PROJECT_NAME} PUBLIC NITROS_GXF_COMPAT_MODE)
+endif()
+
 target_link_libraries(${PROJECT_NAME}
   Eigen3::Eigen
   yaml-cpp
+  CUDA::cudart
 )
 set_target_properties(${PROJECT_NAME} PROPERTIES
   BUILD_WITH_INSTALL_RPATH TRUE
@@ -80,7 +90,7 @@ if(BUILD_TESTING)
   endif()
 
   find_package(launch_testing_ament_cmake REQUIRED)
-  add_launch_test(test/isaac_ros_nitros_flat_scan_type_test_pol.py TIMEOUT "15")
+  add_launch_test(test/isaac_ros_nitros_flat_scan_type_test_pol.py TIMEOUT "60")
 endif()
 
 

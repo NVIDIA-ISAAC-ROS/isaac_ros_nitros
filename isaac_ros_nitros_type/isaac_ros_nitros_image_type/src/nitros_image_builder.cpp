@@ -16,73 +16,12 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include <cuda_runtime.h>
-
+#include <sstream>
 #include <string>
-#include <vector>
 
+#include "rclcpp/rclcpp.hpp"
 #include "isaac_ros_nitros_image_type/nitros_image_builder.hpp"
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wunused-parameter"
-#pragma GCC diagnostic ignored "-Wmissing-field-initializers"
-#pragma GCC diagnostic ignored "-Wpedantic"
-#include "gxf/core/entity.hpp"
-#include "gxf/core/gxf.h"
-#include "gxf/multimedia/video.hpp"
-#include "gxf/std/timestamp.hpp"
-#pragma GCC diagnostic pop
-#include "isaac_ros_nitros/types/type_adapter_nitros_context.hpp"
-
-
-namespace
-{
-constexpr uint64_t kNanosecondsInSeconds = 1e9;
-
-nvidia::gxf::Expected<void> ReleaseImageCallback(
-  std::function<void()> release_callback,
-  void * ptr)
-{
-  if (release_callback) {
-    release_callback();
-  } else {
-    cudaFree(ptr);
-  }
-  RCLCPP_DEBUG(
-    rclcpp::get_logger("NitrosImageBuilder"),
-    "[ReleaseImageCallback] Released the cuda memory [%p]", ptr);
-  return nvidia::gxf::Success;
-}
-
-template<VideoFormat T>
-void create_image(
-  const uint32_t width, const uint32_t height,
-  nvidia::gxf::Expected<nvidia::gxf::Entity> & msg_entity, void * data, const std::string & name,
-  std::function<void()> release_callback)
-{
-  if (width % 2 != 0 || height % 2 != 0) {
-    RCLCPP_ERROR(
-      rclcpp::get_logger("NitrosImageBuilder"),
-      "[create_image] Image width/height must be even for creation of gxf::VideoBuffer");
-    throw std::runtime_error("[create_image] Odd Image width or height.");
-  }
-
-  auto gxf_image = msg_entity->add<nvidia::gxf::VideoBuffer>(name.c_str());
-  NoPaddingColorPlanes<T> nopadding_planes(width);
-  nvidia::gxf::VideoFormatSize<T> format_size;
-  uint64_t size = format_size.size(width, height, nopadding_planes.planes);
-
-  std::vector<nvidia::gxf::ColorPlane> color_planes{nopadding_planes.planes.begin(),
-    nopadding_planes.planes.end()};
-
-  constexpr auto surface_layout = nvidia::gxf::SurfaceLayout::GXF_SURFACE_LAYOUT_PITCH_LINEAR;
-  constexpr auto storage_type = nvidia::gxf::MemoryStorageType::kDevice;
-
-  nvidia::gxf::VideoBufferInfo buffer_info{width, height, T, color_planes, surface_layout};
-
-  gxf_image.value()->wrapMemory(
-    buffer_info, size, storage_type, data,
-    std::bind(&ReleaseImageCallback, release_callback, std::placeholders::_1));
-}
-}  // namespace
+#include "isaac_ros_nitros/types/cuda_stream_pool.hpp"
 
 namespace nvidia
 {
@@ -94,21 +33,6 @@ namespace nitros
 NitrosImageBuilder::NitrosImageBuilder()
 : nitros_image_{}
 {
-  auto message = gxf::Entity::New(GetTypeAdapterNitrosContext().getContext());
-  if (!message) {
-    std::stringstream error_msg;
-    error_msg <<
-      "[constructor] Error initializing new message entity: " <<
-      GxfResultStr(message.error());
-    RCLCPP_ERROR(
-      rclcpp::get_logger("NitrosImageBuilder"), error_msg.str().c_str());
-    throw std::runtime_error(error_msg.str().c_str());
-  }
-
-  nitros_image_.handle = message->eid();
-  GxfEntityRefCountInc(
-    nvidia::isaac_ros::nitros::GetTypeAdapterNitrosContext().getContext(), message->eid());
-
   RCLCPP_DEBUG(rclcpp::get_logger("NitrosImageBuilder"), "[constructor] NitrosImage initialized");
 }
 
@@ -168,25 +92,9 @@ void NitrosImageBuilder::Validate()
 
 NitrosImageBuilder & NitrosImageBuilder::WithHeader(std_msgs::msg::Header header)
 {
-  auto message = gxf::Entity::Shared(
-    GetTypeAdapterNitrosContext().getContext(), nitros_image_.handle);
-
-  // Set timestamp
-  auto output_timestamp = message->add<gxf::Timestamp>("timestamp");
-  if (!output_timestamp) {
-    std::stringstream error_msg;
-    error_msg << "[WithHeader] Failed to add a timestamp component to message: " <<
-      GxfResultStr(output_timestamp.error());
-    RCLCPP_ERROR(
-      rclcpp::get_logger("NitrosImageBuilder"), error_msg.str().c_str());
-    throw std::runtime_error(error_msg.str().c_str());
-  }
-  output_timestamp.value()->acqtime = header.stamp.sec * kNanosecondsInSeconds +
-    header.stamp.nanosec;
-
-  // Set frame ID
+  nitros_image_.timestamp_sec = header.stamp.sec;
+  nitros_image_.timestamp_nsec = header.stamp.nanosec;
   nitros_image_.frame_id = header.frame_id;
-
   return *this;
 }
 
@@ -217,24 +125,18 @@ NitrosImageBuilder & NitrosImageBuilder::WithReleaseCallback(std::function<void(
 
 NitrosImage NitrosImageBuilder::Build()
 {
-  // Validate all data is present before building the NitrosImage
   Validate();
-
-  auto message = gxf::Entity::Shared(
-    GetTypeAdapterNitrosContext().getContext(), nitros_image_.handle);
 
   // If CUDA event provided, synchronize on that event before building
   if (event_) {
     cudaError_t cuda_error = cudaEventSynchronize(event_);
-
     if (cuda_error != cudaSuccess) {
       std::stringstream error_msg;
       error_msg <<
         "[Build] cudaEventSynchronize failed: " <<
         cudaGetErrorName(cuda_error) <<
         " (" << cudaGetErrorString(cuda_error) << ")";
-      RCLCPP_ERROR(
-        rclcpp::get_logger("NitrosImageBuilder"), error_msg.str().c_str());
+      RCLCPP_ERROR(rclcpp::get_logger("NitrosImageBuilder"), error_msg.str().c_str());
       throw std::runtime_error(error_msg.str().c_str());
     }
 
@@ -245,105 +147,66 @@ NitrosImage NitrosImageBuilder::Build()
         "[Build] cudaEventDestroy failed: " <<
         cudaGetErrorName(cuda_error) <<
         " (" << cudaGetErrorString(cuda_error) << ")";
-      RCLCPP_ERROR(
-        rclcpp::get_logger("NitrosImageBuilder"), error_msg.str().c_str());
+      RCLCPP_ERROR(rclcpp::get_logger("NitrosImageBuilder"), error_msg.str().c_str());
       throw std::runtime_error(error_msg.str().c_str());
     }
   }
 
-  auto color_fmt = g_ros_to_gxf_video_format.find(encoding_);
-  if (color_fmt == std::end(g_ros_to_gxf_video_format)) {
+  // Compute step size based on encoding
+  uint32_t step = 0;
+  if (encoding_ == "rgb8" || encoding_ == "bgr8") {
+    step = width_ * 3;
+  } else if (encoding_ == "rgba8" || encoding_ == "bgra8") {
+    step = width_ * 4;
+  } else if (encoding_ == "rgb16" || encoding_ == "bgr16") {
+    step = width_ * 6;
+  } else if (encoding_ == "mono8") {
+    step = width_;
+  } else if (encoding_ == "mono16") {
+    step = width_ * 2;
+  } else if (encoding_ == "16UC1") {
+    step = width_ * 2;
+  } else if (encoding_ == "32FC1") {
+    step = width_ * 4;
+  } else if (encoding_ == "32FC3") {
+    step = width_ * 12;
+  } else if (encoding_ == "32FC4") {
+    step = width_ * 16;
+  } else if (encoding_ == "nv12" || encoding_ == "nv24") {
+    step = width_;
+  } else {
     RCLCPP_ERROR(
       rclcpp::get_logger("NitrosImageBuilder"), "Unsupported encoding [%s].", encoding_.c_str());
     throw std::runtime_error("[NitrosImageBuilder] Unsupported encoding.");
   }
 
-  switch (color_fmt->second) {
-    case VideoFormat::GXF_VIDEO_FORMAT_RGB:
-      create_image<VideoFormat::GXF_VIDEO_FORMAT_RGB>(
-        width_, height_, message, data_, nitros_image_.frame_id, release_callback_);
-      break;
-
-    case VideoFormat::GXF_VIDEO_FORMAT_RGBA:
-      create_image<VideoFormat::GXF_VIDEO_FORMAT_RGBA>(
-        width_, height_, message, data_, nitros_image_.frame_id, release_callback_);
-      break;
-
-    case VideoFormat::GXF_VIDEO_FORMAT_RGB16:
-      create_image<VideoFormat::GXF_VIDEO_FORMAT_RGB16>(
-        width_, height_, message, data_, nitros_image_.frame_id, release_callback_);
-      break;
-
-    case VideoFormat::GXF_VIDEO_FORMAT_BGR:
-      create_image<VideoFormat::GXF_VIDEO_FORMAT_BGR>(
-        width_, height_, message, data_, nitros_image_.frame_id, release_callback_);
-      break;
-
-    case VideoFormat::GXF_VIDEO_FORMAT_BGRA:
-      create_image<VideoFormat::GXF_VIDEO_FORMAT_BGRA>(
-        width_, height_, message, data_, nitros_image_.frame_id, release_callback_);
-      break;
-
-    case VideoFormat::GXF_VIDEO_FORMAT_BGR16:
-      create_image<VideoFormat::GXF_VIDEO_FORMAT_BGR16>(
-        width_, height_, message, data_, nitros_image_.frame_id, release_callback_);
-      break;
-
-    case VideoFormat::GXF_VIDEO_FORMAT_GRAY:
-      create_image<VideoFormat::GXF_VIDEO_FORMAT_GRAY>(
-        width_, height_, message, data_, nitros_image_.frame_id, release_callback_);
-      break;
-
-    case VideoFormat::GXF_VIDEO_FORMAT_GRAY16:
-      create_image<VideoFormat::GXF_VIDEO_FORMAT_GRAY16>(
-        width_, height_, message, data_, nitros_image_.frame_id, release_callback_);
-      break;
-
-    case VideoFormat::GXF_VIDEO_FORMAT_GRAY32:
-      create_image<VideoFormat::GXF_VIDEO_FORMAT_GRAY32>(
-        width_, height_, message, data_, nitros_image_.frame_id, release_callback_);
-      break;
-
-    case VideoFormat::GXF_VIDEO_FORMAT_NV24:
-      create_image<VideoFormat::GXF_VIDEO_FORMAT_NV24>(
-        width_, height_, message, data_, nitros_image_.frame_id, release_callback_);
-      break;
-
-    case VideoFormat::GXF_VIDEO_FORMAT_NV24_ER:
-      create_image<VideoFormat::GXF_VIDEO_FORMAT_NV24_ER>(
-        width_, height_, message, data_, nitros_image_.frame_id, release_callback_);
-      break;
-
-    case VideoFormat::GXF_VIDEO_FORMAT_NV12:
-      create_image<VideoFormat::GXF_VIDEO_FORMAT_NV12>(
-        width_, height_, message, data_, nitros_image_.frame_id, release_callback_);
-      break;
-
-    case VideoFormat::GXF_VIDEO_FORMAT_NV12_ER:
-      create_image<VideoFormat::GXF_VIDEO_FORMAT_NV12_ER>(
-        width_, height_, message, data_, nitros_image_.frame_id, release_callback_);
-      break;
-
-    case VideoFormat::GXF_VIDEO_FORMAT_RGB32:
-      create_image<VideoFormat::GXF_VIDEO_FORMAT_RGB32>(
-        width_, height_, message, data_, nitros_image_.frame_id, release_callback_);
-      break;
-
-    case VideoFormat::GXF_VIDEO_FORMAT_RGBD32:
-      create_image<VideoFormat::GXF_VIDEO_FORMAT_RGBD32>(
-        width_, height_, message, data_, nitros_image_.frame_id, release_callback_);
-      break;
-
-    default:
-      RCLCPP_ERROR(
-        rclcpp::get_logger("NitrosImageBuilder"), "Unsupported encoding [%s].", encoding_.c_str());
-      throw std::runtime_error("[convert_to_custom] Unsupported encoding from ROS.");
-      break;
+  // Compute total buffer size
+  size_t buffer_size = step * height_;
+  if (encoding_ == "nv12") {
+    buffer_size = buffer_size * 3 / 2;
+  } else if (encoding_ == "nv24") {
+    buffer_size = buffer_size * 3;
   }
+
+  auto & stream_pool = nvidia::isaac_ros::nitros::CudaStreamPool::instance();
+  cudaStream_t cuda_stream = stream_pool.acquire();
+
+  auto deleter = [release_callback = release_callback_, &stream_pool, cuda_stream](uint8_t * p) {
+      if (p) {
+        if (release_callback) {
+          release_callback();
+        } else {
+          cudaFreeAsync(p, cuda_stream);
+        }
+      }
+      stream_pool.release(cuda_stream);
+    };
+
+  [[maybe_unused]] auto write_handle = nitros_image_.from_external(
+    data_, buffer_size, width_, height_, step, encoding_, cuda_stream, deleter);
 
   RCLCPP_DEBUG(rclcpp::get_logger("NitrosImageBuilder"), "[Build] Image built");
 
-  // Reseting data after it is done building
   data_ = nullptr;
   return nitros_image_;
 }

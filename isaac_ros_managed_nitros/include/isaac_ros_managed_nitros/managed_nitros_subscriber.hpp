@@ -25,6 +25,7 @@
 #include "extensions/gxf_optimizer/core/optimizer.hpp"
 #include "isaac_ros_nitros/nitros_subscriber.hpp"
 #include "isaac_ros_nitros/types/nitros_type_manager.hpp"
+#include "isaac_ros_nitros/types/nitros_type_view_factory.hpp"
 #include "rclcpp/rclcpp.hpp"
 
 
@@ -46,34 +47,52 @@ public:
     std::function<void(const NitrosMsgView & msg_view)> callback = nullptr,
     const NitrosDiagnosticsConfig & diagnostics_config = {},
     const rclcpp::QoS qos = rclcpp::QoS(1))
-  : node_{node}, topic_{topic_name},
-    nitros_type_manager_{std::make_shared<NitrosTypeManager>(node_)}
+  : node_{node}, topic_{topic_name}
   {
-    nitros_type_manager_->registerSupportedType<typename NitrosMsgView::BaseType>();
-    nitros_type_manager_->loadExtensions(format);
+    if constexpr (IsNitrosBufferBased<typename NitrosMsgView::BaseType>::value) {
+      rclcpp::SubscriptionOptions sub_options;
+      sub_options.use_intra_process_comm = rclcpp::IntraProcessSetting::Enable;
 
-    std::vector<std::string> supported_data_formats{format};
-
-    NitrosPublisherSubscriberConfig component_config{
-      .type = nitros::NitrosPublisherSubscriberType::NEGOTIATED,
-      .qos = qos,
-      .compatible_data_format = format,
-      .topic_name = topic_name,
-      .callback = [callback](const gxf_context_t, NitrosTypeBase & msg) -> void {
-          const NitrosMsgView view(*(static_cast<typename NitrosMsgView::BaseType *>(&msg)));
+      auto ros_callback =
+        [callback](const std::shared_ptr<const typename NitrosMsgView::BaseType> msg) {
+          const NitrosMsgView view(*msg);
           callback(view);
-        }
-    };
+        };
 
-    nitros_sub_ = std::make_shared<NitrosSubscriber>(
-      *node_, GetTypeAdapterNitrosContext().getContext(), nitros_type_manager_,
-      supported_data_formats, component_config, diagnostics_config);
+      ros_sub_ = node_->template create_subscription<typename NitrosMsgView::BaseType>(
+        topic_name, qos, ros_callback, sub_options);
 
-    nitros_sub_->start();
+      RCLCPP_INFO(
+        node_->get_logger().get_child("ManagedNitrosSubscriber"),
+        "Starting Managed Nitros Subscriber (GXF-free)");
+    } else {
+      nitros_type_manager_ = std::make_shared<NitrosTypeManager>(node_);
+      nitros_type_manager_->registerSupportedType<typename NitrosMsgView::BaseType>();
+      nitros_type_manager_->loadExtensions(format);
 
-    RCLCPP_INFO(
-      node_->get_logger().get_child("ManagedNitrosSubscriber"),
-      "Starting Managed Nitros Subscriber");
+      std::vector<std::string> supported_data_formats{format};
+
+      NitrosPublisherSubscriberConfig component_config{
+        .type = nitros::NitrosPublisherSubscriberType::NEGOTIATED,
+        .qos = qos,
+        .compatible_data_format = format,
+        .topic_name = topic_name,
+        .callback = [callback](const gxf_context_t, NitrosTypeBase & msg) -> void {
+            const NitrosMsgView view(*(static_cast<typename NitrosMsgView::BaseType *>(&msg)));
+            callback(view);
+          }
+      };
+
+      nitros_sub_ = std::make_shared<NitrosSubscriber>(
+        *node_, GetTypeAdapterNitrosContext().getContext(), nitros_type_manager_,
+        supported_data_formats, component_config, diagnostics_config);
+
+      nitros_sub_->start();
+
+      RCLCPP_INFO(
+        node_->get_logger().get_child("ManagedNitrosSubscriber"),
+        "Starting Managed Nitros Subscriber (GXF-based for legacy type)");
+    }
   }
 
 private:
@@ -81,6 +100,7 @@ private:
   std::string topic_;
   std::shared_ptr<NitrosTypeManager> nitros_type_manager_;
   std::shared_ptr<NitrosSubscriber> nitros_sub_;
+  std::shared_ptr<rclcpp::Subscription<typename NitrosMsgView::BaseType>> ros_sub_;
 };
 
 }  // namespace nitros

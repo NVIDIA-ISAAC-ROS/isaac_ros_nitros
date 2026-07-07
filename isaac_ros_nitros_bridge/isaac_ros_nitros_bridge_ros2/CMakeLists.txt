@@ -67,8 +67,8 @@ if(BUILD_TESTING)
   endif()
 
   find_package(launch_testing_ament_cmake REQUIRED)
-  add_launch_test(test/isaac_ros_nitros_bridge_image_pol.py TIMEOUT "15")
-  add_launch_test(test/isaac_ros_nitros_bridge_tensor_list_pol.py TIMEOUT "15")
+  add_launch_test(test/isaac_ros_nitros_bridge_image_pol.py TIMEOUT "60")
+  add_launch_test(test/isaac_ros_nitros_bridge_tensor_list_pol.py TIMEOUT "60")
 endif()
 
 

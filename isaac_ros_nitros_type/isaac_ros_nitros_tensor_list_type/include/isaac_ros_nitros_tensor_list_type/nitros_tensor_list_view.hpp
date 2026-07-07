@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
-// Copyright (c) 2023-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+// Copyright (c) 2023-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -21,20 +21,10 @@
 #include <string>
 #include <vector>
 
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wunused-parameter"
-#pragma GCC diagnostic ignored "-Wmissing-field-initializers"
-#pragma GCC diagnostic ignored "-Wpedantic"
-#include "gxf/core/entity.hpp"
-#include "gxf/core/expected.hpp"
-#include "gxf/core/gxf.h"
-#include "gxf/std/tensor.hpp"
-#pragma GCC diagnostic pop
-
 #include "isaac_ros_nitros/types/nitros_type_view_factory.hpp"
 #include "isaac_ros_nitros_tensor_list_type/nitros_tensor_list.hpp"
 #include "isaac_ros_nitros_tensor_list_type/nitros_tensor_shape.hpp"
-
+#include "isaac_ros_nitros_tensor_list_type/nitros_tensor.hpp"
 
 namespace nvidia
 {
@@ -42,50 +32,73 @@ namespace isaac_ros
 {
 namespace nitros
 {
+NITROS_TYPE_VIEW_FACTORY_BEGIN_NO_GXF(NitrosTensorList)
 
-using PrimitiveType = gxf::PrimitiveType;
-
-NITROS_TYPE_VIEW_FACTORY_BEGIN(NitrosTensorList)
 MARK_PUBLIC_SECTION()
-class NitrosTensorView
+inline size_t GetTensorCount() const {return msg_.get_tensors().size();}
+inline const NitrosTensor & GetTensorByName(const std::string & name) const
 {
-public:
-  explicit NitrosTensorView(const gxf::Tensor & tensor, const std::string & name = "")
-  : tensor_{tensor}, name_{name} {FillStrides();}
-  inline const unsigned char * GetBuffer() const {return tensor_.pointer();}
-  inline const std::string GetName() const {return name_;}
-  inline uint32_t GetRank() const {return tensor_.rank();}
-  inline uint64_t GetBytesPerElement() const {return tensor_.bytes_per_element();}
-  inline uint64_t GetElementCount() const {return tensor_.element_count();}
-  inline size_t GetDimension(size_t index) const {return tensor_.shape().dimension(index);}
-  inline size_t GetTensorSize() const {return tensor_.size();}
-  inline NitrosTensorShape GetShape() const {return NitrosTensorShape(tensor_.shape());}
-  inline PrimitiveType GetElementType() const {return tensor_.element_type();}
-  inline std::vector<uint64_t> GetStrides() const {return strides_;}
-
-private:
-  const gxf::Tensor & tensor_{};
-  const std::string name_{};
-  std::vector<uint64_t> strides_{};
-  inline void FillStrides()
-  {
-    for (size_t i = 0; i < tensor_.shape().rank(); i++) {
-      strides_.push_back(tensor_.stride(i));
-    }
+  auto tensor = msg_.get_tensor_by_name(name);
+  if (!tensor) {
+    throw std::runtime_error("Tensor with name '" + name + "' not found");
   }
-};
+  return *tensor;
+}
+inline const NitrosTensor & GetNamedTensor(const std::string & name) const
+{
+  return GetTensorByName(name);
+}
+inline const unsigned char * GetBufferByName(const std::string & name) const
+{
+  return GetTensorByName(name).get_read_handle(msg_.get_stream()).get_ptr();
+}
+inline const NitrosTensor & get_tensor(size_t index = 0) const
+{
+  if (index >= msg_.get_tensors().size()) {
+    throw std::out_of_range("Tensor index " + std::to_string(index) + " out of range");
+  }
+  return msg_.get_tensors().at(index);
+}
+inline const unsigned char * GetBuffer(size_t index = 0) const
+{
+  return get_tensor(index).get_read_handle(msg_.get_stream()).get_ptr();
+}
+inline const std::string GetName(size_t index = 0) const
+{
+  return get_tensor(index).get_name();
+}
+
+inline uint32_t GetRank(size_t index = 0) const
+{
+  return get_tensor(index).shape().rank();
+}
+inline uint64_t GetBytesPerElement(size_t index = 0) const
+{
+  return get_tensor(index).bytes_per_element();
+}
+inline uint64_t GetElementCount(size_t index = 0) const
+{
+  return get_tensor(index).element_count();
+}
+inline size_t GetDimension(size_t index = 0, size_t dimension = 0) const
+{
+  const auto & tensor = get_tensor(index);
+  if (dimension >= tensor.shape().rank()) {
+    throw std::out_of_range("Dimension index " + std::to_string(dimension) + " out of range");
+  }
+  return tensor.shape().dims()[dimension];
+}
+inline size_t GetTensorSize(size_t index = 0) const
+{
+  return get_tensor(index).element_count() * get_tensor(index).bytes_per_element();
+}
+inline NitrosTensorShape GetShape(size_t index = 0) const
+{
+  return get_tensor(index).shape();
+}
 
 MARK_PUBLIC_SECTION()
-// Public methods
-size_t GetTensorCount() const;
-const std::vector<NitrosTensorListView::NitrosTensorView> GetAllTensor() const;
-const NitrosTensorView GetAnyNamedTensor(std::string tensor_name) const;
-const NitrosTensorView GetNamedTensor(std::string tensor_name) const;
-
-MARK_PRIVATE_SECTION()
-void GetAllTensorEntity();
-FixedVector<gxf::Handle<gxf::Tensor>, kMaxComponents> tensor_list_;
-NITROS_TYPE_VIEW_FACTORY_END(NitrosTensorList)
+NITROS_TYPE_VIEW_FACTORY_END_NO_GXF(NitrosTensorList)
 
 }  // namespace nitros
 }  // namespace isaac_ros

@@ -52,10 +52,34 @@ struct NitrosTypeBase
   // Copy constructor
   NitrosTypeBase(const NitrosTypeBase & other);
 
-  // Destructor
-  ~NitrosTypeBase();
+  // Copy assignment (required for use in rclcpp message_event etc.)
+  NitrosTypeBase & operator=(const NitrosTypeBase & other);
 
-  int64_t handle;
+  // Move constructor: transfer entity ref to this; moved-from must not Dec on destruction
+  NitrosTypeBase(NitrosTypeBase && other) noexcept;
+
+  // Move assignment
+  NitrosTypeBase & operator=(NitrosTypeBase && other) noexcept;
+
+  // Destructor (virtual to allow for polymorphic destruction)
+  virtual ~NitrosTypeBase();
+
+  // Virtual timestamp accessors for GXF-free messages
+  // GXF-free messages (handle < 0) should override to return actual timestamp
+  virtual uint32_t get_timestamp_sec() const {return 0;}
+  virtual uint32_t get_timestamp_nsec() const {return 0;}
+
+  // Virtual timestamp setters for GXF-free messages
+  // GXF-free messages (handle < 0) should override to allow timestamp updates
+  virtual void set_timestamp_sec(uint32_t sec) {(void)sec;}
+  virtual void set_timestamp_nsec(uint32_t nsec) {(void)nsec;}
+
+  // Virtual frame_id accessor; derived types may override to point at their
+  // own storage. Always read through this via `base->get_frame_id()`.
+  virtual const std::string & get_frame_id() const {return frame_id;}
+
+  // -1 means no GXF entity (GXF-free / uninitialized); only Dec when >= 0
+  int64_t handle{-1};
   std::string data_format_name;
   std::string compatible_data_format_name;
   std::string frame_id;

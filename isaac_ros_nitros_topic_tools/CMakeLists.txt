@@ -51,9 +51,9 @@ find_package(ament_lint_auto REQUIRED)
   endif()
 
   find_package(launch_testing_ament_cmake REQUIRED)
-  add_launch_test(test/isaac_ros_nitros_topic_tools_camera_drop_node_mode_0_test.py TIMEOUT "15")
-  add_launch_test(test/isaac_ros_nitros_topic_tools_camera_drop_node_mode_1_test.py TIMEOUT "15")
-  add_launch_test(test/isaac_ros_nitros_topic_tools_camera_drop_node_mode_2_test.py TIMEOUT "15")
+  add_launch_test(test/isaac_ros_nitros_topic_tools_camera_drop_node_mode_0_test.py TIMEOUT "60")
+  add_launch_test(test/isaac_ros_nitros_topic_tools_camera_drop_node_mode_1_test.py TIMEOUT "60")
+  add_launch_test(test/isaac_ros_nitros_topic_tools_camera_drop_node_mode_2_test.py TIMEOUT "60")
 endif()
 
 

@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
-// Copyright (c) 2022-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+// Copyright (c) 2022-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -23,14 +23,27 @@
  *   ROS type:    sensor_msgs::msg::PointCloud2
  */
 
+#ifndef NITROS_GXF_COMPAT_MODE
+#define NITROS_GXF_COMPAT_MODE
+#endif
+
+#include <map>
+#include <memory>
 #include <string>
+#include <utility>
+#include <vector>
 
 #include "isaac_ros_nitros/types/nitros_format_agent.hpp"
-
+#include "isaac_ros_nitros/types/nitros_type_base.hpp"
+#include "isaac_ros_nitros/types/nitros_buffer.hpp"
+#include "isaac_ros_nitros/types/cuda_memory_pool.hpp"
 #include "rclcpp/type_adapter.hpp"
 #include "sensor_msgs/msg/point_cloud2.hpp"
 #include "sensor_msgs/point_cloud2_iterator.hpp"
 
+#ifdef NITROS_GXF_COMPAT_MODE
+#include "isaac_ros_nitros_point_cloud_type/nitros_point_cloud_gxf_compat.hpp"
+#endif
 
 namespace nvidia
 {
@@ -42,28 +55,148 @@ namespace nitros
 // Type forward declaration
 struct NitrosPointCloud;
 
-// Formats
+// Format descriptor for NitrosTypeManager / negotiated API (used by ManagedNitros and benchmark)
 struct nitros_point_cloud_t
 {
   using MsgT = NitrosPointCloud;
   static const inline std::string supported_type_name = "nitros_point_cloud";
 };
 
-// NITROS data type registration factory
-NITROS_TYPE_FACTORY_BEGIN(NitrosPointCloud)
-// Supported data formats
-NITROS_FORMAT_FACTORY_BEGIN()
-NITROS_FORMAT_ADD(nitros_point_cloud_t)
-NITROS_FORMAT_FACTORY_END()
-// Required extensions
-NITROS_TYPE_EXTENSION_FACTORY_BEGIN()
-NITROS_TYPE_EXTENSION_ADD("isaac_ros_gxf", "gxf/lib/serialization/libgxf_serialization.so")
-NITROS_TYPE_EXTENSION_ADD("gxf_isaac_messages", "gxf/lib/libgxf_isaac_messages.so")
-NITROS_TYPE_EXTENSION_ADD("gxf_isaac_ros_messages", "gxf/lib/libgxf_isaac_ros_messages.so")
-NITROS_TYPE_EXTENSION_ADD("gxf_isaac_atlas", "gxf/lib/libgxf_isaac_atlas.so")
-NITROS_TYPE_EXTENSION_ADD("gxf_isaac_sight", "gxf/lib/libgxf_isaac_sight.so")
-NITROS_TYPE_EXTENSION_FACTORY_END()
-NITROS_TYPE_FACTORY_END()
+class NitrosPointCloud : public NitrosTypeBase
+{
+public:
+  // Need to be removed after the GXF compat mode is removed
+  static std::string GetDefaultCompatibleFormat()
+  {
+    return "nitros_point_cloud";
+  }
+#ifdef NITROS_GXF_COMPAT_MODE
+  static std::map<std::string, NitrosFormatCallbacks> GetFormatCallbacks()
+  {
+    std::map<std::string, NitrosFormatCallbacks> format_callback_map;
+    format_callback_map.emplace(
+      nitros_point_cloud_t::supported_type_name,
+      NitrosFormatAgent<nitros_point_cloud_t>::GetFormatCallbacks());
+    return format_callback_map;
+  }
+
+  static std::vector<std::pair<std::string, std::string>> GetExtensions() {return {};}
+#endif
+
+  // Standard ROS2 message pointer type aliases (required by message_filters)
+  using SharedPtr = std::shared_ptr<NitrosPointCloud>;
+  using ConstSharedPtr = std::shared_ptr<const NitrosPointCloud>;
+  using UniquePtr = std::unique_ptr<NitrosPointCloud>;
+  using ConstUniquePtr = std::unique_ptr<const NitrosPointCloud>;
+  using WeakPtr = std::weak_ptr<NitrosPointCloud>;
+  using ConstWeakPtr = std::weak_ptr<const NitrosPointCloud>;
+  using ConstPtr = const NitrosPointCloud *;
+
+  NitrosPointCloud()
+  : NitrosTypeBase()
+  {
+    handle = -1;
+  }
+  explicit NitrosPointCloud(const NitrosTypeBase & base)
+  : NitrosTypeBase(base) {}
+
+  // Message metadata accessors
+  uint32_t get_width() const {return width;}
+  uint32_t get_height() const {return height;}
+  uint32_t get_point_step() const {return point_step;}
+
+  // Timestamp accessors
+  uint32_t get_timestamp_sec() const override {return timestamp_sec;}
+  uint32_t get_timestamp_nsec() const override {return timestamp_nsec;}
+  const std::string & get_frame_id() const {return frame_id;}
+
+  // Timestamp setters (override virtual methods from NitrosTypeBase)
+  void set_timestamp_sec(uint32_t sec) override {timestamp_sec = sec;}
+  void set_timestamp_nsec(uint32_t nsec) override {timestamp_nsec = nsec;}
+
+  // Get read handle for consuming image data on the specified stream
+  nvidia::isaac_ros::nitros::ReadHandle get_read_handle(cudaStream_t stream) const
+  {
+    return buffer_->get_read_handle(stream);
+  }
+
+  // Initialize from pool storage and return write handle for producer
+  // Memory is acquired from the pool and will be recycled when buffer is destroyed
+  [[nodiscard]] nvidia::isaac_ros::nitros::WriteHandle from_pool(
+    nvidia::isaac_ros::nitros::CUDAMemoryPool & pool,
+    uint32_t width,
+    uint32_t height,
+    uint32_t point_step,
+    uint32_t row_step,
+    bool is_bigendian,
+    bool use_color,
+    cudaStream_t stream)
+  {
+    uint8_t * ptr = nullptr;
+    const cudaError_t acquire_err = pool.acquire(&ptr);
+    if (acquire_err != cudaSuccess) {
+      throw std::runtime_error("CUDAMemoryPool exhausted");
+    }
+    buffer_ = std::make_shared<nvidia::isaac_ros::nitros::NitrosBuffer>(ptr, pool.block_size(),
+            pool.deleter());
+    this->width = width;
+    this->height = height;
+    this->point_step = point_step;
+    this->row_step = row_step;
+    this->is_bigendian = is_bigendian;
+    this->use_color = use_color;
+    handle = -1;
+    return buffer_->get_write_handle(stream);
+  }
+
+  // Initialize from an external device pointer and return write handle for producer
+  // Memory ownership is transferred to the buffer with the provided deleter
+  // If no deleter provided, defaults to cudaFree
+  [[nodiscard]] nvidia::isaac_ros::nitros::WriteHandle from_external(
+    void * device_ptr,
+    size_t bytes,
+    uint32_t width,
+    uint32_t height,
+    uint32_t point_step,
+    uint32_t row_step,
+    bool is_bigendian,
+    bool use_color,
+    cudaStream_t stream,
+    std::function<void(uint8_t *)> deleter = nullptr)
+  {
+    if (!deleter) {
+      deleter = [](uint8_t * p){if (p) {cudaFree(p);}};
+    }
+    buffer_ = std::make_shared<nvidia::isaac_ros::nitros::NitrosBuffer>(device_ptr, bytes,
+            std::move(deleter));
+    this->width = width;
+    this->height = height;
+    this->point_step = point_step;
+    this->row_step = row_step;
+    this->is_bigendian = is_bigendian;
+    this->use_color = use_color;
+    handle = -1;
+    return buffer_->get_write_handle(stream);
+  }
+
+  // Core message data (public like ROS2 messages)
+  uint32_t width{0};
+  uint32_t height{0};
+  uint32_t point_step{0};
+  uint32_t row_step{0};
+  bool is_bigendian{false};
+  bool use_color{false};
+  uint32_t timestamp_sec{0};
+  uint32_t timestamp_nsec{0};
+  std::string frame_id;
+
+private:
+  friend class nvidia::isaac_ros::nitros::NitrosBufferAccessor<NitrosPointCloud>;
+  friend struct rclcpp::TypeAdapter<NitrosPointCloud, sensor_msgs::msg::PointCloud2>;
+
+  // Implementation details (private, accessed via NitrosBufferAccessor)
+  std::shared_ptr<nvidia::isaac_ros::nitros::NitrosBuffer> buffer_;
+};
 
 }  // namespace nitros
 }  // namespace isaac_ros

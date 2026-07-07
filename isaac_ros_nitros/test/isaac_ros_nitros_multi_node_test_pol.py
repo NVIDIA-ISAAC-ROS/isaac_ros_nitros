@@ -137,7 +137,7 @@ class IsaacROSNitrosNodeTest(IsaacROSBaseTest):
             # Start sending messages
             self.node.get_logger().info('Start publishing messages')
             sent_count = 0
-            end_time = time.time() + 0.5
+            end_time = time.time() + 10
             while time.time() < end_time:
                 sent_count += 1
                 pub.publish(msg)

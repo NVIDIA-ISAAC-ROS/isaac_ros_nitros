@@ -54,12 +54,20 @@ struct TimeStamp<M, typename std::enable_if<IsNitrosType<M>::value>::type>
   static rclcpp::Time value(const M & m)
   {
     std_msgs::msg::Header ros_header;
-    if (nvidia::isaac_ros::nitros::GetTypeAdapterNitrosContext().getEntityTimestamp(
-        m.handle, ros_header) != GXF_SUCCESS)
-    {
-      RCLCPP_ERROR(
-        rclcpp::get_logger("[NITROS message_filter_traits]"),
-        "[message_filter] getEntityTimestamp Error");
+    // Check if message is buffer-based (handle < 0) or GXF-based (handle >= 0)
+    if (m.handle < 0) {
+      // Buffer-based: use virtual timestamp accessors
+      ros_header.stamp.sec = m.get_timestamp_sec();
+      ros_header.stamp.nanosec = m.get_timestamp_nsec();
+    } else {
+      // GXF-based: get timestamp from entity
+      if (nvidia::isaac_ros::nitros::GetTypeAdapterNitrosContext().getEntityTimestamp(
+          m.handle, ros_header) != GXF_SUCCESS)
+      {
+        RCLCPP_ERROR(
+          rclcpp::get_logger("[NITROS message_filter_traits]"),
+          "[message_filter] getEntityTimestamp Error");
+      }
     }
     return rclcpp::Time(ros_header.stamp, RCL_ROS_TIME);
   }
