@@ -30,6 +30,7 @@
 #include "rclcpp/rclcpp.hpp"
 #include "negotiated/negotiated_publisher.hpp"
 
+#include "isaac_ros_nitros/nitros_node_interfaces.hpp"
 #include "isaac_ros_nitros/types/nitros_type_base.hpp"
 #include "isaac_ros_nitros/types/nitros_format_agent.hpp"
 #include "isaac_ros_nitros/types/type_adapter_nitros_context.hpp"
@@ -142,10 +143,10 @@ static NitrosFormatCallbacks MakeGxfCompatCallbacks(NitrosFormatCallbacks base)
 
   // Negotiated publish: Publishes to negotiated topic with format type information
   base.negotiatedPublishCallback = [context](
-    rclcpp::Node & node,
+    NitrosNodeInterfaces node_ifaces,
     std::shared_ptr<negotiated::NegotiatedPublisher> pub,
     NitrosTypeBase & base_msg) {
-      (void)node;
+      (void)node_ifaces;
       if (base_msg.handle >= 0) {
         // GXF-based message: convert from GXF entity
         MessageType msg = NitrosGxfCompatTraits<MessageType>::CreateFromGxfEntity(
@@ -159,10 +160,10 @@ static NitrosFormatCallbacks MakeGxfCompatCallbacks(NitrosFormatCallbacks base)
 
   // Compatible publish: Publishes to standard topic as fallback
   base.compatiblePublishCallback = [context](
-    rclcpp::Node & node,
+    NitrosNodeInterfaces node_ifaces,
     std::shared_ptr<rclcpp::PublisherBase> pub,
     NitrosTypeBase & base_msg) {
-      (void)node;
+      (void)node_ifaces;
       auto cast_pub = static_cast<rclcpp::Publisher<MessageType> *>(pub.get());
       if (base_msg.handle >= 0) {
         // GXF-based message: convert from GXF entity
