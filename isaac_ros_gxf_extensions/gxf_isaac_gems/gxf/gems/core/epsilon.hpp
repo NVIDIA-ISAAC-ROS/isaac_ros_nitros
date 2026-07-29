@@ -32,9 +32,10 @@ namespace isaac {
 template <typename K>
 constexpr K MachineEpsilon = K(0);
 template <>
-constexpr float MachineEpsilon<float> = 5.9604644775390625e-8f;
+inline constexpr float MachineEpsilon<float> = 5.9604644775390625e-8f;
 template <>
-constexpr double MachineEpsilon<double> = 1.1102230246251565404236316680908203125e-16;
+inline constexpr double MachineEpsilon<double> =
+    1.1102230246251565404236316680908203125e-16;
 
 // Returns true if a floating point value can be considered to be zero under floating point
 // rounding errors. This function compares against a custom epsilon.
