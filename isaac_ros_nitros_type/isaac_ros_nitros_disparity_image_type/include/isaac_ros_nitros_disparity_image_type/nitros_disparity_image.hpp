@@ -30,7 +30,6 @@
 
 #include <map>
 
-#include "isaac_ros_nitros/types/nitros_format_agent.hpp"
 #include "isaac_ros_nitros/types/nitros_type_base.hpp"
 #include "isaac_ros_nitros/types/nitros_buffer.hpp"
 #include "isaac_ros_nitros/types/cuda_memory_pool.hpp"
@@ -57,22 +56,6 @@ struct nitros_disparity_image_32FC1_t
 class NitrosDisparityImage : public NitrosTypeBase
 {
 public:
-  // Need to be removed after the GXF compat mode is removed
-  static std::string GetDefaultCompatibleFormat()
-  {
-    constexpr const char * kDefaultCompatibleFormat = "nitros_disparity_image_32FC1";
-    return kDefaultCompatibleFormat;
-  }
-  static std::map<std::string, NitrosFormatCallbacks> GetFormatCallbacks()
-  {
-    std::map<std::string, NitrosFormatCallbacks> format_callback_map;
-    format_callback_map.emplace(
-      nitros_disparity_image_32FC1_t::supported_type_name,
-      NitrosFormatAgent<nitros_disparity_image_32FC1_t>::GetFormatCallbacks());
-    return format_callback_map;
-  }
-  static std::vector<std::pair<std::string, std::string>> GetExtensions() {return {};}
-
   // Standard ROS2 message pointer type aliases (required by message_filters)
   using SharedPtr = std::shared_ptr<NitrosDisparityImage>;
   using ConstSharedPtr = std::shared_ptr<const NitrosDisparityImage>;

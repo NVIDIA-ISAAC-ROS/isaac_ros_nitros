@@ -42,11 +42,11 @@ find_package(yaml-cpp)
 # NitrosDisparityImage
 ament_auto_add_library(${PROJECT_NAME} SHARED
 src/nitros_disparity_image.cpp
-src/nitros_disparity_image_view.cpp
 src/nitros_disparity_image_builder.cpp
 )
 target_link_libraries(${PROJECT_NAME}
   yaml-cpp
+  CUDA::cudart
 )
 set_target_properties(${PROJECT_NAME} PROPERTIES
   BUILD_WITH_INSTALL_RPATH TRUE

@@ -2,7 +2,7 @@
 
 NVIDIA Isaac Transport for ROS package for hardware-acceleration friendly movement of messages.
 
-<div align="center"><a class="reference internal image-reference" href="https://media.githubusercontent.com/media/NVIDIA-ISAAC-ROS/.github/release-4.5/resources/isaac_ros_docs/repositories_and_packages/isaac_ros_nitros/image5-1.gif/"><img alt="image" src="https://media.githubusercontent.com/media/NVIDIA-ISAAC-ROS/.github/release-4.5/resources/isaac_ros_docs/repositories_and_packages/isaac_ros_nitros/image5-1.gif/" width="600px"/></a></div>
+<div align="center"><a class="reference internal image-reference" href="https://media.githubusercontent.com/media/NVIDIA-ISAAC-ROS/.github/release-4.6/resources/isaac_ros_docs/repositories_and_packages/isaac_ros_nitros/image5-1.gif/"><img alt="image" src="https://media.githubusercontent.com/media/NVIDIA-ISAAC-ROS/.github/release-4.6/resources/isaac_ros_docs/repositories_and_packages/isaac_ros_nitros/image5-1.gif/" width="600px"/></a></div>
 
 ## Overview
 
@@ -10,10 +10,6 @@ Isaac ROS NITROS contains NVIDIA’s implementation
 of type adaptation and negotiation in ROS 2. To learn more about NITROS, see [here](https://nvidia-isaac-ros.github.io/concepts/nitros/index.html).
 
 Isaac ROS NITROS is composed of a number of individual packages, each with either a functional or structural purpose:
-
-`isaac_ros_gxf`:
-: This package serves as a container for precompiled GXF extensions used by other Isaac ROS packages.
-  While a number of GXF extensions used by Isaac ROS are provided with source, the extensions contained in `isaac_ros_gxf` are license constrained and are thus shipped as `.so` binaries.
 
 `isaac_ros_managed_nitros`:
 : This package contains the wrapper classes that enable developers to add NITROS-compatible publishers and subscribers to third-party CUDA-based ROS nodes.
@@ -47,7 +43,6 @@ Please visit the [Isaac ROS Documentation](https://nvidia-isaac-ros.github.io/re
 
 ## Packages
 
-* [`isaac_ros_gxf`](https://nvidia-isaac-ros.github.io/repositories_and_packages/isaac_ros_nitros/isaac_ros_gxf/index.html)
 * [`isaac_ros_managed_nitros`](https://nvidia-isaac-ros.github.io/repositories_and_packages/isaac_ros_nitros/isaac_ros_managed_nitros/index.html)
 * [`isaac_ros_nitros`](https://nvidia-isaac-ros.github.io/repositories_and_packages/isaac_ros_nitros/isaac_ros_nitros/index.html)
   * [Quickstart](https://nvidia-isaac-ros.github.io/repositories_and_packages/isaac_ros_nitros/isaac_ros_nitros/index.html#quickstart)
@@ -72,4 +67,4 @@ Please visit the [Isaac ROS Documentation](https://nvidia-isaac-ros.github.io/re
 
 ## Latest
 
-Update 2026-04-30: Compatibility and integration updates for the Isaac ROS 4.4.0 release
+Update 2026-07-06: Reduced NITROS build/runtime complexity by sun-setting the GXF implementation and added CUDA streaming support for NITROS messaging

@@ -44,28 +44,14 @@ find_package(yaml-cpp)
 set(NITROS_POINT_CLOUD_SOURCES
   src/nitros_point_cloud.cpp
   src/nitros_point_cloud_builder.cpp
-  src/nitros_point_cloud_view.cpp
 )
 
-# Option to turn on NITROS_GXF_COMPAT_MODE
-option(NITROS_GXF_COMPAT_MODE "Enable support for GXF compatibility mode" ON)
-if(NITROS_GXF_COMPAT_MODE)
-  add_compile_definitions(NITROS_GXF_COMPAT_MODE)
-endif()
-
-if(NITROS_GXF_COMPAT_MODE)
-  list(APPEND NITROS_POINT_CLOUD_SOURCES src/nitros_point_cloud_gxf_compat.cpp)
-endif()
-
 ament_auto_add_library(${PROJECT_NAME} SHARED ${NITROS_POINT_CLOUD_SOURCES})
-
-if(NITROS_GXF_COMPAT_MODE)
-  target_compile_definitions(${PROJECT_NAME} PUBLIC NITROS_GXF_COMPAT_MODE)
-endif()
 
 target_link_libraries(${PROJECT_NAME}
   Eigen3::Eigen
   yaml-cpp
+  CUDA::cudart
 )
 set_target_properties(${PROJECT_NAME} PROPERTIES
   BUILD_WITH_INSTALL_RPATH TRUE
@@ -87,26 +73,6 @@ if(BUILD_TESTING)
   rclcpp_components_register_nodes(nitros_point_cloud_forward_node "nvidia::isaac_ros::nitros::NitrosPointCloudForwardNode")
   set(node_plugins "${node_plugins}nvidia::isaac_ros::nitros::NitrosPointCloudForwardNode;$<TARGET_FILE:nitros_point_cloud_forward_node>\n")
 
-  # Find isaac_ros_managed_nitros for test node
-  # (ament_auto_find_build_dependencies only finds <depend>, not <test_depend>)
-  find_package(isaac_ros_managed_nitros REQUIRED)
-
-  # ManagedNitrosPointCloudForwardNode
-  ament_auto_add_library(managed_nitros_point_cloud_forward_node SHARED
-    test/managed_nitros_point_cloud_forward_node.cpp)
-  target_link_libraries(managed_nitros_point_cloud_forward_node ${PROJECT_NAME})
-  ament_target_dependencies(managed_nitros_point_cloud_forward_node isaac_ros_managed_nitros)
-  set_target_properties(managed_nitros_point_cloud_forward_node PROPERTIES
-    BUILD_WITH_INSTALL_RPATH TRUE
-    BUILD_RPATH_USE_ORIGIN TRUE
-    INSTALL_RPATH_USE_LINK_PATH TRUE)
-
-  rclcpp_components_register_nodes(managed_nitros_point_cloud_forward_node
-    "nvidia::isaac_ros::nitros::ManagedNitrosPointCloudForwardNode")
-  set(node_plugins
-    "${node_plugins}nvidia::isaac_ros::nitros::ManagedNitrosPointCloudForwardNode;\
-$<TARGET_FILE:managed_nitros_point_cloud_forward_node>\n")
-
   find_package(ament_lint_auto REQUIRED)
 
   # Ignore copyright notices since we use custom NVIDIA Isaac ROS Software License
@@ -120,7 +86,6 @@ $<TARGET_FILE:managed_nitros_point_cloud_forward_node>\n")
 
   find_package(launch_testing_ament_cmake REQUIRED)
   add_launch_test(test/isaac_ros_nitros_point_cloud_type_test_pol.py TIMEOUT "60")
-  add_launch_test(test/isaac_ros_managed_nitros_point_cloud_type_test_pol.py TIMEOUT "60")
 endif()
 
 

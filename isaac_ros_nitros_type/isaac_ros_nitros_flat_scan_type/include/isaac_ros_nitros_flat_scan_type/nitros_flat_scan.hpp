@@ -27,16 +27,13 @@
  *   Total size: 2 * num_beams * sizeof(float)
  */
 
-#ifndef NITROS_GXF_COMPAT_MODE
-#define NITROS_GXF_COMPAT_MODE
-#endif
-
 #include <cuda_runtime.h>
 
 #include <functional>
 #include <memory>
 #include <string>
 #include <cstdint>
+#include <utility>
 #include <vector>
 
 #include "rclcpp/type_adapter.hpp"
@@ -44,13 +41,6 @@
 #include "isaac_ros_nitros/types/nitros_type_base.hpp"
 #include "isaac_ros_nitros/types/nitros_buffer.hpp"
 #include "isaac_ros_nitros/types/cuda_memory_pool.hpp"
-
-#ifdef NITROS_GXF_COMPAT_MODE
-// INTERIM: Includes for GXF compatibility (remove with macro)
-#include <map>
-#include <utility>
-#include "isaac_ros_nitros/types/nitros_format_agent.hpp"
-#endif
 
 namespace nvidia
 {
@@ -69,35 +59,9 @@ struct nitros_flat_scan_t
   static const inline std::string supported_type_name = "nitros_flat_scan";
 };
 
-#ifdef NITROS_GXF_COMPAT_MODE
-// Forward declare the compat traits template so it can be friended below
-template<typename T>
-struct NitrosGxfCompatTraits;
-#endif
-
 class NitrosFlatScan : public NitrosTypeBase
 {
 public:
-#ifdef NITROS_GXF_COMPAT_MODE
-  // INTERIM: Static methods required for old NitrosNode registration (remove with macro)
-  static std::map<std::string, NitrosFormatCallbacks> GetFormatCallbacks();
-  static std::vector<std::pair<std::string, std::string>> GetExtensions()
-  {
-    return {
-      {"isaac_ros_gxf", "gxf/lib/serialization/libgxf_serialization.so"},
-      {"gxf_isaac_gxf_helpers", "gxf/lib/libgxf_isaac_gxf_helpers.so"},
-      {"gxf_isaac_sight", "gxf/lib/libgxf_isaac_sight.so"},
-      {"gxf_isaac_atlas", "gxf/lib/libgxf_isaac_atlas.so"},
-      {"gxf_isaac_messages", "gxf/lib/libgxf_isaac_messages.so"},
-      {"gxf_isaac_ros_messages", "gxf/lib/libgxf_isaac_ros_messages.so"},
-    };
-  }
-#endif
-  static std::string GetDefaultCompatibleFormat()
-  {
-    return nitros_flat_scan_t::supported_type_name;
-  }
-
   // Standard ROS2 message pointer type aliases (required by message_filters)
   using SharedPtr = std::shared_ptr<NitrosFlatScan>;
   using ConstSharedPtr = std::shared_ptr<const NitrosFlatScan>;
@@ -108,12 +72,7 @@ public:
   using ConstPtr = const NitrosFlatScan *;
 
   NitrosFlatScan()
-  : NitrosTypeBase()
-  {
-#ifdef NITROS_GXF_COMPAT_MODE
-    handle = -1;
-#endif
-  }
+  : NitrosTypeBase() {}
   explicit NitrosFlatScan(const NitrosTypeBase & base)
   : NitrosTypeBase(base) {}
 
@@ -151,9 +110,6 @@ public:
     num_beams = num_beams_in;
     range_max = range_max_in;
     range_min = range_min_in;
-#ifdef NITROS_GXF_COMPAT_MODE
-    handle = -1;
-#endif
     return buffer_->get_write_handle(stream);
   }
 
@@ -176,9 +132,6 @@ public:
     num_beams = num_beams_in;
     range_max = range_max_in;
     range_min = range_min_in;
-#ifdef NITROS_GXF_COMPAT_MODE
-    handle = -1;
-#endif
     return buffer_->get_write_handle(stream);
   }
 
@@ -195,9 +148,6 @@ public:
 
 private:
   friend class nvidia::isaac_ros::nitros::NitrosBufferAccessor<NitrosFlatScan>;
-#ifdef NITROS_GXF_COMPAT_MODE
-  friend struct nvidia::isaac_ros::nitros::NitrosGxfCompatTraits<NitrosFlatScan>;
-#endif
   friend struct rclcpp::TypeAdapter<NitrosFlatScan,
     isaac_ros_pointcloud_interfaces::msg::FlatScan>;
 

@@ -26,7 +26,6 @@
 #include <sstream>
 
 #include "rclcpp/rclcpp.hpp"
-#include "isaac_ros_nitros/types/cuda_stream_pool.hpp"
 
 namespace
 {

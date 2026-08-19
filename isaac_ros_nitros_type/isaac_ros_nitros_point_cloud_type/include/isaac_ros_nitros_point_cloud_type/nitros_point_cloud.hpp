@@ -23,27 +23,18 @@
  *   ROS type:    sensor_msgs::msg::PointCloud2
  */
 
-#ifndef NITROS_GXF_COMPAT_MODE
-#define NITROS_GXF_COMPAT_MODE
-#endif
-
 #include <map>
 #include <memory>
 #include <string>
 #include <utility>
 #include <vector>
 
-#include "isaac_ros_nitros/types/nitros_format_agent.hpp"
 #include "isaac_ros_nitros/types/nitros_type_base.hpp"
 #include "isaac_ros_nitros/types/nitros_buffer.hpp"
 #include "isaac_ros_nitros/types/cuda_memory_pool.hpp"
 #include "rclcpp/type_adapter.hpp"
 #include "sensor_msgs/msg/point_cloud2.hpp"
 #include "sensor_msgs/point_cloud2_iterator.hpp"
-
-#ifdef NITROS_GXF_COMPAT_MODE
-#include "isaac_ros_nitros_point_cloud_type/nitros_point_cloud_gxf_compat.hpp"
-#endif
 
 namespace nvidia
 {
@@ -55,34 +46,9 @@ namespace nitros
 // Type forward declaration
 struct NitrosPointCloud;
 
-// Format descriptor for NitrosTypeManager / negotiated API (used by ManagedNitros and benchmark)
-struct nitros_point_cloud_t
-{
-  using MsgT = NitrosPointCloud;
-  static const inline std::string supported_type_name = "nitros_point_cloud";
-};
-
 class NitrosPointCloud : public NitrosTypeBase
 {
 public:
-  // Need to be removed after the GXF compat mode is removed
-  static std::string GetDefaultCompatibleFormat()
-  {
-    return "nitros_point_cloud";
-  }
-#ifdef NITROS_GXF_COMPAT_MODE
-  static std::map<std::string, NitrosFormatCallbacks> GetFormatCallbacks()
-  {
-    std::map<std::string, NitrosFormatCallbacks> format_callback_map;
-    format_callback_map.emplace(
-      nitros_point_cloud_t::supported_type_name,
-      NitrosFormatAgent<nitros_point_cloud_t>::GetFormatCallbacks());
-    return format_callback_map;
-  }
-
-  static std::vector<std::pair<std::string, std::string>> GetExtensions() {return {};}
-#endif
-
   // Standard ROS2 message pointer type aliases (required by message_filters)
   using SharedPtr = std::shared_ptr<NitrosPointCloud>;
   using ConstSharedPtr = std::shared_ptr<const NitrosPointCloud>;

@@ -15,15 +15,7 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wunused-parameter"
-#pragma GCC diagnostic ignored "-Wmissing-field-initializers"
-#include "gxf/core/entity.hpp"
-#include "gxf/core/gxf.h"
-#pragma GCC diagnostic pop
-
 #include "isaac_ros_nitros/types/nitros_type_base.hpp"
-#include "isaac_ros_nitros/types/type_adapter_nitros_context.hpp"
 
 #include "rclcpp/rclcpp.hpp"
 
@@ -166,14 +158,6 @@ NitrosTypeBase::NitrosTypeBase(
         "[NitrosTypeBase] setCUDAMemoryPoolSize Error: %s", error_msg.str().c_str());
     }
   }
-
-  // Guard: Only increment refcount for valid GXF entities (handle >= 0)
-  // GXF-free types use handle=-1 and don't use GXF refcounting
-  if (handle >= 0) {
-    GxfEntityRefCountInc(
-      nvidia::isaac_ros::nitros::GetTypeAdapterNitrosContext().getContext(),
-      handle);
-  }
 }
 
 NitrosTypeBase::NitrosTypeBase(const NitrosTypeBase & other)
@@ -187,30 +171,16 @@ NitrosTypeBase::NitrosTypeBase(const NitrosTypeBase & other)
     rclcpp::get_logger("NitrosTypeBase"),
     "[Copy Constructor] Copying a Nitros-typed object for handle = %ld",
     other.handle);
-  // Guard: Only increment refcount for valid GXF entities (handle >= 0)
-  // GXF-free types use handle=-1 and don't use GXF refcounting
-  if (other.handle >= 0) {
-    GxfEntityRefCountInc(
-      nvidia::isaac_ros::nitros::GetTypeAdapterNitrosContext().getContext(),
-      other.handle);
-  }
 }
 
 NitrosTypeBase & NitrosTypeBase::operator=(const NitrosTypeBase & other)
 {
   if (this != &other) {
-    auto ctx = nvidia::isaac_ros::nitros::GetTypeAdapterNitrosContext().getContext();
-    if (handle >= 0) {
-      GxfEntityRefCountDec(ctx, handle);
-    }
     handle = other.handle;
     data_format_name = other.data_format_name;
     compatible_data_format_name = other.compatible_data_format_name;
     frame_id = other.frame_id;
     cuda_stream = other.cuda_stream;
-    if (handle >= 0) {
-      GxfEntityRefCountInc(ctx, handle);
-    }
   }
   return *this;
 }
@@ -229,12 +199,6 @@ NitrosTypeBase::NitrosTypeBase(NitrosTypeBase && other) noexcept
 NitrosTypeBase & NitrosTypeBase::operator=(NitrosTypeBase && other) noexcept
 {
   if (this != &other) {
-    // Release our current ref if we hold a valid entity
-    if (handle >= 0) {
-      GxfEntityRefCountDec(
-        nvidia::isaac_ros::nitros::GetTypeAdapterNitrosContext().getContext(),
-        handle);
-    }
     handle = other.handle;
     data_format_name = std::move(other.data_format_name);
     compatible_data_format_name = std::move(other.compatible_data_format_name);
@@ -251,13 +215,6 @@ NitrosTypeBase::~NitrosTypeBase()
     rclcpp::get_logger("NitrosTypeBase"),
     "[Destructor]Destroying a Nitros-typed object for handle = %ld",
     handle);
-  // Guard: Only decrement refcount for valid GXF entities (handle >= 0)
-  // GXF-free types use handle=-1 and don't use GXF refcounting
-  if (handle >= 0) {
-    GxfEntityRefCountDec(
-      nvidia::isaac_ros::nitros::GetTypeAdapterNitrosContext().getContext(),
-      handle);
-  }
 }
 
 }  // namespace nitros

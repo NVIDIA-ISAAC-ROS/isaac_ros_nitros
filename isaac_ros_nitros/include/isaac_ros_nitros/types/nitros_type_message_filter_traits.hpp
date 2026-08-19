@@ -25,7 +25,6 @@
 #include <vector>
 
 #include "isaac_ros_nitros/types/nitros_type_base.hpp"
-#include "isaac_ros_nitros/types/type_adapter_nitros_context.hpp"
 #include "isaac_ros_nitros/types/type_utility.hpp"
 #include "std_msgs/msg/header.hpp"
 
@@ -59,15 +58,6 @@ struct TimeStamp<M, typename std::enable_if<IsNitrosType<M>::value>::type>
       // Buffer-based: use virtual timestamp accessors
       ros_header.stamp.sec = m.get_timestamp_sec();
       ros_header.stamp.nanosec = m.get_timestamp_nsec();
-    } else {
-      // GXF-based: get timestamp from entity
-      if (nvidia::isaac_ros::nitros::GetTypeAdapterNitrosContext().getEntityTimestamp(
-          m.handle, ros_header) != GXF_SUCCESS)
-      {
-        RCLCPP_ERROR(
-          rclcpp::get_logger("[NITROS message_filter_traits]"),
-          "[message_filter] getEntityTimestamp Error");
-      }
     }
     return rclcpp::Time(ros_header.stamp, RCL_ROS_TIME);
   }

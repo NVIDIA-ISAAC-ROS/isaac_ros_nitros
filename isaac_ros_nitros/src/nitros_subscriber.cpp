@@ -18,10 +18,6 @@
 #include "gxf/core/gxf.h"
 
 #include "isaac_ros_nitros/nitros_subscriber.hpp"
-#ifdef NITROS_GXF_COMPAT_MODE
-#include "isaac_ros_nitros/types/nitros_gxf_compat_traits.hpp"
-#endif
-
 #include "rclcpp/logger.hpp"
 #include "rclcpp/rclcpp.hpp"
 
@@ -395,20 +391,6 @@ void NitrosSubscriber::subscriberCallback(
   nvtxRangePushWrapper(nvtx_tag_name.str().c_str(), CLR_PURPLE);
 
   int64_t handle = msg_base->handle;
-
-#ifdef NITROS_GXF_COMPAT_MODE
-  if (msg_base->handle == -1 && use_gxf_receiver_) {
-    int64_t eid = CreateGxfEntityFromNitros(context_, msg_ref);
-    if (eid >= 0) {
-      handle = eid;
-      // Expose the synthesized eid so legacy user callbacks that read msg.handle
-      // to inspect the GXF entity (e.g. get<PoseFrameUid>) see a valid entity.
-      // ~NitrosTypeBase() will Dec this eid, balancing the Inc done inside
-      // CreateGxfEntity — so no explicit Dec is needed after pushEntity.
-      msg_base->handle = eid;
-    }
-  }
-#endif
 
   // Only enable diagnostics if the ROS parameter flag is enabled and
   // the topic has been specified in the topics_list ROS parameter

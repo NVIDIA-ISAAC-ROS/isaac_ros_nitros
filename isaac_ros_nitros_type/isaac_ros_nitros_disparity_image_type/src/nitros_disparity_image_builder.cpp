@@ -21,107 +21,13 @@
 #include <vector>
 #include <array>
 
-#ifdef NITROS_GXF_COMPAT_MODE
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wunused-parameter"
-#pragma GCC diagnostic ignored "-Wmissing-field-initializers"
-#pragma GCC diagnostic ignored "-Wpedantic"
-#include "gxf/core/entity.hpp"
-#include "gxf/core/gxf.h"
-#include "gxf/multimedia/video.hpp"
-#include "gxf/std/timestamp.hpp"
-#include "extensions/messages/camera_message.hpp"
-#pragma GCC diagnostic pop
-
 #include "isaac_ros_nitros_disparity_image_type/nitros_disparity_image_builder.hpp"
-#include "isaac_ros_nitros/types/type_adapter_nitros_context.hpp"
-#else
-#include "isaac_ros_nitros_disparity_image_type/nitros_disparity_image_builder.hpp"
-#endif
 
 #include "isaac_ros_nitros/types/cuda_stream_pool.hpp"
 
 namespace
 {
 constexpr uint64_t kNanosecondsInSeconds = 1e9;
-
-#ifdef NITROS_GXF_COMPAT_MODE
-// NoPaddingColorPlanes specialization for D32F format
-template<nvidia::gxf::VideoFormat T>
-struct NoPaddingColorPlanes {};
-
-template<>
-struct NoPaddingColorPlanes<nvidia::gxf::VideoFormat::GXF_VIDEO_FORMAT_D32F>
-{
-  explicit NoPaddingColorPlanes(uint32_t width)
-  : planes({nvidia::gxf::ColorPlane("D", 4, width * 4)}) {}
-  std::array<nvidia::gxf::ColorPlane, 1> planes;
-};
-
-nvidia::gxf::Expected<void> ReleaseImageCallback(
-  std::function<void()> release_callback,
-  void * ptr)
-{
-  if (release_callback) {
-    release_callback();
-  } else {
-    cudaFree(ptr);
-  }
-  RCLCPP_DEBUG(
-    rclcpp::get_logger("NitrosDisparityImageBuilder"),
-    "[ReleaseImageCallback] Released the cuda memory [%p]", ptr);
-  return nvidia::gxf::Success;
-}
-
-nvidia::gxf::Expected<nvidia::isaac::CameraMessageParts> CreateDisparityImage(
-  const uint32_t width, const uint32_t height,
-  gxf_context_t context,
-  void * data,
-  std::function<void()> release_callback)
-{
-  if (width % 2 != 0 || height % 2 != 0) {
-    RCLCPP_ERROR(
-      rclcpp::get_logger("NitrosDisparityImageBuilder"),
-      "[CreateDisparityImage] Image width/height must be even for creation of gxf::VideoBuffer");
-    throw std::runtime_error("[CreateDisparityImage] Odd Image width or height.");
-  }
-
-  // Create proper CameraMessage structure
-  auto maybe_camera_message = nvidia::isaac::InitializeCameraMessage(context);
-  if (!maybe_camera_message) {
-    RCLCPP_ERROR(
-      rclcpp::get_logger("NitrosDisparityImageBuilder"),
-      "[CreateDisparityImage] Failed to initialize CameraMessage");
-    return nvidia::gxf::ForwardError(maybe_camera_message);
-  }
-
-  auto camera_message = maybe_camera_message.value();
-
-  // Setup VideoBuffer with the provided data
-  NoPaddingColorPlanes<nvidia::gxf::VideoFormat::GXF_VIDEO_FORMAT_D32F> nopadding_planes(width);
-  nvidia::gxf::VideoFormatSize<nvidia::gxf::VideoFormat::GXF_VIDEO_FORMAT_D32F> format_size;
-  uint64_t size = format_size.size(width, height, nopadding_planes.planes);
-
-  std::vector<nvidia::gxf::ColorPlane> color_planes{nopadding_planes.planes.begin(),
-    nopadding_planes.planes.end()};
-
-  constexpr auto surface_layout = nvidia::gxf::SurfaceLayout::GXF_SURFACE_LAYOUT_PITCH_LINEAR;
-  constexpr auto storage_type = nvidia::gxf::MemoryStorageType::kDevice;
-
-  nvidia::gxf::VideoBufferInfo buffer_info{
-    width, height,
-    nvidia::gxf::VideoFormat::GXF_VIDEO_FORMAT_D32F,
-    color_planes,
-    surface_layout
-  };
-
-  camera_message.frame->wrapMemory(
-    buffer_info, size, storage_type, data,
-    std::bind(&ReleaseImageCallback, release_callback, std::placeholders::_1));
-
-  return camera_message;
-}
-#endif
 }  // namespace
 
 namespace nvidia
@@ -261,44 +167,6 @@ NitrosDisparityImage NitrosDisparityImageBuilder::Build()
 {
   // Validate all data is present before building the NitrosDisparityImage
   Validate();
-#ifdef NITROS_GXF_COMPAT_MODE
-  auto context = GetTypeAdapterNitrosContext().getContext();
-
-  // Create the CameraMessage structure with proper components
-  auto maybe_camera_message = CreateDisparityImage(
-    width_, height_, context, data_, release_callback_);
-
-  if (!maybe_camera_message) {
-    std::stringstream error_msg;
-    error_msg << "[Build] Failed to create CameraMessage: " <<
-      GxfResultStr(maybe_camera_message.error());
-    RCLCPP_ERROR(
-      rclcpp::get_logger("NitrosDisparityImageBuilder"), error_msg.str().c_str());
-    throw std::runtime_error(error_msg.str().c_str());
-  }
-
-  auto camera_message = maybe_camera_message.value();
-
-  // Set disparity parameters in intrinsics and extrinsics for compatibility with disparity_to_depth
-  camera_message.intrinsics->focal_length.x = f_;
-  camera_message.extrinsics->translation[0] = t_;
-
-  // Add disparity parameters as float components for backward compatibility
-  *(camera_message.entity.add<float>("f")->get()) = f_;
-  *(camera_message.entity.add<float>("t")->get()) = t_;
-  *(camera_message.entity.add<float>("min_disparity")->get()) = min_disparity_;
-  *(camera_message.entity.add<float>("max_disparity")->get()) = max_disparity_;
-
-  // Set timestamp from header if provided
-  if (header_.stamp.sec != 0 || header_.stamp.nanosec != 0) {
-    uint64_t input_timestamp = header_.stamp.sec * kNanosecondsInSeconds + header_.stamp.nanosec;
-    camera_message.timestamp->acqtime = input_timestamp;
-  }
-
-  // Set the handle and frame_id
-  nitros_disparity_image_.handle = camera_message.entity.eid();
-  GxfEntityRefCountInc(context, camera_message.entity.eid());
-#else
   nitros_disparity_image_.width = width_;
   nitros_disparity_image_.height = height_;
   nitros_disparity_image_.step = sizeof(float) * width_;
@@ -321,7 +189,7 @@ NitrosDisparityImage NitrosDisparityImageBuilder::Build()
       stream_pool.release(stream);
     };
 
-  nitros_disparity_image_.from_external(
+  [[maybe_unused]] auto write_handle = nitros_disparity_image_.from_external(
       data_, buffer_size, width_, height_, nitros_disparity_image_.step,
       "32FC1", stream, deleter);
   data_ = nullptr;  // ownership transferred
@@ -335,7 +203,6 @@ NitrosDisparityImage NitrosDisparityImageBuilder::Build()
     nitros_disparity_image_.timestamp_nsec = 0;
   }
   nitros_disparity_image_.frame_id = header_.frame_id;
-#endif
 
   RCLCPP_DEBUG(
     rclcpp::get_logger("NitrosDisparityImageBuilder"),

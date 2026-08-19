@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
-// Copyright (c) 2023-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+// Copyright (c) 2023-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -16,7 +16,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include "isaac_ros_nitros_flat_scan_type/nitros_flat_scan.hpp"
-#include "isaac_ros_nitros/nitros_node.hpp"
 
 #include "rclcpp_components/register_node_macro.hpp"
 
@@ -29,61 +28,29 @@ namespace nitros
 
 constexpr char PACKAGE_NAME[] = "isaac_ros_nitros_flat_scan_type";
 constexpr char FORWARD_FORMAT[] = "nitros_flat_scan";
-
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wpedantic"
-class NitrosFlatScanForwardNode : public NitrosNode
+class NitrosFlatScanForwardNode : public rclcpp::Node
 {
 public:
   explicit NitrosFlatScanForwardNode(const rclcpp::NodeOptions & options)
-  : NitrosNode(
-      options,
-      // Application graph filename
-      "test/config/test_forward_node.yaml",
-      // I/O configuration map
-        {
-          {"forward/input",
-            {
-              .type = NitrosPublisherSubscriberType::NEGOTIATED,
-              .qos = rclcpp::QoS(1),
-              .compatible_data_format = FORWARD_FORMAT,
-              .topic_name = "topic_forward_input",
-              .use_compatible_format_only = true,
-            }
-          },
-          {"sink/sink",
-            {
-              .type = NitrosPublisherSubscriberType::NEGOTIATED,
-              .qos = rclcpp::QoS(1),
-              .compatible_data_format = FORWARD_FORMAT,
-              .topic_name = "topic_forward_output",
-              .use_compatible_format_only = true,
-            }
-          }
-        },
-      // Extension specs
-      {},
-      // Optimizer's rule filenames
-      {},
-      // Extension so file list
-        {
-          {"gxf_isaac_message_compositor", "gxf/lib/libgxf_isaac_message_compositor.so"}
-        },
-      // Test node package name
-      PACKAGE_NAME)
+  : rclcpp::Node("NitrosFlatScanForwardNode", options)
   {
-    std::string compatible_format = declare_parameter<std::string>("compatible_format", "");
-    if (!compatible_format.empty()) {
-      config_map_["forward/input"].compatible_data_format = compatible_format;
-      config_map_["sink/sink"].compatible_data_format = compatible_format;
-    }
-
-    registerSupportedType<nvidia::isaac_ros::nitros::NitrosFlatScan>();
-
-    startNitrosNode();
+    auto qos = rclcpp::QoS(1);
+    sub_ = create_subscription<nvidia::isaac_ros::nitros::NitrosFlatScan>(
+      "topic_forward_input", qos,
+      std::bind(&NitrosFlatScanForwardNode::on_flat_scan, this, std::placeholders::_1));
+    pub_ = create_publisher<nvidia::isaac_ros::nitros::NitrosFlatScan>(
+      "topic_forward_output", qos);
   }
+
+private:
+  void on_flat_scan(const nvidia::isaac_ros::nitros::NitrosFlatScan & msg)
+  {
+    pub_->publish(msg);
+  }
+
+  rclcpp::Subscription<nvidia::isaac_ros::nitros::NitrosFlatScan>::SharedPtr sub_;
+  rclcpp::Publisher<nvidia::isaac_ros::nitros::NitrosFlatScan>::SharedPtr pub_;
 };
-#pragma GCC diagnostic pop
 
 }  // namespace nitros
 }  // namespace isaac_ros
