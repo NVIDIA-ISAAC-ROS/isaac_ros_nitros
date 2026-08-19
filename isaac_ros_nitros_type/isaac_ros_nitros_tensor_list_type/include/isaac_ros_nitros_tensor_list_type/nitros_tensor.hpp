@@ -18,10 +18,6 @@
 #ifndef ISAAC_ROS_NITROS_TENSOR_LIST_TYPE__NITROS_TENSOR_HPP_
 #define ISAAC_ROS_NITROS_TENSOR_LIST_TYPE__NITROS_TENSOR_HPP_
 
-#ifndef NITROS_GXF_COMPAT_MODE
-#define NITROS_GXF_COMPAT_MODE
-#endif
-
 #include <memory>
 #include <string>
 #include <utility>
@@ -61,9 +57,6 @@ public:
     const NitrosDataType & data_type)
   : shape_(shape), data_type_(data_type)
   {
-#ifndef NITROS_GXF_COMPAT_MODE
-    handle = -1;
-#endif
   }
 
   explicit NitrosTensor(
@@ -71,9 +64,6 @@ public:
     const NitrosDataType & data_type)
   : name_(name), shape_(shape), data_type_(data_type)
   {
-#ifndef NITROS_GXF_COMPAT_MODE
-    handle = -1;
-#endif
   }
 
   // Message metadata accessors
@@ -165,9 +155,6 @@ public:
     for (int32_t i = shape_.rank() - 2; i >= 0; i--) {
       this->strides_[i] = this->strides_[i + 1] * shape_.dims()[i + 1];
     }
-#ifndef NITROS_GXF_COMPAT_MODE
-    handle = -1;
-#endif
     return buffer_->get_write_handle(stream);
   }
 
@@ -196,9 +183,6 @@ public:
     for (int32_t i = shape_.rank() - 2; i >= 0; i--) {
       this->strides_[i] = this->strides_[i + 1] * shape_.dims()[i + 1];
     }
-#ifndef NITROS_GXF_COMPAT_MODE
-    handle = -1;
-#endif
     return buffer_->get_write_handle(stream);
   }
 

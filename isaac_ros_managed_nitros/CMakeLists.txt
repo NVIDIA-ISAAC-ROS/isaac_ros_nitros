@@ -40,10 +40,6 @@ install(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/include/"
         DESTINATION "${CMAKE_INSTALL_PREFIX}/share/${PROJECT_NAME}/gxf/include")
 set_target_properties(${PROJECT_NAME} PROPERTIES
   INTERFACE_INCLUDE_DIRECTORIES "$<INSTALL_PREFIX>/share/${PROJECT_NAME}/gxf/include")
-# set_property(TARGET ${PROJECT_NAME} PROPERTY
-#   INTERFACE_LINK_LIBRARIES
-#     gxf_isaac_message_compositor::gxf_isaac_message_compositor
-# )
 
 install(TARGETS ${PROJECT_NAME}
         EXPORT export_${PROJECT_NAME}

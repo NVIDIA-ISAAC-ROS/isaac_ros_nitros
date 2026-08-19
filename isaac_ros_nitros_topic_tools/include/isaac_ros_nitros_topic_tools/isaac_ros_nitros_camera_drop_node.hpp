@@ -28,9 +28,7 @@
 #include <sensor_msgs/msg/camera_info.hpp>
 #include <sensor_msgs/msg/image.hpp>
 
-#include "isaac_ros_managed_nitros/managed_nitros_publisher.hpp"
 #include "isaac_ros_nitros/types/nitros_type_message_filter_traits.hpp"
-#include "isaac_ros_nitros_camera_info_type/nitros_camera_info.hpp"
 #include "isaac_ros_nitros_image_type/nitros_image.hpp"
 
 namespace nvidia
@@ -63,39 +61,33 @@ public:
 
 private:
   // Subscribers
-  ::message_filters::Subscriber<nvidia::isaac_ros::nitros::NitrosImage> image_sub_1_;
-  ::message_filters::Subscriber<sensor_msgs::msg::CameraInfo> camera_info_sub_1_;
-  ::message_filters::Subscriber<nvidia::isaac_ros::nitros::NitrosImage> image_sub_2_;
-  ::message_filters::Subscriber<sensor_msgs::msg::CameraInfo> camera_info_sub_2_;
-  ::message_filters::Subscriber<nvidia::isaac_ros::nitros::NitrosImage> depth_sub_;
+  message_filters::Subscriber<nvidia::isaac_ros::nitros::NitrosImage> image_sub_1_;
+  message_filters::Subscriber<sensor_msgs::msg::CameraInfo> camera_info_sub_1_;
+  message_filters::Subscriber<nvidia::isaac_ros::nitros::NitrosImage> image_sub_2_;
+  message_filters::Subscriber<sensor_msgs::msg::CameraInfo> camera_info_sub_2_;
+  message_filters::Subscriber<nvidia::isaac_ros::nitros::NitrosImage> depth_sub_;
 
-  std::shared_ptr<
-    nvidia::isaac_ros::nitros::ManagedNitrosPublisher<nvidia::isaac_ros::nitros::NitrosImage>>
-  image_pub_1_;
+  rclcpp::Publisher<nvidia::isaac_ros::nitros::NitrosImage>::SharedPtr image_pub_1_;
   rclcpp::Publisher<sensor_msgs::msg::CameraInfo>::SharedPtr camera_info_pub_1_;
-  std::shared_ptr<
-    nvidia::isaac_ros::nitros::ManagedNitrosPublisher<nvidia::isaac_ros::nitros::NitrosImage>>
-  image_pub_2_;
+  rclcpp::Publisher<nvidia::isaac_ros::nitros::NitrosImage>::SharedPtr image_pub_2_;
   rclcpp::Publisher<sensor_msgs::msg::CameraInfo>::SharedPtr camera_info_pub_2_;
-  std::shared_ptr<
-    nvidia::isaac_ros::nitros::ManagedNitrosPublisher<nvidia::isaac_ros::nitros::NitrosImage>>
-  depth_pub_;
+  rclcpp::Publisher<nvidia::isaac_ros::nitros::NitrosImage>::SharedPtr depth_pub_;
   // Exact message sync policy
-  using ExactPolicyMode0 = ::message_filters::sync_policies::ExactTime<
+  using ExactPolicyMode0 = message_filters::sync_policies::ExactTime<
     nvidia::isaac_ros::nitros::NitrosImage, sensor_msgs::msg::CameraInfo>;
-  using ExactSyncMode0 = ::message_filters::Synchronizer<ExactPolicyMode0>;
+  using ExactSyncMode0 = message_filters::Synchronizer<ExactPolicyMode0>;
   std::shared_ptr<ExactSyncMode0> exact_sync_mode_0_;  // Exact sync mode 0
 
-  using ExactPolicyMode1 = ::message_filters::sync_policies::ExactTime<
+  using ExactPolicyMode1 = message_filters::sync_policies::ExactTime<
     nvidia::isaac_ros::nitros::NitrosImage, sensor_msgs::msg::CameraInfo,
     nvidia::isaac_ros::nitros::NitrosImage, sensor_msgs::msg::CameraInfo>;
-  using ExactSyncMode1 = ::message_filters::Synchronizer<ExactPolicyMode1>;
+  using ExactSyncMode1 = message_filters::Synchronizer<ExactPolicyMode1>;
   std::shared_ptr<ExactSyncMode1> exact_sync_mode_1_;  // Exact sync mode 1
 
-  using ExactPolicyMode2 = ::message_filters::sync_policies::ExactTime<
+  using ExactPolicyMode2 = message_filters::sync_policies::ExactTime<
     nvidia::isaac_ros::nitros::NitrosImage, sensor_msgs::msg::CameraInfo,
     nvidia::isaac_ros::nitros::NitrosImage>;
-  using ExactSyncMode2 = ::message_filters::Synchronizer<ExactPolicyMode2>;
+  using ExactSyncMode2 = message_filters::Synchronizer<ExactPolicyMode2>;
   std::shared_ptr<ExactSyncMode2> exact_sync_mode_2_;  // Exact sync mode 2
 
   /**

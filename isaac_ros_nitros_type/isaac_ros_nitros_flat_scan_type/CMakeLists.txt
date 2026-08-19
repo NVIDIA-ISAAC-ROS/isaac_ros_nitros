@@ -1,5 +1,5 @@
 # SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
-# Copyright (c) 2023-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# Copyright (c) 2023-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -32,24 +32,12 @@ find_package(CUDAToolkit REQUIRED)
 find_package(Eigen3 3.3 REQUIRED NO_MODULE)
 find_package(yaml-cpp)
 
-# INTERIM: Enable GXF compatibility mode for old NitrosNode infrastructure
-option(NITROS_GXF_COMPAT_MODE "Enable GXF compatibility for old NitrosNode" ON)
-
 set(FLAT_SCAN_SOURCES
   src/nitros_flat_scan.cpp
 )
 
-if(NITROS_GXF_COMPAT_MODE)
-  add_compile_definitions(NITROS_GXF_COMPAT_MODE)
-  list(APPEND FLAT_SCAN_SOURCES src/nitros_flat_scan_gxf_compat.cpp)
-endif()
-
 # NitrosFlatScan
 ament_auto_add_library(${PROJECT_NAME} SHARED ${FLAT_SCAN_SOURCES})
-
-if(NITROS_GXF_COMPAT_MODE)
-  target_compile_definitions(${PROJECT_NAME} PUBLIC NITROS_GXF_COMPAT_MODE)
-endif()
 
 target_link_libraries(${PROJECT_NAME}
   Eigen3::Eigen

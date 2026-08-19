@@ -24,7 +24,6 @@
 #include "message_filters/subscriber.h"
 
 #include "isaac_ros_managed_nitros/managed_nitros_subscriber.hpp"
-#include "isaac_ros_nitros/types/nitros_type_message_filter_traits.hpp"
 
 namespace nvidia
 {
@@ -36,7 +35,7 @@ namespace message_filters
 {
 
 template<class NitrosTypeViewT, class NodeType = rclcpp::Node>
-class Subscriber
+class [[deprecated("Use rclcpp::create_subscription instead")]] Subscriber
   : public ::message_filters::SubscriberBase<NodeType>,
   public ::message_filters::SimpleFilter<typename NitrosTypeViewT::BaseType>
 {
@@ -191,18 +190,16 @@ public:
    * \param qos The rmw qos profile to use to subscribe
    * \param options The subscription options to use to subscribe.
    * \param compatible_data_format The NITROS compatible data format to use to subscribe.
-   * \param diagnostics_config The NITROS diagnostics config to use to subscribe.
    */
   void subscribe(
     NodePtr node,
     const std::string & topic,
     const rmw_qos_profile_t qos,
     rclcpp::SubscriptionOptions options,
-    const std::string & compatible_data_format,
-    const NitrosDiagnosticsConfig & diagnostics_config = {})
+    const std::string & compatible_data_format)
   {
     // Use raw pointer implementation, then reset the node pointer member variables
-    subscribe(node.get(), topic, qos, options, compatible_data_format, diagnostics_config);
+    subscribe(node.get(), topic, qos, options, compatible_data_format);
     node_raw_ = nullptr;
     node_shared_ = node;
   }
@@ -217,15 +214,13 @@ public:
    * \param qos The rmw qos profile to use to subscribe
    * \param options The subscription options to use to subscribe.
    * \param compatible_data_format The NITROS compatible data format to use to subscribe.
-   * \param diagnostics_config The NITROS diagnostics config to use to subscribe.
    */
   void subscribe(
     NodeType * node,
     const std::string & topic,
     const rmw_qos_profile_t qos,
     rclcpp::SubscriptionOptions options,
-    const std::string & compatible_data_format,
-    const NitrosDiagnosticsConfig & diagnostics_config = {})
+    const std::string & compatible_data_format)
   {
     unsubscribe();
 
@@ -237,7 +232,6 @@ public:
       options_ = options;
       compatible_data_format_ = compatible_data_format !=
         "" ? compatible_data_format : MessageType::GetDefaultCompatibleFormat();
-      diagnostics_config_ = diagnostics_config;
 
       sub_ = std::make_shared<ManagedNitrosSubscriber<NitrosTypeViewT>>(
         node,
@@ -246,7 +240,6 @@ public:
         [this](const NitrosTypeViewT & nitrosViewMsg) {
           this->cb(EventType(std::make_shared<const MessageType>(nitrosViewMsg.GetMessage())));
         },
-        diagnostics_config,
         rclcpp_qos
       );
 
@@ -261,10 +254,9 @@ public:
   {
     if (!topic_.empty()) {
       if (node_raw_ != nullptr) {
-        subscribe(node_raw_, topic_, qos_, options_, compatible_data_format_, diagnostics_config_);
+        subscribe(node_raw_, topic_, qos_, options_, compatible_data_format_);
       } else if (node_shared_ != nullptr) {
-        subscribe(node_shared_, topic_, qos_, options_, compatible_data_format_,
-                  diagnostics_config_);
+        subscribe(node_shared_, topic_, qos_, options_, compatible_data_format_);
       }
     }
   }
@@ -322,7 +314,6 @@ private:
   rmw_qos_profile_t qos_;
   rclcpp::SubscriptionOptions options_;
   std::string compatible_data_format_;
-  NitrosDiagnosticsConfig diagnostics_config_;
 };
 
 }  // namespace message_filters

@@ -66,4 +66,5 @@ private:
 }  // namespace nitros
 }  // namespace isaac_ros
 }  // namespace nvidia
+
 #endif  // ISAAC_ROS_NITROS_POINT_CLOUD_TYPE__NITROS_POINT_CLOUD_BUILDER_HPP_

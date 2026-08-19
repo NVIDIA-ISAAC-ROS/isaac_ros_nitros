@@ -13,7 +13,7 @@ license agreement from NVIDIA CORPORATION is strictly prohibited.
 <?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
   <name>isaac_ros_nitros_disparity_image_type</name>
-  <version>4.5.0</version>
+  <version>4.6.0</version>
   <description>Isaac ROS Nitros Disparity Image Type</description>
 
   <maintainer email="isaac-ros-maintainers@nvidia.com">Isaac ROS Maintainers</maintainer>
@@ -26,16 +26,12 @@ license agreement from NVIDIA CORPORATION is strictly prohibited.
 
   <depend>rclcpp</depend>
   <depend>rclcpp_components</depend>
+  <depend>std_msgs</depend>
   <depend>stereo_msgs</depend>
   <depend>isaac_ros_nitros</depend>
-  <depend>gxf_isaac_messages</depend>
 
   <build_depend>isaac_ros_common</build_depend>
   <build_depend>ament_index_cpp</build_depend>
-
-  <exec_depend>gxf_isaac_atlas</exec_depend>
-  <exec_depend>gxf_isaac_gxf_helpers</exec_depend>
-  <exec_depend>gxf_isaac_sight</exec_depend>
 
   <test_depend>ament_lint_auto</test_depend>
   <test_depend>ament_lint_common</test_depend>

@@ -20,18 +20,6 @@
 
 #include "isaac_ros_nitros/types/nitros_type_base.hpp"
 
-#ifdef NITROS_GXF_COMPAT_MODE
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wunused-parameter"
-#pragma GCC diagnostic ignored "-Wmissing-field-initializers"
-#pragma GCC diagnostic ignored "-Wpedantic"
-#include "gxf/core/entity.hpp"
-#include "gxf/core/gxf.h"
-#include "gxf/std/tensor.hpp"
-#include "gxf/std/timestamp.hpp"
-#pragma GCC diagnostic pop
-#endif
-
 namespace nvidia
 {
 namespace isaac_ros
@@ -66,10 +54,6 @@ enum class NitrosDataType
   kFloat64,
   kCustom,
 };
-
-#ifdef NITROS_GXF_COMPAT_MODE
-nvidia::gxf::PrimitiveType GetPrimitiveType(NitrosDataType nitros_data_type);
-#endif
 
 }  // namespace nitros
 }  // namespace isaac_ros

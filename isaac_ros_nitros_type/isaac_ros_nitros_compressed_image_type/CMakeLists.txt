@@ -26,17 +26,8 @@ find_package(ament_cmake_auto REQUIRED)
 find_package(CUDAToolkit REQUIRED)
 ament_auto_find_build_dependencies()
 
-# INTERIM: Enable GXF compatibility mode for old NitrosNode infrastructure
-# TODO: Remove these lines when all nodes migrated to ManagedNitros
-option(NITROS_IMAGE_GXF_COMPAT_MODE "Enable GXF compatibility for old NitrosNode" ON)
-
 # NitrosCompressedImage (GXF-free implementation)
 ament_auto_add_library(${PROJECT_NAME} SHARED src/nitros_compressed_image.cpp)
-
-# INTERIM: Enable GXF compat for old NitrosNode infrastructure (remove when all nodes migrated)
-if(NITROS_IMAGE_GXF_COMPAT_MODE)
-  target_compile_definitions(${PROJECT_NAME} PUBLIC NITROS_IMAGE_GXF_COMPAT_MODE)
-endif()
 
 target_link_libraries(${PROJECT_NAME} CUDA::cudart)
 set_target_properties(${PROJECT_NAME} PROPERTIES BUILD_RPATH_USE_ORIGIN TRUE)

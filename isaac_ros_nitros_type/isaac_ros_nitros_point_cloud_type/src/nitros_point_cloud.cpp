@@ -25,17 +25,6 @@
 #include "isaac_ros_nitros/types/cuda_stream_pool.hpp"
 #include "isaac_ros_nitros_point_cloud_type/nitros_point_cloud.hpp"
 
-#ifdef NITROS_GXF_COMPAT_MODE
-#include "isaac_ros_nitros/types/type_adapter_nitros_context.hpp"
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wunused-parameter"
-#pragma GCC diagnostic ignored "-Wpedantic"
-#include "gxf/core/entity.hpp"
-#include "gxf/core/gxf.h"
-#include "messages/point_cloud_message.hpp"
-#pragma GCC diagnostic pop
-#endif
-
 #include "rclcpp/rclcpp.hpp"
 
 void rclcpp::TypeAdapter<
@@ -50,66 +39,6 @@ void rclcpp::TypeAdapter<
   RCLCPP_DEBUG(
     rclcpp::get_logger("NitrosPointCloud"),
     "[convert_to_ros_message] Conversion started for handle=%ld", source.handle);
-
-#ifdef NITROS_GXF_COMPAT_MODE
-  if (source.handle >= 0) {
-    auto context = nvidia::isaac_ros::nitros::GetTypeAdapterNitrosContext().getContext();
-    auto entity = nvidia::gxf::Entity::Shared(context, source.handle);
-    if (!entity) {
-      throw std::runtime_error("NitrosPointCloud GXF compat: Failed to get GXF entity");
-    }
-    auto maybe_parts = nvidia::isaac_ros::messages::GetPointCloudMessage(entity.value());
-    if (!maybe_parts) {
-      std::stringstream error_msg;
-      error_msg << "[convert_to_ros_message] Failed to get point cloud message: "
-                << GxfResultStr(maybe_parts.error());
-      RCLCPP_ERROR(rclcpp::get_logger("NitrosPointCloud"), error_msg.str().c_str());
-      throw std::runtime_error(error_msg.str().c_str());
-    }
-    auto parts = maybe_parts.value();
-    destination.height = 1;
-    destination.width = static_cast<uint32_t>(parts.points->shape().dimension(0));
-    destination.point_step = parts.info->use_color ? 16u : 12u;
-    destination.row_step = destination.point_step * destination.width;
-    destination.is_bigendian = parts.info->is_bigendian;
-    destination.is_dense = false;
-    sensor_msgs::PointCloud2Modifier pc2_modifier(destination);
-    if (parts.info->use_color) {
-      pc2_modifier.setPointCloud2Fields(
-        4,
-        "x", 1, sensor_msgs::msg::PointField::FLOAT32,
-        "y", 1, sensor_msgs::msg::PointField::FLOAT32,
-        "z", 1, sensor_msgs::msg::PointField::FLOAT32,
-        "rgb", 1, sensor_msgs::msg::PointField::FLOAT32);
-    } else {
-      pc2_modifier.setPointCloud2Fields(
-        3,
-        "x", 1, sensor_msgs::msg::PointField::FLOAT32,
-        "y", 1, sensor_msgs::msg::PointField::FLOAT32,
-        "z", 1, sensor_msgs::msg::PointField::FLOAT32);
-    }
-    destination.data.resize(destination.row_step * destination.height);
-    auto maybe_src = parts.points->data<float>();
-    if (!maybe_src) {
-      throw std::runtime_error("[convert_to_ros_message] Tensor returned no data pointer");
-    }
-    const size_t copy_bytes = destination.row_step * destination.height;
-    const cudaError_t err = cudaMemcpy(
-      destination.data.data(), *maybe_src, copy_bytes, cudaMemcpyDeviceToHost);
-    if (err != cudaSuccess) {
-      std::stringstream error_msg;
-      error_msg << "[convert_to_ros_message] cudaMemcpy failed: "
-                << cudaGetErrorName(err) << " (" << cudaGetErrorString(err) << ")";
-      RCLCPP_ERROR(rclcpp::get_logger("NitrosPointCloud"), error_msg.str().c_str());
-      throw std::runtime_error(error_msg.str().c_str());
-    }
-    destination.header.stamp.sec = source.timestamp_sec;
-    destination.header.stamp.nanosec = source.timestamp_nsec;
-    destination.header.frame_id = source.frame_id;
-    nvidia::isaac_ros::nitros::nvtxRangePopWrapper();
-    return;
-  }
-#endif
 
   // RAII handle: declared BEFORE read_handle so reverse-destruction order
   // lets read_handle record its CUDA event before the stream returns to the

@@ -18,19 +18,13 @@
 #ifndef ISAAC_ROS_NITROS_COMPRESSED_IMAGE_TYPE__NITROS_COMPRESSED_IMAGE_HPP_
 #define ISAAC_ROS_NITROS_COMPRESSED_IMAGE_TYPE__NITROS_COMPRESSED_IMAGE_HPP_
 
-// INTERIM: GXF compatibility mode
-// Controlled by CMake option, but also defined here for header-only usage
-// TODO(yuankunz): Remove this define when all nodes migrated to ManagedNitros
-#ifndef NITROS_IMAGE_GXF_COMPAT_MODE
-#define NITROS_IMAGE_GXF_COMPAT_MODE
-#endif
-
 #include <cuda_runtime.h>
 
 #include <cstring>
 #include <memory>
 #include <string>
 #include <cstdint>
+#include <utility>
 #include <vector>
 #include <functional>
 
@@ -39,12 +33,6 @@
 #include "isaac_ros_nitros/types/nitros_buffer.hpp"
 #include "isaac_ros_nitros/types/cuda_memory_pool.hpp"
 #include "isaac_ros_nitros/types/nitros_type_base.hpp"
-
-#ifdef NITROS_IMAGE_GXF_COMPAT_MODE
-#include <map>
-#include <utility>
-#include "isaac_ros_nitros/types/nitros_format_agent.hpp"
-#endif
 
 namespace nvidia
 {
@@ -64,22 +52,6 @@ struct nitros_compressed_image_t
 class NitrosCompressedImage : public NitrosTypeBase
 {
 public:
-#ifdef NITROS_IMAGE_GXF_COMPAT_MODE
-  static std::map<std::string, NitrosFormatCallbacks> GetFormatCallbacks()
-  {
-    std::map<std::string, NitrosFormatCallbacks> format_callback_map;
-    format_callback_map.emplace(
-      nitros_compressed_image_t::supported_type_name,
-      NitrosFormatAgent<nitros_compressed_image_t>::GetFormatCallbacks());
-    return format_callback_map;
-  }
-  static std::vector<std::pair<std::string, std::string>> GetExtensions() {return {};}
-#endif
-  static std::string GetDefaultCompatibleFormat()
-  {
-    return nitros_compressed_image_t::supported_type_name;
-  }
-
   using SharedPtr = std::shared_ptr<NitrosCompressedImage>;
   using ConstSharedPtr = std::shared_ptr<const NitrosCompressedImage>;
   using UniquePtr = std::unique_ptr<NitrosCompressedImage>;

@@ -38,13 +38,6 @@ if(USE_NVTX)
     link_libraries("CUDA::nvtx3")
 endif()
 
-# INTERIM: Enable GXF compatibility mode for GXF-free NITROS types
-# TODO: Remove when all nodes migrated to ManagedNitros
-option(NITROS_GXF_COMPAT_MODE "Enable GXF compatibility for GXF-free types" ON)
-if(NITROS_GXF_COMPAT_MODE)
-  add_compile_definitions(NITROS_GXF_COMPAT_MODE)
-endif()
-
 # cuVSLAM and cuApriltags (register paths and install)
 
 # Determine the architecture
@@ -99,14 +92,7 @@ find_package(yaml-cpp)
 
 # NitrosNode
 ament_auto_add_library(${PROJECT_NAME} SHARED
-  src/nitros_node.cpp
-  src/nitros_context.cpp
-  src/types/type_adapter_nitros_context.cpp
   src/types/nitros_type_base.cpp
-  src/types/nitros_empty.cpp
-  src/nitros_publisher.cpp
-  src/nitros_subscriber.cpp
-  src/nitros_publisher_subscriber_group.cpp
 )
 target_link_libraries(${PROJECT_NAME}
   Eigen3::Eigen
@@ -122,16 +108,6 @@ if(BUILD_TESTING)
   # Install test/config directory
   install(DIRECTORY test/config DESTINATION share/${PROJECT_NAME}/test)
 
-  # NitrosEmptyForwardNode
-  ament_auto_add_library(nitros_empty_forward_node SHARED test/src/nitros_empty_forward_node.cpp)
-  target_link_libraries(nitros_empty_forward_node ${PROJECT_NAME})
-  set_target_properties(nitros_empty_forward_node PROPERTIES
-    BUILD_WITH_INSTALL_RPATH TRUE
-    BUILD_RPATH_USE_ORIGIN TRUE
-    INSTALL_RPATH_USE_LINK_PATH TRUE)
-  rclcpp_components_register_nodes(nitros_empty_forward_node "nvidia::isaac_ros::nitros::NitrosEmptyForwardNode")
-  set(node_plugins "${node_plugins}nvidia::isaac_ros::nitros::NitrosEmpty;$<TARGET_FILE:nitros_empty_forward_node>\n")
-
   find_package(ament_lint_auto REQUIRED)
 
   # Ignore copyright notices since we use custom NVIDIA Isaac ROS Software License
@@ -142,14 +118,6 @@ if(BUILD_TESTING)
   if(POLICY CMP0148)
     cmake_policy(SET CMP0148 OLD)
   endif()
-
-  find_package(launch_testing_ament_cmake REQUIRED)
-  add_launch_test(test/isaac_ros_nitros_test_pol.py TIMEOUT "60")
-  add_launch_test(test/isaac_ros_nitros_diagnostics_test_pol.py TIMEOUT "60")
-
-  find_package(ament_cmake_gtest REQUIRED)
-  ament_add_gtest(test_cuda_stream_pool test/src/test_cuda_stream_pool.cpp)
-  target_link_libraries(test_cuda_stream_pool ${PROJECT_NAME} CUDA::cudart)
 endif()
 
 # Install header files for isaac_ros_nitros
@@ -162,5 +130,8 @@ install(FILES include/isaac_ros_nitros/types/cuda_stream_pool.hpp
 ament_index_get_resource(ISAAC_ROS_COMMON_CMAKE_PATH isaac_ros_common_cmake_path isaac_ros_common)
 include("${ISAAC_ROS_COMMON_CMAKE_PATH}/isaac_ros_common-version-info.cmake")
 generate_version_info(${PROJECT_NAME})
+list(APPEND ${PROJECT_NAME}_CONFIG_EXTRAS
+  cmake/isaac_ros_nitros-extras.cmake
+)
 
-ament_auto_package(INSTALL_TO_SHARE config)
+ament_auto_package()

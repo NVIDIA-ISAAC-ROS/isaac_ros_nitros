@@ -35,9 +35,6 @@ if(USE_NVTX)
   link_libraries("CUDA::nvtx3")
 endif()
 
-option(NITROS_GXF_COMPAT_MODE "Enable GXF compatibility for old NitrosNode" ON)
-
-
 # Ensure CUDA imported targets (e.g., CUDA::nvtx3) are available
 find_package(CUDAToolkit REQUIRED)
 
@@ -49,23 +46,12 @@ set(NITROS_TENSOR_LIST_SOURCES
   src/nitros_tensor_builder.cpp
   src/nitros_tensor_list_builder.cpp
   src/nitros_tensor_list.cpp
-  src/nitros_tensor_list_view.cpp
 )
-# INTERIM: Add GXF compat (remove when macro removed)
-if(NITROS_GXF_COMPAT_MODE)
-  list(APPEND NITROS_TENSOR_LIST_SOURCES
-    src/nitros_data_type.cpp
-    src/nitros_tensor_list_gxf_compat.cpp)
-endif()
 
 ament_auto_add_library(${PROJECT_NAME} SHARED ${NITROS_TENSOR_LIST_SOURCES})
-
-if(NITROS_GXF_COMPAT_MODE)
-  target_compile_definitions(${PROJECT_NAME} PUBLIC NITROS_GXF_COMPAT_MODE)
-endif()
-
 target_link_libraries(${PROJECT_NAME}
   yaml-cpp
+  CUDA::cudart
 )
 set_target_properties(${PROJECT_NAME} PROPERTIES
   BUILD_WITH_INSTALL_RPATH TRUE

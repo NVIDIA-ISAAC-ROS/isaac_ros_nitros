@@ -18,20 +18,15 @@
 #ifndef ISAAC_ROS_NITROS_TENSOR_LIST_TYPE__NITROS_TENSOR_LIST_HPP_
 #define ISAAC_ROS_NITROS_TENSOR_LIST_TYPE__NITROS_TENSOR_LIST_HPP_
 
-#ifndef NITROS_GXF_COMPAT_MODE
-#define NITROS_GXF_COMPAT_MODE
-#endif
-
 #include <cuda_runtime.h>
 
 #include <cstdint>
+#include <map>
 #include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
-#include <map>
-#include <utility>
-#include "isaac_ros_nitros/types/nitros_format_agent.hpp"
 #include "isaac_ros_nitros/types/nitros_type_base.hpp"
 #include "isaac_ros_tensor_list_interfaces/msg/tensor_list.hpp"
 #include "isaac_ros_nitros/types/nitros_buffer.hpp"
@@ -40,10 +35,6 @@
 #include "isaac_ros_nitros_tensor_list_type/nitros_tensor.hpp"
 #include "isaac_ros_nitros_tensor_list_type/nitros_tensor_shape.hpp"
 #include "rclcpp/type_adapter.hpp"
-
-#ifdef NITROS_GXF_COMPAT_MODE
-#include "isaac_ros_nitros_tensor_list_type/nitros_tensor_list_gxf_compat.hpp"
-#endif
 
 namespace nvidia
 {
@@ -58,64 +49,12 @@ struct NitrosTensorList;
 NitrosDataType convert_to_nitros_data_type(int32_t data_type);
 int32_t convert_to_ros_data_type(NitrosDataType nitros_data_type);
 
-// Format descriptors for NitrosTypeManager and compatible data format negotiation
-struct nitros_tensor_list_nchw_t
-{
-  using MsgT = NitrosTensorList;
-  static const inline std::string supported_type_name = "nitros_tensor_list_nchw";
-};
-
-struct nitros_tensor_list_nhwc_t
-{
-  using MsgT = NitrosTensorList;
-  static const inline std::string supported_type_name = "nitros_tensor_list_nhwc";
-};
-
-struct nitros_tensor_list_nchw_rgb_f32_t
-{
-  using MsgT = NitrosTensorList;
-  static const inline std::string supported_type_name = "nitros_tensor_list_nchw_rgb_f32";
-};
-
-struct nitros_tensor_list_nhwc_rgb_f32_t
-{
-  using MsgT = NitrosTensorList;
-  static const inline std::string supported_type_name = "nitros_tensor_list_nhwc_rgb_f32";
-};
-
-struct nitros_tensor_list_nchw_bgr_f32_t
-{
-  using MsgT = NitrosTensorList;
-  static const inline std::string supported_type_name = "nitros_tensor_list_nchw_bgr_f32";
-};
-
-struct nitros_tensor_list_nhwc_bgr_f32_t
-{
-  using MsgT = NitrosTensorList;
-  static const inline std::string supported_type_name = "nitros_tensor_list_nhwc_bgr_f32";
-};
-
 class NitrosTensorList : public NitrosTypeBase
 {
 public:
-#ifdef NITROS_GXF_COMPAT_MODE
-  static std::map<std::string, NitrosFormatCallbacks> GetFormatCallbacks();
-  static std::vector<std::pair<std::string, std::string>> GetExtensions() {return {};}
-#else
-  static std::map<std::string, NitrosFormatCallbacks> GetFormatCallbacks() {return {};}
-  static std::vector<std::pair<std::string, std::string>> GetExtensions() {return {};}
-#endif
-  static std::string GetDefaultCompatibleFormat()
-  {
-    return nitros_tensor_list_nchw_rgb_f32_t::supported_type_name;
-  }
-
   NitrosTensorList()
   : NitrosTypeBase()
   {
-#ifndef NITROS_GXF_COMPAT_MODE
-    handle = -1;
-#endif
   }
   explicit NitrosTensorList(const NitrosTypeBase & base)
   : NitrosTypeBase(base) {}
@@ -123,9 +62,6 @@ public:
   explicit NitrosTensorList(cudaStream_t stream)
   : stream_(stream)
   {
-#ifndef NITROS_GXF_COMPAT_MODE
-    handle = -1;
-#endif
   }
 
   // Standard ROS2 message pointer type aliases (required by message_filters)

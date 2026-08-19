@@ -18,13 +18,6 @@
 #ifndef ISAAC_ROS_NITROS_IMAGE_TYPE__NITROS_IMAGE_HPP_
 #define ISAAC_ROS_NITROS_IMAGE_TYPE__NITROS_IMAGE_HPP_
 
-// INTERIM: GXF compatibility mode
-// Controlled by CMake option, but also defined here for header-only usage
-// TODO(yuankunz): Remove this define when all nodes migrated to ManagedNitros
-#ifndef NITROS_GXF_COMPAT_MODE
-#define NITROS_GXF_COMPAT_MODE
-#endif
-
 #include <cuda_runtime.h>
 
 #include <memory>
@@ -33,24 +26,15 @@
 #include <cstdint>
 #include <vector>
 #include <cstddef>
+#include <utility>
 
 #include "rclcpp/type_adapter.hpp"
 #include "sensor_msgs/msg/image.hpp"
 #include "sensor_msgs/image_encodings.hpp"
 #include "isaac_ros_nitros/types/nitros_buffer.hpp"
 #include "isaac_ros_nitros/types/cuda_memory_pool.hpp"
+#include "isaac_ros_nitros/types/cuda_stream_pool.hpp"
 #include "isaac_ros_nitros/types/nitros_type_base.hpp"
-
-#include "nitros_image_details.hpp"
-
-
-#ifdef NITROS_GXF_COMPAT_MODE
-// INTERIM: Includes for GXF compatibility (remove with macro)
-#include <map>
-#include <utility>
-#include "isaac_ros_nitros/types/nitros_format_agent.hpp"
-#include "isaac_ros_nitros_image_type/nitros_image_details.hpp"
-#endif
 
 namespace nvidia
 {
@@ -61,96 +45,15 @@ namespace nitros
 
 // Forward declaration
 struct NitrosImage;
-
-#ifdef NITROS_GXF_COMPAT_MODE
-// Formats
 struct nitros_image_rgb8_t
 {
   using MsgT = NitrosImage;
   static const inline std::string supported_type_name = "nitros_image_rgb8";
 };
 
-struct nitros_image_rgba8_t
-{
-  using MsgT = NitrosImage;
-  static const inline std::string supported_type_name = "nitros_image_rgba8";
-};
-
-struct nitros_image_rgb16_t
-{
-  using MsgT = NitrosImage;
-  static const inline std::string supported_type_name = "nitros_image_rgb16";
-};
-
-struct nitros_image_bgr8_t
-{
-  using MsgT = NitrosImage;
-  static const inline std::string supported_type_name = "nitros_image_bgr8";
-};
-
-struct nitros_image_bgra8_t
-{
-  using MsgT = NitrosImage;
-  static const inline std::string supported_type_name = "nitros_image_bgra8";
-};
-
-struct nitros_image_bgr16_t
-{
-  using MsgT = NitrosImage;
-  static const inline std::string supported_type_name = "nitros_image_bgr16";
-};
-
-struct nitros_image_mono8_t
-{
-  using MsgT = NitrosImage;
-  static const inline std::string supported_type_name = "nitros_image_mono8";
-};
-
-struct nitros_image_mono16_t
-{
-  using MsgT = NitrosImage;
-  static const inline std::string supported_type_name = "nitros_image_mono16";
-};
-
-struct nitros_image_nv12_t
-{
-  using MsgT = NitrosImage;
-  static const inline std::string supported_type_name = "nitros_image_nv12";
-};
-
-struct nitros_image_nv24_t
-{
-  using MsgT = NitrosImage;
-  static const inline std::string supported_type_name = "nitros_image_nv24";
-};
-
-struct nitros_image_32FC1_t
-{
-  using MsgT = NitrosImage;
-  static const inline std::string supported_type_name = "nitros_image_32FC1";
-};
-
-struct nitros_image_32FC3_t
-{
-  using MsgT = NitrosImage;
-  static const inline std::string supported_type_name = "nitros_image_32FC3";
-};
-
-struct nitros_image_32FC4_t
-{
-  using MsgT = NitrosImage;
-  static const inline std::string supported_type_name = "nitros_image_32FC4";
-};
-#endif
-
 class NitrosImage : public NitrosTypeBase
 {
 public:
-#ifdef NITROS_GXF_COMPAT_MODE
-  // Required by NitrosTypeManager; definition in nitros_image_gxf_compat.cpp
-  static std::map<std::string, NitrosFormatCallbacks> GetFormatCallbacks();
-  static std::vector<std::pair<std::string, std::string>> GetExtensions() {return {};}
-#endif
   static std::string GetDefaultCompatibleFormat() {return nitros_image_rgb8_t::supported_type_name;}
 
   // Standard ROS2 message pointer type aliases (required by message_filters)
@@ -174,9 +77,6 @@ public:
   NitrosImage()
   : NitrosTypeBase()
   {
-#ifdef NITROS_GXF_COMPAT_MODE
-    handle = -1;
-#endif
   }
   explicit NitrosImage(const NitrosTypeBase & base)
   : NitrosTypeBase(base) {}
@@ -254,9 +154,6 @@ public:
     this->step = step_bytes;
     this->encoding = encoding;
     setup_planes(width, height, step_bytes, encoding);
-#ifdef NITROS_GXF_COMPAT_MODE
-    handle = -1;
-#endif
     return buffer_->get_write_handle(stream);
   }
 
@@ -283,9 +180,6 @@ public:
     this->step = step_bytes;
     this->encoding = encoding;
     setup_planes(width, height, step_bytes, encoding);
-#ifdef NITROS_GXF_COMPAT_MODE
-    handle = -1;  // INTERIM: Signal buffer mode
-#endif
     return buffer_->get_write_handle(stream);
   }
 
