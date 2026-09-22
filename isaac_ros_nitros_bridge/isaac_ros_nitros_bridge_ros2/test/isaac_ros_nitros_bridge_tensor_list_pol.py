@@ -17,8 +17,8 @@
 """
 Proof-of-Life test for interprocess NITROS bridge tensor list on ROS 2.
 
-NITROSBridgeTensorListConverter1(NITROSTensorList->NITROSBridgeTensorList)
-NITROSBridgeTensorListConverter2(NITROSBridgeTensorList->NITROSTensorList)
+TensorListConverter1(TensorList->NitrosBridgeTensorList)
+TensorListConverter2(NitrosBridgeTensorList->TensorList)
 """
 
 import os
@@ -26,7 +26,7 @@ import pathlib
 import subprocess
 import time
 
-from isaac_ros_tensor_list_interfaces.msg import Tensor, TensorList, TensorShape
+from isaac_ros_tensor_msgs.msg import TensorList
 from isaac_ros_test import IsaacROSBaseTest
 
 import launch
@@ -37,6 +37,7 @@ import numpy as np
 
 import pytest
 import rclpy
+from tensor_msgs.msg import ExperimentalTensor
 
 
 @pytest.mark.rostest
@@ -125,26 +126,23 @@ class IsaacROSNitrosBridgeTest(IsaacROSBaseTest):
                                                          self.DEFAULT_QOS)
 
             try:
-                DATA_TYPE = 9
                 INPUT_TENSOR_DIMENSIONS = [10, 3, 100, 100]
                 INPUT_TENSOR_NAME = 'input'
                 INPUT_TENSOR_STRIDE = 4
 
                 tensor_list = TensorList()
-                tensor = Tensor()
-                tensor_shape = TensorShape()
-
-                tensor_shape.rank = len(INPUT_TENSOR_DIMENSIONS)
-                tensor_shape.dims = INPUT_TENSOR_DIMENSIONS
-
-                tensor.shape = tensor_shape
-                tensor.name = INPUT_TENSOR_NAME
-                tensor.data_type = DATA_TYPE
+                tensor = ExperimentalTensor()
+                tensor.dtype_code = 2
+                tensor.dtype_bits = 32
+                tensor.dtype_lanes = 1
+                tensor.shape = INPUT_TENSOR_DIMENSIONS
                 tensor.strides = []
+                tensor.byte_offset = 0
 
                 data_length = INPUT_TENSOR_STRIDE * np.prod(INPUT_TENSOR_DIMENSIONS)
                 tensor.data = np.random.randint(256, size=data_length).tolist()
 
+                tensor_list.names = [INPUT_TENSOR_NAME, INPUT_TENSOR_NAME]
                 tensor_list.tensors = [tensor, tensor]
                 timestamp = self.node.get_clock().now().to_msg()
                 tensor_list.header.stamp = timestamp
@@ -172,24 +170,32 @@ class IsaacROSNitrosBridgeTest(IsaacROSBaseTest):
                 for i in range(len(tensor_list.tensors)):
                     source_tensor = tensor_list.tensors[i]
                     received_tensor = received_tensor_list.tensors[i]
-                    self.assertEqual(source_tensor.name, received_tensor.name,
+                    received_data = list(received_tensor.data)
+                    expected_strides = []
+                    stride = 1
+                    for dim in reversed(source_tensor.shape):
+                        expected_strides.insert(0, stride)
+                        stride *= dim
+                    self.assertEqual(tensor_list.names[i], received_tensor_list.names[i],
                                      'Source and received tensor names do not match')
-                    self.assertEqual(source_tensor.name, received_tensor.name,
-                                     'Source and received tensor names do not match')
-                    self.assertEqual(source_tensor.data_type, received_tensor.data_type,
+                    self.assertEqual(source_tensor.dtype_code, received_tensor.dtype_code,
                                      'Source and received tensor data types do not match')
-                    self.assertEqual(source_tensor.shape.rank, received_tensor.shape.rank,
-                                     'Source and received tensor ranks do not match')
-                    self.assertEqual(source_tensor.shape.dims, received_tensor.shape.dims,
+                    self.assertEqual(source_tensor.dtype_bits, received_tensor.dtype_bits,
+                                     'Source and received tensor data widths do not match')
+                    self.assertEqual(source_tensor.dtype_lanes, received_tensor.dtype_lanes,
+                                     'Source and received tensor lane counts do not match')
+                    self.assertEqual(source_tensor.shape, received_tensor.shape,
                                      'Source and received tensor dimensions do not match')
-                    self.assertEqual(len(source_tensor.data), len(received_tensor.data),
+                    self.assertEqual(list(received_tensor.strides), expected_strides,
+                                     'Source and received tensor strides do not match')
+                    self.assertEqual(len(source_tensor.data), len(received_data),
                                      'Source and received tensor data do not match')
                     self.assertEqual(str(timestamp), str(received_tensor_list.header.stamp),
                                      'Timestamps do not match.')
 
                     for j in range(len(source_tensor.data)):
-                        self.assertEqual(source_tensor.data[j], received_tensor.data[j],
-                                         'Source and received image pixels do not match')
+                        self.assertEqual(source_tensor.data[j], received_data[j],
+                                         'Source and received tensor values do not match')
 
             finally:
                 self.node.destroy_subscription(received_tensor_list_sub)

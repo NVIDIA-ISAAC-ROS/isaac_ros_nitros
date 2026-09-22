@@ -15,16 +15,77 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-
 #include <cuda_runtime_api.h>
 #include <sys/un.h>
-#include <string>
 
+#include <cstring>
+#include <memory>
+#include <string>
+#include <utility>
+
+#include "cuda_buffer/cuda_buffer_api.hpp"
 #include "isaac_ros_nitros_bridge_ros2/image_converter_node.hpp"
-#include "sensor_msgs/image_encodings.hpp"
 
 #define SYS_pidfd_getfd_nitros_bridge 438
 
+namespace
+{
+
+class HostIpcRefGuard
+{
+public:
+  explicit HostIpcRefGuard(
+    std::shared_ptr<nvidia::isaac_ros::nitros_bridge::HostIPCBuffer> buffer)
+  : buffer_(std::move(buffer)) {}
+
+  HostIpcRefGuard(const HostIpcRefGuard &) = delete;
+  HostIpcRefGuard & operator=(const HostIpcRefGuard &) = delete;
+
+  ~HostIpcRefGuard()
+  {
+    if (buffer_) {
+      buffer_->refcount_dec();
+    }
+  }
+
+private:
+  std::shared_ptr<nvidia::isaac_ros::nitros_bridge::HostIPCBuffer> buffer_;
+};
+
+class CudaEventGuard
+{
+public:
+  ~CudaEventGuard()
+  {
+    if (opened_) {
+      cudaEventDestroy(event_);
+    }
+  }
+
+  cudaEvent_t * event_ptr() {return &event_;}
+
+  void set_opened() {opened_ = true;}
+
+private:
+  cudaEvent_t event_{};
+  bool opened_{false};
+};
+
+bool LogCuError(
+  const rclcpp::Logger & logger, CUresult cuda_err, const char * what)
+{
+  if (CUDA_SUCCESS == cuda_err) {
+    return true;
+  }
+  const char * error_str = nullptr;
+  cuGetErrorString(cuda_err, &error_str);
+  RCLCPP_ERROR(
+    logger, "Failed to call %s %s", what,
+    error_str != nullptr ? error_str : "unknown");
+  return false;
+}
+
+}  // namespace
 
 namespace nvidia
 {
@@ -36,84 +97,104 @@ namespace nitros_bridge
 ImageConverterNode::ImageConverterNode(const rclcpp::NodeOptions options)
 : rclcpp::Node("image_converter_node", options),
   num_blocks_(declare_parameter<int64_t>("num_blocks", 40)),
-  // Timeout in microseconds: duration to wait after refcount reaches 0 before recycling the buffer
+      // Timeout in microseconds: duration to wait after refcount reaches 0
+      // before recycling the buffer
   timeout_(declare_parameter<int64_t>("timeout", 500)),
-  bridge_pub_qos_{::isaac_ros::common::AddQosParameter(*this, "DEFAULT", "bridge_pub_qos")},
-  bridge_sub_qos_{::isaac_ros::common::AddQosParameter(*this, "DEFAULT", "bridge_sub_qos")},
-  nitros_pub_qos_{::isaac_ros::common::AddQosParameter(*this, "DEFAULT", "nitros_pub_qos")},
-  nitros_sub_qos_{::isaac_ros::common::AddQosParameter(*this, "DEFAULT", "nitros_sub_qos")}
+  bridge_pub_qos_{::isaac_ros::common::AddQosParameter(
+      *this, "DEFAULT", "bridge_pub_qos")},
+  bridge_sub_qos_{::isaac_ros::common::AddQosParameter(
+      *this, "DEFAULT", "bridge_sub_qos")},
+  image_pub_qos_{::isaac_ros::common::AddQosParameter(
+      *this, "DEFAULT", "ros_pub_qos")},
+  image_sub_qos_{::isaac_ros::common::AddQosParameter(
+      *this, "DEFAULT", "ros_sub_qos")}
 {
   cudaSetDevice(0);
   cuDevicePrimaryCtxRetain(&ctx_, 0);
-  auto cuda_err = cudaStreamCreateWithFlags(&cuda_stream_, cudaStreamNonBlocking);
+  auto cuda_err =
+    cudaStreamCreateWithFlags(&cuda_stream_, cudaStreamNonBlocking);
   if (cuda_err != cudaSuccess) {
     throw std::runtime_error("[NITROS Bridge] cudaStreamCreateWithFlags Error");
   }
 
-  cudaEventCreateWithFlags(&event_, cudaEventInterprocess | cudaEventDisableTiming);
-  cudaIpcGetEventHandle(reinterpret_cast<cudaIpcEventHandle_t *>(&ipc_event_handle_), event_);
+  rclcpp::PublisherOptions image_pub_options;
+  image_pub_options.use_intra_process_comm =
+    rclcpp::IntraProcessSetting::Enable;
+  rclcpp::SubscriptionOptions image_sub_options;
+  image_sub_options.use_intra_process_comm =
+    rclcpp::IntraProcessSetting::Enable;
+  image_sub_options.acceptable_buffer_backends = "any";
 
-  rclcpp::PublisherOptions nitros_pub_options;
-  nitros_pub_options.use_intra_process_comm = rclcpp::IntraProcessSetting::Enable;
-  rclcpp::SubscriptionOptions nitros_sub_options;
-  nitros_sub_options.use_intra_process_comm = rclcpp::IntraProcessSetting::Enable;
-
-  bridge_image_pub_ = create_publisher<isaac_ros_nitros_bridge_interfaces::msg::NitrosBridgeImage>(
-    "ros2_output_bridge_image", bridge_pub_qos_);
+  bridge_image_pub_ = create_publisher<
+    isaac_ros_nitros_bridge_interfaces::msg::NitrosBridgeImage>(
+      "ros2_output_bridge_image", bridge_pub_qos_);
 
   bridge_image_sub_ = create_subscription<
     isaac_ros_nitros_bridge_interfaces::msg::NitrosBridgeImage>(
-    "ros2_input_bridge_image", bridge_sub_qos_,
-    std::bind(&ImageConverterNode::BridgeToROSCallback, this, std::placeholders::_1));
+      "ros2_input_bridge_image", bridge_sub_qos_,
+      std::bind(
+        &ImageConverterNode::BridgeToROSCallback, this,
+        std::placeholders::_1));
 
-  nitros_pub_ = create_publisher<nvidia::isaac_ros::nitros::NitrosImage>(
-    "ros2_output_image", nitros_pub_qos_, nitros_pub_options);
+  image_pub_ = create_publisher<sensor_msgs::msg::Image>(
+      "ros2_output_image", image_pub_qos_, image_pub_options);
 
-  nitros_sub_ = create_subscription<nvidia::isaac_ros::nitros::NitrosImage>(
-    "ros2_input_image", nitros_sub_qos_,
-    std::bind(&ImageConverterNode::ROSToBridgeCallback, this, std::placeholders::_1),
-    nitros_sub_options);
+  image_sub_ = create_subscription<sensor_msgs::msg::Image>(
+      "ros2_input_image", image_sub_qos_,
+      std::bind(
+        &ImageConverterNode::ROSToBridgeCallback, this,
+        std::placeholders::_1),
+      image_sub_options);
 }
 
 ImageConverterNode::~ImageConverterNode()
 {
   if (cuda_stream_ != nullptr) {
+    cudaStreamSynchronize(cuda_stream_);
     cudaStreamDestroy(cuda_stream_);
+    cuda_stream_ = nullptr;
   }
+  cuDevicePrimaryCtxRelease(0);
 }
 
 void ImageConverterNode::BridgeToROSCallback(
-  const isaac_ros_nitros_bridge_interfaces::msg::NitrosBridgeImage::SharedPtr msg)
+  const isaac_ros_nitros_bridge_interfaces::msg::NitrosBridgeImage::SharedPtr
+  msg)
 {
   cuCtxSetCurrent(ctx_);
+
+  if (msg->data.size() < 2 || msg->height == 0 || msg->step == 0) {
+    RCLCPP_ERROR(get_logger(), "Invalid bridge image metadata.");
+    return;
+  }
 
   CUdeviceptr gpu_buffer = 0ULL;
   CUmemGenericAllocationHandle generic_allocation_handle;
 
-  auto pid = msg->data[0];
-  auto fd = msg->data[1];
+  const auto pid = msg->data[0];
+  const auto fd = msg->data[1];
+  const auto msg_uid = msg->uid;
 
-  auto msg_uid = msg->uid;
-  cudaEvent_t event;
-  cudaIpcEventHandle_t event_handle;
-
-  // Construct CUDA IPC event handle if it exists
+  CudaEventGuard event_guard;
   if (msg->cuda_event_handle.size() != 0) {
     if (msg->cuda_event_handle.size() != sizeof(cudaIpcEventHandle_t)) {
       RCLCPP_ERROR(this->get_logger(), "Invalid event handle size.");
       return;
     }
-    memcpy(&event_handle, msg->cuda_event_handle.data(), sizeof(cudaIpcEventHandle_t));
-    auto err = cudaIpcOpenEventHandle(&event, event_handle);
+    cudaIpcEventHandle_t event_handle;
+    memcpy(
+      &event_handle, msg->cuda_event_handle.data(),
+      sizeof(cudaIpcEventHandle_t));
+    auto err = cudaIpcOpenEventHandle(event_guard.event_ptr(), event_handle);
     if (err != cudaSuccess) {
       RCLCPP_ERROR(
         this->get_logger(), "cudaIpcOpenEventHandle failed: %s",
         cudaGetErrorString(err));
       return;
     }
+    event_guard.set_opened();
 
-    // The event may record the completion of the previous operation
-    err = cudaEventSynchronize(event);
+    err = cudaEventSynchronize(*event_guard.event_ptr());
     if (err != cudaSuccess) {
       RCLCPP_ERROR(
         this->get_logger(), "CUDA event synchronize failed: %s",
@@ -122,41 +203,41 @@ void ImageConverterNode::BridgeToROSCallback(
     }
   }
 
-  // Compare UID if exists
-  std::shared_ptr<HostIPCBuffer> host_ipc_buffer;
+  std::unique_ptr<HostIpcRefGuard> host_ipc_guard;
   if (!msg_uid.empty()) {
-    std::string shm_name = std::to_string(pid) + std::to_string(fd);
-    host_ipc_buffer = std::make_shared<HostIPCBuffer>(shm_name, HostIPCBuffer::Mode::OPEN);
+    const std::string shm_name = std::to_string(pid) + std::to_string(fd);
+    auto host_ipc_buffer =
+      std::make_shared<HostIPCBuffer>(shm_name, HostIPCBuffer::Mode::OPEN);
     if (!host_ipc_buffer->refcoun_inc_if_uid_match(msg_uid)) {
       RCLCPP_WARN(this->get_logger(), "Failed to match UID, skip.");
       return;
     }
+    host_ipc_guard = std::make_unique<HostIpcRefGuard>(std::move(host_ipc_buffer));
   }
 
-  if (handle_ptr_map_.find(msg->data.data()[1]) != handle_ptr_map_.end()) {
-    gpu_buffer = handle_ptr_map_[msg->data.data()[1]];
+  if (handle_ptr_map_.find(fd) != handle_ptr_map_.end()) {
+    gpu_buffer = handle_ptr_map_[fd];
     RCLCPP_DEBUG(this->get_logger(), "Found FD in local map.");
   } else {
-    int pidfd = syscall(SYS_pidfd_open, msg->data.data()[0], 0);
+    int pidfd = syscall(SYS_pidfd_open, pid, 0);
     if (pidfd <= 0) {
-      perror("SYS_pidfd_open failed");
+      RCLCPP_ERROR(get_logger(), "SYS_pidfd_open failed.");
+      return;
     }
-    int fd = syscall(SYS_pidfd_getfd_nitros_bridge, pidfd, msg->data.data()[1], 0);
-    if (fd <= 0) {
-      perror("SYS_pidfd_getfd failed");
+    int imported_fd = syscall(SYS_pidfd_getfd_nitros_bridge, pidfd, fd, 0);
+    if (imported_fd <= 0) {
+      RCLCPP_ERROR(get_logger(), "SYS_pidfd_getfd failed.");
+      return;
     }
 
     auto cuda_err = cuMemImportFromShareableHandle(
-      &generic_allocation_handle,
-      reinterpret_cast<void *>((uintptr_t)fd),
-      CU_MEM_HANDLE_TYPE_POSIX_FILE_DESCRIPTOR);
-    if (CUDA_SUCCESS != cuda_err) {
-      const char * error_str = NULL;
-      cuGetErrorString(cuda_err, &error_str);
-      RCLCPP_ERROR(
-        this->get_logger(), "Failed to call cuMemImportFromShareableHandle %s",
-        error_str);
-      throw std::runtime_error("[NITROS Bridge] cuMemImportFromShareableHandle Error");
+        &generic_allocation_handle,
+        reinterpret_cast<void *>(static_cast<uintptr_t>(imported_fd)),
+        CU_MEM_HANDLE_TYPE_POSIX_FILE_DESCRIPTOR);
+    if (!LogCuError(
+        get_logger(), cuda_err, "cuMemImportFromShareableHandle"))
+    {
+      return;
     }
 
     CUmemAllocationProp prop = {};
@@ -167,35 +248,25 @@ void ImageConverterNode::BridgeToROSCallback(
     size_t granularity = 0;
 
     cuda_err = cuMemGetAllocationGranularity(
-      &granularity, &prop, CU_MEM_ALLOC_GRANULARITY_MINIMUM);
-    if (CUDA_SUCCESS != cuda_err) {
-      const char * error_str = NULL;
-      cuGetErrorString(cuda_err, &error_str);
-      RCLCPP_ERROR(
-        this->get_logger(), "Failed to call cuMemGetAllocationGranularity %s",
-        error_str);
-      throw std::runtime_error(
-              "[NITROS Bridge] cuMemGetAllocationGranularity Error");
+        &granularity, &prop, CU_MEM_ALLOC_GRANULARITY_MINIMUM);
+    if (!LogCuError(
+        get_logger(), cuda_err, "cuMemGetAllocationGranularity"))
+    {
+      return;
     }
 
-    auto alloc_size = msg->height * msg->step;
-    // The alloc size must be the integral multiple of granularity
+    auto alloc_size = static_cast<size_t>(msg->height) * msg->step;
     alloc_size = alloc_size - (alloc_size % granularity) + granularity;
 
     cuda_err = cuMemAddressReserve(&gpu_buffer, alloc_size, 0, 0, 0);
-    if (CUDA_SUCCESS != cuda_err) {
-      const char * error_str = NULL;
-      cuGetErrorString(cuda_err, &error_str);
-      RCLCPP_ERROR(this->get_logger(), "Failed to call cuMemAddressReserve %s", error_str);
-      throw std::runtime_error("[NITROS Bridge] cuMemAddressReserve Error");
+    if (!LogCuError(get_logger(), cuda_err, "cuMemAddressReserve")) {
+      return;
     }
 
-    cuda_err = cuMemMap(gpu_buffer, alloc_size, 0, generic_allocation_handle, 0);
-    if (CUDA_SUCCESS != cuda_err) {
-      const char * error_str = NULL;
-      cuGetErrorString(cuda_err, &error_str);
-      RCLCPP_ERROR(this->get_logger(), "Failed to call cuMemMap %s", error_str);
-      throw std::runtime_error("[NITROS Bridge] cuMemMap Error");
+    cuda_err =
+      cuMemMap(gpu_buffer, alloc_size, 0, generic_allocation_handle, 0);
+    if (!LogCuError(get_logger(), cuda_err, "cuMemMap")) {
+      return;
     }
 
     CUmemAccessDesc accessDesc = {};
@@ -203,83 +274,105 @@ void ImageConverterNode::BridgeToROSCallback(
     accessDesc.location.id = 0;
     accessDesc.flags = CU_MEM_ACCESS_FLAGS_PROT_READWRITE;
     cuda_err = cuMemSetAccess(gpu_buffer, alloc_size, &accessDesc, 1);
-    if (CUDA_SUCCESS != cuda_err) {
-      const char * error_str = NULL;
-      cuGetErrorString(cuda_err, &error_str);
-      RCLCPP_ERROR(this->get_logger(), "Failed to call cuMemSetAccess %s", error_str);
-      throw std::runtime_error("[NITROS Bridge] cuMemMap Error");
+    if (!LogCuError(get_logger(), cuda_err, "cuMemSetAccess")) {
+      return;
     }
-    handle_ptr_map_[msg->data.data()[1]] = gpu_buffer;
+    handle_ptr_map_[fd] = gpu_buffer;
   }
 
-  auto host_ipc_buffer_ptr = host_ipc_buffer;
-  auto deleter = [host_ipc_buffer_ptr](uint8_t * p) {
-      (void)p;
-      if (host_ipc_buffer_ptr) {
-        host_ipc_buffer_ptr->refcount_dec();
-      }
-    };
-
-  nvidia::isaac_ros::nitros::NitrosImage nitros_image;
-  {
-    [[maybe_unused]] auto write_handle = nitros_image.from_external(
-      reinterpret_cast<void *>(gpu_buffer),
-      msg->height * msg->step,
-      msg->width, msg->height, msg->step, msg->encoding, cuda_stream_, deleter);
+  auto image = std::make_unique<sensor_msgs::msg::Image>();
+  image->header = msg->header;
+  image->height = msg->height;
+  image->width = msg->width;
+  image->encoding = msg->encoding;
+  image->is_bigendian = msg->is_bigendian;
+  image->step = msg->step;
+  const size_t image_size_bytes = static_cast<size_t>(msg->height) * msg->step;
+  try {
+    image->data = cuda_buffer_backend::allocate_buffer(image_size_bytes);
+    auto write_handle =
+      cuda_buffer_backend::from_output_buffer(image->data, cuda_stream_);
+    auto cuda_err = cudaMemcpyAsync(
+        write_handle.get_ptr(), reinterpret_cast<void *>(gpu_buffer),
+        image_size_bytes, cudaMemcpyDeviceToDevice, cuda_stream_);
+    if (cuda_err != cudaSuccess) {
+      RCLCPP_ERROR(
+        get_logger(), "Failed to copy bridge image: %s",
+        cudaGetErrorString(cuda_err));
+      return;
+    }
+  } catch (const std::exception & e) {
+    RCLCPP_ERROR(get_logger(), "Failed to allocate or copy bridge image: %s", e.what());
+    return;
   }
-  nitros_image.timestamp_sec = msg->header.stamp.sec;
-  nitros_image.timestamp_nsec = msg->header.stamp.nanosec;
-  nitros_image.frame_id = msg->header.frame_id;
 
-  nitros_pub_->publish(nitros_image);
-
-  RCLCPP_DEBUG(this->get_logger(), "NITROS Image is Published from NITROS Bridge.");
+  auto cuda_err = cudaStreamSynchronize(cuda_stream_);
+  if (cuda_err != cudaSuccess) {
+    RCLCPP_ERROR(
+      get_logger(), "Failed to synchronize bridge image copy: %s",
+      cudaGetErrorString(cuda_err));
+    return;
+  }
+  image_pub_->publish(std::move(image));
 }
 
 void ImageConverterNode::ROSToBridgeCallback(
-  const nvidia::isaac_ros::nitros::NitrosImage::SharedPtr msg)
+  const sensor_msgs::msg::Image::SharedPtr msg)
 {
   cuCtxSetCurrent(ctx_);
 
-  const size_t image_size_bytes = msg->get_data_size();
+  const size_t image_size_bytes = static_cast<size_t>(msg->height) * msg->step;
+  if (image_size_bytes == 0 || msg->data.size() < image_size_bytes) {
+    RCLCPP_ERROR(get_logger(), "Image data is smaller than height * step.");
+    return;
+  }
 
   if (first_msg_received_ == false) {
     ipc_buffer_manager_ = std::make_shared<IPCBufferManager>(
-      num_blocks_, image_size_bytes, timeout_);
+        num_blocks_, image_size_bytes, timeout_);
+    ipc_buffer_bytes_ = image_size_bytes;
     first_msg_received_ = true;
+  } else if (image_size_bytes > ipc_buffer_bytes_) {
+    RCLCPP_ERROR(
+      get_logger(),
+      "Image payload (%zu bytes) exceeds IPC pool size (%zu bytes).",
+      image_size_bytes, ipc_buffer_bytes_);
+    return;
   }
 
   auto ipc_buffer = ipc_buffer_manager_->find_next_available_buffer();
 
   isaac_ros_nitros_bridge_interfaces::msg::NitrosBridgeImage img_msg;
-  img_msg.header.frame_id = msg->get_frame_id();
-  img_msg.header.stamp.sec = msg->get_timestamp_sec();
-  img_msg.header.stamp.nanosec = msg->get_timestamp_nsec();
+  img_msg.header = msg->header;
   img_msg.height = msg->height;
   img_msg.width = msg->width;
   img_msg.encoding = msg->encoding;
+  img_msg.is_bigendian = msg->is_bigendian;
   img_msg.step = msg->step;
 
-  auto read_handle = msg->get_read_handle(cuda_stream_);
-  auto cuda_err = cudaMemcpyAsync(
-    reinterpret_cast<void *>(ipc_buffer->d_ptr),
-    read_handle.get_ptr(),
-    image_size_bytes,
-    cudaMemcpyDeviceToDevice,
-    cuda_stream_);
-  if (cudaSuccess != cuda_err) {
-    RCLCPP_ERROR(
-      this->get_logger(), "Failed to call cudaMemcpyAsync %s",
-      cudaGetErrorString(cuda_err));
-    throw std::runtime_error("[NITROS Bridge] cudaMemcpyAsync Error");
-  }
+  try {
+    auto read_handle =
+      cuda_buffer_backend::from_input_buffer(msg->data, cuda_stream_);
+    auto cuda_err = cudaMemcpyAsync(
+        reinterpret_cast<void *>(ipc_buffer->d_ptr), read_handle.get_ptr(),
+        image_size_bytes, cudaMemcpyDeviceToDevice, cuda_stream_);
+    if (cudaSuccess != cuda_err) {
+      RCLCPP_ERROR(
+        this->get_logger(), "Failed to call cudaMemcpyAsync %s",
+        cudaGetErrorString(cuda_err));
+      return;
+    }
 
-  cuda_err = cudaStreamSynchronize(cuda_stream_);
-  if (cudaSuccess != cuda_err) {
-    RCLCPP_ERROR(
-      this->get_logger(), "Failed to synchronize CUDA stream %s",
-      cudaGetErrorString(cuda_err));
-    throw std::runtime_error("[NITROS Bridge] cudaStreamSynchronize Error");
+    cuda_err = cudaStreamSynchronize(cuda_stream_);
+    if (cudaSuccess != cuda_err) {
+      RCLCPP_ERROR(
+        this->get_logger(), "Failed to synchronize CUDA stream %s",
+        cudaGetErrorString(cuda_err));
+      return;
+    }
+  } catch (const std::exception & e) {
+    RCLCPP_ERROR(get_logger(), "Failed to copy image into bridge memory: %s", e.what());
+    return;
   }
 
   img_msg.data.push_back(ipc_buffer->pid);
@@ -296,4 +389,5 @@ void ImageConverterNode::ROSToBridgeCallback(
 
 // Register as component
 #include "rclcpp_components/register_node_macro.hpp"
-RCLCPP_COMPONENTS_REGISTER_NODE(nvidia::isaac_ros::nitros_bridge::ImageConverterNode)
+RCLCPP_COMPONENTS_REGISTER_NODE(
+    nvidia::isaac_ros::nitros_bridge::ImageConverterNode)

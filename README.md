@@ -2,69 +2,39 @@
 
 NVIDIA Isaac Transport for ROS package for hardware-acceleration friendly movement of messages.
 
-<div align="center"><a class="reference internal image-reference" href="https://media.githubusercontent.com/media/NVIDIA-ISAAC-ROS/.github/release-4.6/resources/isaac_ros_docs/repositories_and_packages/isaac_ros_nitros/image5-1.gif/"><img alt="image" src="https://media.githubusercontent.com/media/NVIDIA-ISAAC-ROS/.github/release-4.6/resources/isaac_ros_docs/repositories_and_packages/isaac_ros_nitros/image5-1.gif/" width="600px"/></a></div>
+<div align="center"><a class="reference internal image-reference" href="https://media.githubusercontent.com/media/NVIDIA-ISAAC-ROS/.github/release-5.0/resources/isaac_ros_docs/repositories_and_packages/isaac_ros_nitros/image5-1.gif/"><img alt="image" src="https://media.githubusercontent.com/media/NVIDIA-ISAAC-ROS/.github/release-5.0/resources/isaac_ros_docs/repositories_and_packages/isaac_ros_nitros/image5-1.gif/" width="600px"/></a></div>
 
 ## Overview
 
-Isaac ROS NITROS contains NVIDIA’s implementation
-of type adaptation and negotiation in ROS 2. To learn more about NITROS, see [here](https://nvidia-isaac-ros.github.io/concepts/nitros/index.html).
+**NITROS is deprecated.** Isaac ROS nodes now use ROS 2 messages with `rosidl::Buffer` fields and
+the CUDA buffer backend, which are native ROS 2 Lyrical features. NITROS type adaptation and
+negotiation, Managed NITROS, CUDA with NITROS, PyNITROS, and the NITROS Bridge APIs will be removed
+in a future Isaac ROS release. Node-level compatibility is maintained, but applications that call
+NITROS APIs directly require source-level migration. Refer to
+[From NITROS to rosidl::Buffer](https://nvidia-isaac-ros.github.io/concepts/rosidl_buffer/nitros_migration.html) for the migration
+guide, and [rosidl::Buffer and Buffer Backends](https://nvidia-isaac-ros.github.io/concepts/rosidl_buffer/index.html) for the
+replacement architecture.
 
-Isaac ROS NITROS is composed of a number of individual packages, each with either a functional or structural purpose:
-
-`isaac_ros_managed_nitros`:
-: This package contains the wrapper classes that enable developers to add NITROS-compatible publishers and subscribers to third-party CUDA-based ROS nodes.
-  For more information about CUDA with NITROS, see [here](https://nvidia-isaac-ros.github.io/concepts/nitros/cuda_with_nitros.html).
-
-`isaac_ros_nitros`:
-: This package contains the base `NitrosNode` class and associated core utilities that serve as the foundation for all NITROS-based ROS nodes.
-
-`isaac_ros_nitros_bridge`:
-: This folder contains the implementation of the NITROS Bridge for inter-process communication.
-
-`isaac_ros_nitros_interfaces`:
-: This package contains the definitions of the custom ROS 2 interfaces that facilitate type negotiation between NITROS nodes.
-
-`isaac_ros_nitros_topic_tools`:
-: This folder contains a NITROS based implementation of some of the nodes in the [topic_tools package](https://github.com/ros-tooling/topic_tools).
-
-`isaac_ros_nitros_type`:
-: This folder contains a number of packages, each defining a specific NITROS type and the associated type adaptation logic to convert to and from a standard ROS type.
-
-`isaac_ros_pynitros`:
-: This folder contains the implementation of Python NITROS.
+[Isaac ROS NITROS](https://github.com/NVIDIA-ISAAC-ROS/isaac_ros_nitros) now contains the vendor
+packages that distribute NVIDIA’s precompiled SDKs to other Isaac ROS repositories, along with the
+remaining NITROS Bridge converter.
 
 ---
 
 ## Documentation
 
-Please visit the [Isaac ROS Documentation](https://nvidia-isaac-ros.github.io/repositories_and_packages/isaac_ros_nitros/index.html) to learn how to use this repository.
+Please visit the [Isaac ROS Documentation](https://nvidia-isaac-ros.github.io) to learn how to use
+this repository.
 
 ---
 
 ## Packages
 
-* [`isaac_ros_managed_nitros`](https://nvidia-isaac-ros.github.io/repositories_and_packages/isaac_ros_nitros/isaac_ros_managed_nitros/index.html)
-* [`isaac_ros_nitros`](https://nvidia-isaac-ros.github.io/repositories_and_packages/isaac_ros_nitros/isaac_ros_nitros/index.html)
-  * [Quickstart](https://nvidia-isaac-ros.github.io/repositories_and_packages/isaac_ros_nitros/isaac_ros_nitros/index.html#quickstart)
-* [Isaac ROS NITROS Bridge](https://nvidia-isaac-ros.github.io/repositories_and_packages/isaac_ros_nitros/isaac_ros_nitros_bridge/index.html)
-  * [Overview](https://nvidia-isaac-ros.github.io/repositories_and_packages/isaac_ros_nitros/isaac_ros_nitros_bridge/index.html#overview)
-  * [Performance](https://nvidia-isaac-ros.github.io/repositories_and_packages/isaac_ros_nitros/isaac_ros_nitros_bridge/index.html#performance)
-  * [Packages](https://nvidia-isaac-ros.github.io/repositories_and_packages/isaac_ros_nitros/isaac_ros_nitros_bridge/index.html#packages)
-  * [Quickstart](https://nvidia-isaac-ros.github.io/repositories_and_packages/isaac_ros_nitros/isaac_ros_nitros_bridge/index.html#quickstart)
-  * [Try Another Example](https://nvidia-isaac-ros.github.io/repositories_and_packages/isaac_ros_nitros/isaac_ros_nitros_bridge/index.html#try-another-example)
-  * [Troubleshooting](https://nvidia-isaac-ros.github.io/repositories_and_packages/isaac_ros_nitros/isaac_ros_nitros_bridge/index.html#troubleshooting)
-  * [Updates](https://nvidia-isaac-ros.github.io/repositories_and_packages/isaac_ros_nitros/isaac_ros_nitros_bridge/index.html#updates)
-* [`isaac_ros_nitros_bridge_ros2`](https://nvidia-isaac-ros.github.io/repositories_and_packages/isaac_ros_nitros/isaac_ros_nitros_bridge/isaac_ros_nitros_bridge_ros2/index.html)
-  * [API](https://nvidia-isaac-ros.github.io/repositories_and_packages/isaac_ros_nitros/isaac_ros_nitros_bridge/isaac_ros_nitros_bridge_ros2/index.html#api)
-* [`isaac_ros_nitros_topic_tools`](https://nvidia-isaac-ros.github.io/repositories_and_packages/isaac_ros_nitros/isaac_ros_nitros_topic_tools/index.html)
-  * [NitrosCameraDrop Node](https://nvidia-isaac-ros.github.io/repositories_and_packages/isaac_ros_nitros/isaac_ros_nitros_topic_tools/index.html#nitroscameradrop-node)
-* [`isaac_ros_nitros_type`](https://nvidia-isaac-ros.github.io/repositories_and_packages/isaac_ros_nitros/isaac_ros_nitros_type/index.html)
-* [`isaac_ros_pynitros`](https://nvidia-isaac-ros.github.io/repositories_and_packages/isaac_ros_nitros/isaac_ros_pynitros/index.html)
-  * [Creating PyNITROS-Accelerated Nodes](https://nvidia-isaac-ros.github.io/repositories_and_packages/isaac_ros_nitros/isaac_ros_pynitros/index.html#creating-pynitros-accelerated-nodes)
-  * [Quickstart](https://nvidia-isaac-ros.github.io/repositories_and_packages/isaac_ros_nitros/isaac_ros_pynitros/index.html#quickstart)
-  * [Try More Examples](https://nvidia-isaac-ros.github.io/repositories_and_packages/isaac_ros_nitros/isaac_ros_pynitros/index.html#try-more-examples)
-  * [API Reference](https://nvidia-isaac-ros.github.io/repositories_and_packages/isaac_ros_nitros/isaac_ros_pynitros/index.html#api-reference)
+* `cuapriltags_vendor`: Vendor package for the precompiled NVIDIA cuAprilTags SDK.
+* `cumotion_vendor`: Vendor package for the precompiled NVIDIA cuMotion SDK.
+* `cuvslam_vendor`: Vendor package for the precompiled NVIDIA cuVSLAM SDK.
+* `isaac_ros_nitros_bridge_ros2`: Converter between NITROS bridge messages and ROS 2 messages.
 
 ## Latest
 
-Update 2026-07-06: Reduced NITROS build/runtime complexity by sun-setting the GXF implementation and added CUDA streaming support for NITROS messaging
+Update 2026-09-21: Deprecated NITROS in favor of rosidl::Buffer and the CUDA buffer backend

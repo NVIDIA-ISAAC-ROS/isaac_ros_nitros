@@ -36,7 +36,7 @@ def launch_setup(context):
         remappings=[
             ('ros2_output_bridge_tensor_list', 'ros1_input_bridge_tensor_list'),
             ('ros2_output_tensor_list', pub_tensor_list_name),
-            ('ros2_input_bridge_tensor_list', 'pynitros_tensor_list'),
+            ('ros2_input_bridge_tensor_list', 'nitros_bridge_tensor_list'),
             ('ros2_input_tensor_list', sub_tensor_list_name),
         ])
 

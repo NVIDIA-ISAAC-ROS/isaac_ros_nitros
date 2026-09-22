@@ -17,8 +17,8 @@
 """
 Proof-of-Life test for interprocess NITROS bridge image on ROS 2.
 
-NITROSBridgeImageConverter1(NITROSImage->NITROSBridgeImage)
-NITROSBridgeImageConverter2(NITROSBridgeImage->NITROSImage)
+ImageConverter1(Image->NitrosBridgeImage)
+ImageConverter2(NitrosBridgeImage->Image)
 """
 
 import os
@@ -108,7 +108,7 @@ class IsaacROSNitrosBridgeTest(IsaacROSBaseTest):
 
     @IsaacROSBaseTest.for_each_test_case(subfolder='nitros_image')
     def test_nitros_bridge_image(self, test_folder) -> None:
-        """Expect the image received from NitrosImage type conversion to be identical to source."""
+        """Expect the buffer-backed image bridge round trip to preserve the source."""
         if self.skip_test:
             self.skipTest('No ptrace permission! Skipping test.')
         else:
@@ -145,17 +145,15 @@ class IsaacROSNitrosBridgeTest(IsaacROSBaseTest):
                 self.assertTrue(done, "Didn't receive output on output_image topic!")
 
                 received_image = received_messages['ros2_output_image']
-
-                print(f'Source image data size: {len(image.data)}')
-                print(f'Received image data size: {len(received_image.data)}')
+                received_data = list(received_image.data)
 
                 self.assertEqual(str(timestamp), str(received_image.header.stamp),
                                  'Timestamps do not match.')
 
                 self.assertEqual(
-                    len(image.data), len(received_image.data),
+                    len(image.data), len(received_data),
                     'Source and received image sizes do not match: ' +
-                    f'{len(image.data)} != {len(received_image.data)}')
+                    f'{len(image.data)} != {len(received_data)}')
 
                 # Make sure that the source and received images are the same
                 self.assertEqual(
@@ -168,7 +166,7 @@ class IsaacROSNitrosBridgeTest(IsaacROSBaseTest):
                     f'{image.width} != {received_image.width}')
 
                 for i in range(len(image.data)):
-                    self.assertEqual(image.data[i], received_image.data[i],
+                    self.assertEqual(image.data[i], received_data[i],
                                      'Source and received image pixels do not match')
 
             finally:
