@@ -31,9 +31,12 @@ find_package(ament_cmake_auto REQUIRED)
 find_package(CUDAToolkit REQUIRED)
 ament_auto_find_build_dependencies()
 
-# Image converter node
 ament_auto_add_library(image_converter_node SHARED src/image_converter_node.cpp)
-target_link_libraries(image_converter_node CUDA::cuda_driver)
+target_link_libraries(image_converter_node
+  ${cuda_buffer_TARGETS}
+  CUDA::cuda_driver
+  CUDA::cudart
+)
 set_target_properties(image_converter_node PROPERTIES
   BUILD_WITH_INSTALL_RPATH TRUE
   BUILD_RPATH_USE_ORIGIN TRUE
@@ -44,9 +47,12 @@ rclcpp_components_register_nodes(image_converter_node "nvidia::isaac_ros::nitros
 set(node_plugins "${node_plugins}nvidia::isaac_ros::nitros_bridge::ImageConverterNode;$<TARGET_FILE:image_converter_node>\n")
 
 
-# TensorList converter node
 ament_auto_add_library(tensor_list_converter_node SHARED src/tensor_list_converter_node.cpp)
-target_link_libraries(tensor_list_converter_node CUDA::cuda_driver)
+target_link_libraries(tensor_list_converter_node
+  ${cuda_buffer_TARGETS}
+  CUDA::cuda_driver
+  CUDA::cudart
+)
 set_target_properties(tensor_list_converter_node PROPERTIES
   BUILD_WITH_INSTALL_RPATH TRUE
   BUILD_RPATH_USE_ORIGIN TRUE
